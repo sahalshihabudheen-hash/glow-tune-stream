@@ -55,6 +55,7 @@ const Settings = () => {
 
   const [offlineTrackCount, setOfflineTrackCount] = useState(0);
   const [offlineTrackSize, setOfflineTrackSize] = useState(0);
+  const [isAdmin, setIsAdmin] = useState(false);
   const { settings: appSettings } = useAppSettings();
 
   // Load offline storage info
@@ -151,7 +152,6 @@ const Settings = () => {
   const [displayName, setDisplayName] = useState('');
   const [displayNameSaving, setDisplayNameSaving] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const [isAdmin, setIsAdmin] = useState(false);
   const [apkFiles, setApkFiles] = useState<{ name: string; url: string; size: number; uploaded_at: string }[]>([]);
 
   // Check admin status
