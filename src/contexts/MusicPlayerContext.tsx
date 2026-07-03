@@ -10,9 +10,19 @@ import { useTabTitle } from '@/hooks/useTabTitle';
 import { getTrackOffline, isTrackDownloadedOffline } from '@/lib/offlineStore';
 import { COBALT_INSTANCES, PIPED_INSTANCES } from '@/lib/instances';
 
-const getAudioUrlEndpoint = (videoId: string, options?: { stream?: boolean; download?: boolean; title?: string }) => {
-  const baseUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/get-audio-url`;
-  const params = new URLSearchParams({ videoId });
+const getAudioFunctionBase = () => {
+  if (typeof window !== 'undefined' && window.location.hostname.includes('vercel.app')) {
+    return '/api/get-audio-url';
+  }
+  const backendUrl = (import.meta.env.VITE_SUPABASE_URL || '').replace(/\/$/, '');
+  return backendUrl ? `${backendUrl}/functions/v1/get-audio-url` : '/api/get-audio-url';
+};
+
+const getAudioUrlEndpoint = (videoId: string, options?: { stream?: boolean; download?: boolean; title?: string; proxyUrl?: string }) => {
+  const baseUrl = getAudioFunctionBase();
+  const params = new URLSearchParams();
+  if (options?.proxyUrl) params.set('proxyUrl', options.proxyUrl);
+  else params.set('videoId', videoId);
   if (options?.stream) params.append('stream', '1');
   if (options?.download) params.append('download', '1');
   if (options?.title) params.append('title', options.title);
