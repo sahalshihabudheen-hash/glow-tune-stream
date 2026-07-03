@@ -1,5 +1,5 @@
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, ArrowRight, Palette, Volume2, ListMusic, Trash2, Waves, Blend, User, Camera, KeyRound, Loader2, RotateCcw, Sliders, Shield, Sparkles, Smartphone, Home, Search, Users, Heart, Gamepad2, Settings as SettingsIcon, Menu, Download } from 'lucide-react';
+import { ArrowLeft, ArrowRight, Palette, Volume2, ListMusic, Trash2, Waves, Blend, User, Camera, KeyRound, Loader2, RotateCcw, Sliders, Shield, Sparkles, Smartphone, Home, Search, Users, Heart, Gamepad2, Settings as SettingsIcon, Menu, Download, Minus, Plus } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import { useTheme, themes, ThemeName, ProgressBarStyle } from '@/contexts/ThemeContext';
 import { Switch } from '@/components/ui/switch';
@@ -16,6 +16,7 @@ import { useEffect, useState, useRef } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { getAllOfflineTracks, clearAllOfflineTracks } from '@/lib/offlineStore';
 import { useIsMobile } from '@/hooks/use-mobile';
+import { useAppSettings } from '@/hooks/useAppSettings';
 
 const themePreview: Record<ThemeName, { label: string; color: string }> = {
   yellow: { label: 'Neon Yellow', color: 'hsl(50 100% 50%)' },
@@ -54,6 +55,7 @@ const Settings = () => {
 
   const [offlineTrackCount, setOfflineTrackCount] = useState(0);
   const [offlineTrackSize, setOfflineTrackSize] = useState(0);
+  const { settings: appSettings } = useAppSettings();
 
   // Load offline storage info
   useEffect(() => {
@@ -91,7 +93,7 @@ const Settings = () => {
     { id: 'theme', label: '🎨 Theme & Lights', icon: Palette, description: 'Configure custom colors, angles, and RGB modes' },
     { id: 'player', label: '🎵 Player Customizer', icon: Sliders, description: 'Tailor progress bars, soundwaves, and animations' },
     ...(isMobile ? [{ id: 'navigation', label: '📱 Bottom Nav Bar', icon: Smartphone, description: 'Reorder bottom navigation buttons for mobile' }] : []),
-    { id: 'system', label: '💾 Backup & Cache', icon: RotateCcw, description: 'Clear player cache, export ZIP backups, and download APKs' },
+    { id: 'system', label: '💾 Cache & App', icon: RotateCcw, description: 'Clear player cache and download APKs' },
   ];
 
   useEffect(() => {
@@ -100,7 +102,20 @@ const Settings = () => {
     }
   }, [isMobile, settingsTab]);
 
-  const currentNavItems = settings.mobileNavItems || ['home', 'playlists', 'favorites', 'settings'];
+  const isNavItemAllowed = (itemId: string) => {
+    if (itemId === 'admin') return isAdmin;
+    if (itemId === 'home' || itemId === 'settings') return true;
+    return !appSettings.hidden_tabs.includes(itemId);
+  };
+
+  const availableNavEntries = Object.entries(navItemMetadata).filter(([key]) => isNavItemAllowed(key));
+  const currentNavItems = (settings.mobileNavItems || ['home', 'playlists', 'favorites', 'settings']).filter(isNavItemAllowed);
+
+  const applyMobilePreset = (items: string[], message: string) => {
+    const allowedItems = items.filter(isNavItemAllowed);
+    updateSettings({ mobileNavItems: allowedItems.length ? allowedItems : ['home', 'settings'] });
+    toast.success(message);
+  };
 
   const handleMoveItem = (index: number, direction: 'left' | 'right') => {
     const newItems = [...currentNavItems];
