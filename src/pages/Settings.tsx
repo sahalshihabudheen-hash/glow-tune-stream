@@ -711,17 +711,40 @@ const Settings = () => {
                   <span>Transition Speed</span>
                   <span className="text-primary font-medium">{settings.rgbConfig.speed.toFixed(1)}x</span>
                 </label>
-                <Slider
-                  value={[settings.rgbConfig.speed]}
-                  onValueChange={([value]) => updateSettings({ 
-                    rgbConfig: { ...settings.rgbConfig, speed: value } 
-                  })}
-                  min={0.1}
-                  max={5}
-                  step={0.1}
-                  disabled={!settings.rgbConfig.enabled}
-                  className="w-full"
-                />
+                <div className="flex items-center gap-3">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="icon"
+                    disabled={!settings.rgbConfig.enabled || settings.rgbConfig.speed <= 0.1}
+                    onClick={() => updateRgbSpeed(settings.rgbConfig.speed - 0.1)}
+                    aria-label="Decrease transition speed"
+                    className="h-9 w-9 shrink-0"
+                  >
+                    <Minus className="h-4 w-4" />
+                  </Button>
+                  <Slider
+                    value={[settings.rgbConfig.speed]}
+                    onValueChange={([value]) => updateRgbSpeed(value)}
+                    onValueCommit={([value]) => updateRgbSpeed(value)}
+                    min={0.1}
+                    max={5}
+                    step={0.1}
+                    disabled={!settings.rgbConfig.enabled}
+                    className="w-full"
+                  />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="icon"
+                    disabled={!settings.rgbConfig.enabled || settings.rgbConfig.speed >= 5}
+                    onClick={() => updateRgbSpeed(settings.rgbConfig.speed + 0.1)}
+                    aria-label="Increase transition speed"
+                    className="h-9 w-9 shrink-0"
+                  >
+                    <Plus className="h-4 w-4" />
+                  </Button>
+                </div>
                 <div className="flex justify-between mt-2 text-[10px] text-muted-foreground uppercase tracking-widest">
                   <span>Slow</span>
                   <span>Fast</span>
