@@ -94,7 +94,7 @@ const Sidebar = ({ activeTab, onTabChange }: SidebarProps) => {
       {/* Sleek Mobile Bottom Navigation Bar */}
       <div className="md:hidden fixed bottom-0 left-0 right-0 h-16 bg-sidebar/95 backdrop-blur-xl border-t border-border z-[140] px-2 flex items-center justify-around pb-safe shadow-[0_-10px_30px_rgba(0,0,0,0.5)]">
         {(userSettings.mobileNavItems || ['home', 'playlists', 'favorites', 'settings']).map((itemId) => {
-          const item = allMenuItems.find(m => m.id === itemId);
+          const item = menuItems.find(m => m.id === itemId);
           if (!item) return null;
           const Icon = item.icon;
           const isActive = isItemActive(item) && !moreExpanded;
@@ -175,7 +175,7 @@ const Sidebar = ({ activeTab, onTabChange }: SidebarProps) => {
               <div className="px-5 py-4">
                 <p className="text-[9px] font-bold text-muted-foreground uppercase tracking-widest mb-2 px-1">Channels & Controls</p>
                 <div className="grid grid-cols-4 gap-2">
-                  {allMenuItems.map((item) => {
+                  {menuItems.map((item) => {
                     const Icon = item.icon;
                     const isActive = isItemActive(item);
                     return (

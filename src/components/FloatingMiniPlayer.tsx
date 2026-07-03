@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { createPortal } from 'react-dom';
-import { Play, Pause, SkipForward, SkipBack, X, Maximize2, Music2, Download, Loader2, Share2 } from 'lucide-react';
+import { Play, Pause, SkipForward, SkipBack, X, Maximize2, Music2, Download, Loader2, Share2, Repeat1 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useMusicPlayer } from '@/contexts/MusicPlayerContext';
 import { useLocation, useNavigate } from 'react-router-dom';
@@ -40,6 +40,8 @@ const FloatingMiniPlayer = () => {
     playlist,
     handlePlayFromQueue,
     handlePlayFromPlaylist,
+    loopMode,
+    toggleLoopOne,
   } = useMusicPlayer();
 
   // Compute the next-up track (queue first, otherwise next playlist track)
@@ -370,6 +372,23 @@ const FloatingMiniPlayer = () => {
 
           {/* Action Capsule: Lyrics, Share, Download */}
           <div className="flex items-center gap-0.5 bg-white/5 p-0.5 rounded-lg border border-white/5 shrink-0">
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                toggleLoopOne();
+              }}
+              className={cn(
+                "p-1 rounded-md transition-all active:scale-[0.85]",
+                loopMode === 'one'
+                  ? "text-primary bg-primary/15"
+                  : "text-muted-foreground hover:text-foreground hover:bg-white/5"
+              )}
+              aria-label={loopMode === 'one' ? 'Repeat this song on' : 'Repeat this song'}
+              title={loopMode === 'one' ? 'Repeat song on' : 'Repeat this song'}
+            >
+              <Repeat1 className="h-3.5 w-3.5" />
+            </button>
+
             <button
               onClick={(e) => {
                 e.stopPropagation();

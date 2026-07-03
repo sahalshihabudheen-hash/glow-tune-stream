@@ -10,9 +10,19 @@ import { useTabTitle } from '@/hooks/useTabTitle';
 import { getTrackOffline, isTrackDownloadedOffline } from '@/lib/offlineStore';
 import { COBALT_INSTANCES, PIPED_INSTANCES } from '@/lib/instances';
 
-const getAudioUrlEndpoint = (videoId: string, options?: { stream?: boolean; download?: boolean; title?: string }) => {
-  const baseUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/get-audio-url`;
-  const params = new URLSearchParams({ videoId });
+const getAudioFunctionBase = () => {
+  if (typeof window !== 'undefined' && window.location.hostname.includes('vercel.app')) {
+    return '/api/get-audio-url';
+  }
+  const backendUrl = (import.meta.env.VITE_SUPABASE_URL || '').replace(/\/$/, '');
+  return backendUrl ? `${backendUrl}/functions/v1/get-audio-url` : '/api/get-audio-url';
+};
+
+const getAudioUrlEndpoint = (videoId: string, options?: { stream?: boolean; download?: boolean; title?: string; proxyUrl?: string }) => {
+  const baseUrl = getAudioFunctionBase();
+  const params = new URLSearchParams();
+  if (options?.proxyUrl) params.set('proxyUrl', options.proxyUrl);
+  else params.set('videoId', videoId);
   if (options?.stream) params.append('stream', '1');
   if (options?.download) params.append('download', '1');
   if (options?.title) params.append('title', options.title);
@@ -233,6 +243,7 @@ interface MusicPlayerContextType {
   toggleShuffle: () => void;
   loopMode: 'off' | 'all' | 'one';
   cycleLoopMode: () => void;
+  toggleLoopOne: () => void;
 
   // Favorites
   isFavorite: (trackId: string) => boolean;
@@ -577,7 +588,7 @@ export function MusicPlayerProvider({ children }: { children: React.ReactNode })
         secondary.removeEventListener('pause', handlePause);
       }
     };
-  }, [settings.autoPlayNext]);
+    }, [settings.autoPlayNext, loopMode]);
 
   // Sync isPlaying with actual audio or youtube playing state periodically to avoid state desyncs
   // Also updates lockscreen Media Session position progress
@@ -691,6 +702,11 @@ export function MusicPlayerProvider({ children }: { children: React.ReactNode })
           } else if (e.data === yt.PlayerState.PAUSED) {
             setIsPlaying(false);
           } else if (e.data === yt.PlayerState.ENDED) {
+            if (loopMode === 'one') {
+              try { e.target.seekTo(0, true); e.target.playVideo(); } catch {}
+              setIsPlaying(true);
+              return;
+            }
             if (settings.autoPlayNext && handleNextRef.current) handleNextRef.current();
             else setIsPlaying(false);
           }
@@ -703,7 +719,7 @@ export function MusicPlayerProvider({ children }: { children: React.ReactNode })
         },
       },
     });
-  }, [settings.autoPlayNext]);
+  }, [settings.autoPlayNext, loopMode]);
 
   const nextTrackResolvedUrlRef = useRef<{ id: string, url: string, crossOriginSetting: 'anonymous' | null } | null>(null);
 
@@ -859,7 +875,7 @@ export function MusicPlayerProvider({ children }: { children: React.ReactNode })
             }
 
             // Proxy the direct URL through our edge function to guarantee CORS compatibility!
-            const proxiedUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/get-audio-url?proxyUrl=${encodeURIComponent(clientUrl)}`;
+            const proxiedUrl = getAudioUrlEndpoint(videoId, { proxyUrl: clientUrl });
             success = await playAudioUrl(proxiedUrl, 'anonymous');
             if (success) {
               toast.success('High-quality stream connected!');
@@ -1039,7 +1055,7 @@ export function MusicPlayerProvider({ children }: { children: React.ReactNode })
               }
 
               // Proxy the direct URL through our edge function to guarantee CORS compatibility!
-              const proxiedUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/get-audio-url?proxyUrl=${encodeURIComponent(clientUrl)}`;
+              const proxiedUrl = getAudioUrlEndpoint(track.id, { proxyUrl: clientUrl });
               success = await playAudioUrl(proxiedUrl, 'anonymous');
               if (success) {
                 toast.success('High-quality stream connected!');
@@ -1202,6 +1218,14 @@ export function MusicPlayerProvider({ children }: { children: React.ReactNode })
   const cycleLoopMode = useCallback(() => {
     setLoopMode(prev => {
       const next = prev === 'off' ? 'all' : prev === 'all' ? 'one' : 'off';
+      localStorage.setItem('nyra-loop-mode', next);
+      return next;
+    });
+  }, []);
+
+  const toggleLoopOne = useCallback(() => {
+    setLoopMode(prev => {
+      const next = prev === 'one' ? 'off' : 'one';
       localStorage.setItem('nyra-loop-mode', next);
       return next;
     });
@@ -1406,7 +1430,7 @@ export function MusicPlayerProvider({ children }: { children: React.ReactNode })
       handleRemoveFromPlaylist, handleClearPlaylist,
       playlist, queue, isInPlaylist, removeFromQueue, reorderPlaylist,
       shuffleMode, toggleShuffle,
-      loopMode, cycleLoopMode,
+      loopMode, cycleLoopMode, toggleLoopOne,
       nowPlayingOpen, setNowPlayingOpen,
       isFavorite, toggleFavorite,
       tracks, setTracks,

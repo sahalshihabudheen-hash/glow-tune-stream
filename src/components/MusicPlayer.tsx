@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { Play, Pause, SkipBack, SkipForward, Volume2, VolumeX, Volume1, Repeat, Shuffle, ListPlus, Check, Minus, Plus, Maximize2, Music2, SlidersHorizontal, Download, Loader2, Share2, Zap, Headphones, MonitorPlay } from 'lucide-react';
+import { Play, Pause, SkipBack, SkipForward, Volume2, VolumeX, Volume1, Repeat, Repeat1, Shuffle, ListPlus, Check, Minus, Plus, Maximize2, Music2, SlidersHorizontal, Download, Loader2, Share2, Zap, Headphones, MonitorPlay } from 'lucide-react';
 import { toast } from 'sonner';
 import SoundwaveVisualizer from './SoundwaveVisualizer';
 import { cn } from '@/lib/utils';
@@ -112,6 +112,7 @@ const MusicPlayer = ({
     toggleShuffle,
     loopMode: ctxLoopMode,
     cycleLoopMode,
+    toggleLoopOne,
     isFavorite,
     toggleFavorite,
     volume,
@@ -281,6 +282,7 @@ const MusicPlayer = ({
                     <p className="text-[8px] font-black text-muted-foreground/60 truncate uppercase tracking-widest mt-0.5">
                       {currentTrack.channel}
                     </p>
+                    <SoundwaveVisualizer isPlaying={isPlaying} className="mt-1 h-4 w-full max-w-28" shape="spectrum" />
                   </div>
                 </>
               ) : (
@@ -333,6 +335,13 @@ const MusicPlayer = ({
                 title="Fullscreen"
               >
                 <MonitorPlay className="w-3.5 h-3.5" />
+              </button>
+              <button 
+                onClick={toggleLoopOne} 
+                className={cn("p-1.5 rounded-full transition-all", ctxLoopMode === 'one' ? "text-primary bg-primary/10" : "text-muted-foreground hover:text-foreground")}
+                title={ctxLoopMode === 'one' ? 'Repeat song on' : 'Repeat this song'}
+              >
+                <Repeat1 className="w-3.5 h-3.5" />
               </button>
               <button 
                 onClick={handleShare} 
@@ -486,6 +495,17 @@ const MusicPlayer = ({
                 title="Equalizer"
               >
                 <SlidersHorizontal className="w-4 h-4" />
+              </button>
+              <button 
+                onClick={toggleLoopOne} 
+                className={cn(
+                  "rounded-lg transition-all",
+                  nowPlayingOpen ? "p-1" : "p-1.5 lg:p-2",
+                  ctxLoopMode === 'one' ? "bg-primary text-primary-foreground shadow-sm" : "text-muted-foreground hover:text-foreground hover:bg-white/5"
+                )}
+                title={ctxLoopMode === 'one' ? 'Repeat song on' : 'Repeat this song'}
+              >
+                <Repeat1 className="w-4 h-4" />
               </button>
               <button 
                 onClick={handleShare} 

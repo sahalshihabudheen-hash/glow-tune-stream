@@ -228,10 +228,13 @@ async function fetchAudioBlob(
 // Edge-function endpoint that resolves + proxies YouTube audio server-side.
 // Prefer Supabase when configured; fall back to the Vercel /api route so exports
 // still work if the app is deployed without VITE_SUPABASE_URL.
-const SUPABASE_URL = (import.meta.env.VITE_SUPABASE_URL || '').replace(/\/$/, '');
-const AUDIO_FN_BASE = SUPABASE_URL
-  ? `${SUPABASE_URL}/functions/v1/get-audio-url`
-  : '/api/get-audio-url';
+const getAudioFunctionBase = () => {
+  if (typeof window !== 'undefined' && window.location.hostname.includes('vercel.app')) {
+    return '/api/get-audio-url';
+  }
+  const supabaseUrl = (import.meta.env.VITE_SUPABASE_URL || '').replace(/\/$/, '');
+  return supabaseUrl ? `${supabaseUrl}/functions/v1/get-audio-url` : '/api/get-audio-url';
+};
 
 const buildAudioFunctionUrl = (
   track: { id: string; title: string },
@@ -243,7 +246,7 @@ const buildAudioFunctionUrl = (
   if (options.stream) params.set('stream', '1');
   if (options.download) params.set('download', '1');
   params.set('title', sanitizeFilename(track.title) || 'audio');
-  return `${AUDIO_FN_BASE}?${params.toString()}`;
+  return `${getAudioFunctionBase()}?${params.toString()}`;
 };
 
 const extForMime = (mimeType: string) => {

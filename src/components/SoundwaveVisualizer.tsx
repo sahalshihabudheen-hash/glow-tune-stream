@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
 import { cn } from '@/lib/utils';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useDjAudio } from '@/hooks/useDjAudio';
@@ -20,6 +20,9 @@ const SoundwaveVisualizer = ({ isPlaying, className, shape: propShape }: Soundwa
   const [barHeights, setBarHeights] = useState<number[]>(Array(16).fill(20));
   const [dotSizes, setDotSizes] = useState<number[]>(Array(8).fill(4));
   const [pulseScale, setPulseScale] = useState(1);
+  const reactId = useId().replace(/:/g, '');
+  const waveGradientId = `waveGradient-${reactId}`;
+  const waveGlowId = `waveGlow-${reactId}`;
   const animationRef = useRef<number>();
   const isPlayingRef = useRef(isPlaying);
   const stateRef = useRef(state);
@@ -48,12 +51,17 @@ const SoundwaveVisualizer = ({ isPlaying, className, shape: propShape }: Soundwa
       if (stateRef.current.active) {
         const rawFrequencies = getFrequencyDataRef.current();
         freqArray = Array.from(rawFrequencies).map(v => (v / 255) * 100);
-      } else {
-        // Smooth pseudo-random animation when DJ engine is not active
+      }
+
+      // Smooth visual fallback keeps the wave alive on Vercel/YouTube iframe playback
+      // where WebAudio frequency data is blocked or unavailable.
+      const hasRealSignal = freqArray.some(v => v > 2);
+      if (!hasRealSignal) {
         freqArray = Array(16).fill(0).map((_, i) => {
-          const base = 20 + Math.sin(Date.now() / 400 + i * 0.7) * 15;
-          const rand = Math.random() * 50 + 15;
-          return (base + rand) / 2;
+          const t = Date.now() / 260;
+          const waveA = Math.sin(t + i * 0.72) * 22;
+          const waveB = Math.sin(t * 0.55 + i * 1.35) * 14;
+          return Math.max(10, Math.min(95, 42 + waveA + waveB));
         });
       }
 
@@ -84,11 +92,11 @@ const SoundwaveVisualizer = ({ isPlaying, className, shape: propShape }: Soundwa
   // Bars Shape (Classic) - heights in px, not % so they're visible in any container
   if (shape === 'bars') {
     return (
-      <div className={cn('flex items-end justify-center gap-[3px]', className)}>
+      <div className={cn('flex items-end justify-center gap-[3px] min-h-[16px]', className)}>
         {barHeights.slice(0, 12).map((height, index) => {
           // Convert 0-100 scale to a pixel height between 3px and 100% of container
           // Use a minimum of 4px and max via calc
-          const pxHeight = isPlaying ? Math.max(4, Math.round(height * 0.4)) : 4;
+          const pxHeight = isPlaying ? Math.max(5, Math.round(height * 0.42)) : 5;
           return (
             <div
               key={index}
@@ -121,14 +129,14 @@ const SoundwaveVisualizer = ({ isPlaying, className, shape: propShape }: Soundwa
 
     return (
       <div className={cn('flex items-center justify-center overflow-hidden', className)}>
-        <svg viewBox="0 0 100 40" className="w-full h-full" preserveAspectRatio="none">
+        <svg viewBox="0 0 100 40" className="w-full h-full min-h-[20px]" preserveAspectRatio="none">
           <defs>
-            <linearGradient id="waveGradient" x1="0%" y1="0%" x2="100%" y2="0%">
+            <linearGradient id={waveGradientId} x1="0%" y1="0%" x2="100%" y2="0%">
               <stop offset="0%" stopColor="hsl(var(--primary))" stopOpacity="0.4" />
               <stop offset="50%" stopColor="hsl(var(--primary))" stopOpacity="1" />
               <stop offset="100%" stopColor="hsl(var(--primary))" stopOpacity="0.4" />
             </linearGradient>
-            <filter id="glow">
+            <filter id={waveGlowId}>
               <feGaussianBlur stdDeviation="2" result="coloredBlur"/>
               <feMerge>
                 <feMergeNode in="coloredBlur"/>
@@ -139,16 +147,16 @@ const SoundwaveVisualizer = ({ isPlaying, className, shape: propShape }: Soundwa
           <path
             d={pathData}
             fill="none"
-            stroke="url(#waveGradient)"
+            stroke={`url(#${waveGradientId})`}
             strokeWidth="3"
             strokeLinecap="round"
             strokeLinejoin="round"
             className="transition-all duration-75"
-            style={{ filter: isPlaying ? 'url(#glow)' : 'none' }}
+            style={{ filter: isPlaying ? `url(#${waveGlowId})` : 'none' }}
           />
           <path
             d={`${pathData} L 100,40 L 0,40 Z`}
-            fill="url(#waveGradient)"
+            fill={`url(#${waveGradientId})`}
             opacity={isPlaying ? 0.2 : 0.05}
             className="transition-all duration-75"
           />
@@ -216,7 +224,7 @@ const SoundwaveVisualizer = ({ isPlaying, className, shape: propShape }: Soundwa
     const halfBars = barHeights.slice(0, 8);
     const maxHeight = Math.max(...barHeights);
     return (
-      <div className={cn('flex items-center justify-center gap-[2px]', className)}>
+      <div className={cn('flex items-center justify-center gap-[2px] min-h-[16px]', className)}>
         {[...halfBars].reverse().map((height, index) => {
           const pxH = isPlaying ? Math.max(4, Math.round(height * 0.4)) : 6;
           return (
