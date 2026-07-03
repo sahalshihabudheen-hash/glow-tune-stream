@@ -1058,9 +1058,7 @@ const Settings = () => {
                                 onChange={(e) => handleReplaceItem(idx, e.target.value)}
                                 className="h-8 text-xs bg-background border border-border rounded-lg px-2 text-foreground focus:outline-none focus:ring-1 focus:ring-primary font-medium"
                               >
-                                {Object.entries(navItemMetadata)
-                                  .filter(([key]) => key !== 'admin' || isAdmin)
-                                  .map(([key, meta]) => (
+                                {availableNavEntries.map(([key, meta]) => (
                                     <option key={key} value={key}>
                                       Replace with: {meta.label}
                                     </option>
@@ -1083,8 +1081,7 @@ const Settings = () => {
                       <Button
                         variant="outline"
                         onClick={() => {
-                          updateSettings({ mobileNavItems: ['home', 'playlists', 'favorites', 'settings'] });
-                          toast.success('Default Layout applied!');
+                          applyMobilePreset(['home', 'playlists', 'favorites', 'settings'], 'Default Layout applied!');
                         }}
                         className="text-xs py-2 active:scale-95 text-center flex flex-col items-center justify-center gap-1 h-auto"
                       >
@@ -1094,8 +1091,7 @@ const Settings = () => {
                       <Button
                         variant="outline"
                         onClick={() => {
-                          updateSettings({ mobileNavItems: ['home', 'search', 'favorites', 'playlists'] });
-                          toast.success('Discovery Layout applied!');
+                          applyMobilePreset(['home', 'search', 'favorites', 'playlists'], 'Discovery Layout applied!');
                         }}
                         className="text-xs py-2 active:scale-95 text-center flex flex-col items-center justify-center gap-1 h-auto"
                       >
@@ -1105,8 +1101,7 @@ const Settings = () => {
                       <Button
                         variant="outline"
                         onClick={() => {
-                          updateSettings({ mobileNavItems: ['home', 'favorites', 'games', 'settings'] });
-                          toast.success('Fun & Play Layout applied!');
+                          applyMobilePreset(['home', 'favorites', 'games', 'settings'], 'Fun & Play Layout applied!');
                         }}
                         className="text-xs py-2 active:scale-95 text-center flex flex-col items-center justify-center gap-1 h-auto"
                       >
