@@ -288,6 +288,11 @@ const Settings = () => {
     toast.success('Playlist and queue cleared');
   };
 
+  const updateRgbSpeed = (nextSpeed: number) => {
+    const speed = Math.min(5, Math.max(0.1, Math.round(nextSpeed * 10) / 10));
+    updateSettings({ rgbConfig: { ...settings.rgbConfig, speed } });
+  };
+
   return (
     <div className="min-h-screen bg-background/80">
       <Sidebar activeTab={activeTab} onTabChange={setActiveTab} />
