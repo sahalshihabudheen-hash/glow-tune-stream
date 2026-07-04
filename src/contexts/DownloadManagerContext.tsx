@@ -527,7 +527,7 @@ export function DownloadManagerProvider({ children }: { children: React.ReactNod
                 </div>
                 <div>
                   <h4 className="text-sm font-bold text-foreground">Download to Device</h4>
-                  <p className="text-xs text-muted-foreground">Saves file (.mp3) to your downloads folder.</p>
+                  <p className="text-xs text-muted-foreground">Saves an audio file to your downloads folder.</p>
                 </div>
               </button>
 
