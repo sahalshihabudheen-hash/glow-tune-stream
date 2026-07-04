@@ -40,6 +40,50 @@ const COBALT_INSTANCES = [
   'https://co.wuk.sh',
 ];
 
+async function fetchViaInnertube(videoId: string): Promise<{ url: string; mimeType: string } | null> {
+  try {
+    const res = await fetch('https://www.youtube.com/youtubei/v1/player?key=AIzaSyAO_FJ2SlqU8Q4STEHLGCilw_Y9_11qcW8', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Youtube-Client-Name': '21',
+        'X-Youtube-Client-Version': '6.29.58',
+        'User-Agent': 'com.google.android.apps.youtube.music/6.29.58 (Linux; U; Android 11) gzip',
+      },
+      body: JSON.stringify({
+        context: {
+          client: {
+            clientName: 'ANDROID_MUSIC',
+            clientVersion: '6.29.58',
+            androidSdkVersion: 30,
+            hl: 'en',
+            gl: 'US',
+          },
+        },
+        videoId,
+        contentCheckOk: true,
+        racyCheckOk: true,
+      }),
+      signal: AbortSignal.timeout(8000),
+    });
+
+    if (!res.ok) return null;
+    const data = await res.json();
+    const formats: any[] = [
+      ...(data?.streamingData?.adaptiveFormats || []),
+      ...(data?.streamingData?.formats || []),
+    ];
+    const best = formats
+      .filter((f: any) => (f.mimeType || '').startsWith('audio/') && f.url)
+      .sort((a: any, b: any) => Number(b.bitrate || 0) - Number(a.bitrate || 0))[0];
+
+    if (!best?.url) return null;
+    return { url: best.url, mimeType: (best.mimeType || 'audio/webm').split(';')[0] };
+  } catch {
+    return null;
+  }
+}
+
 function companionizeInvidiousUrl(rawUrl: string) {
   const secureUrl = rawUrl.replace(/^http:\/\//, 'https://');
   if (secureUrl.includes('/companion/videoplayback')) return secureUrl;
@@ -207,6 +251,8 @@ async function fetchViaPiped(videoId: string): Promise<{ url: string; mimeType: 
 }
 
 async function getStreamInfo(videoId: string): Promise<{ url: string; mimeType: string } | null> {
+  const innertube = await fetchViaInnertube(videoId);
+  if (innertube) return innertube;
   // Invidious local-proxy is the most reliable free path — try it first.
   const inv = await fetchViaInvidiousLocal(videoId);
   if (inv) return inv;
