@@ -247,6 +247,8 @@ const FullscreenPlayer = ({
     setVolume,
     isMuted,
     setIsMuted,
+    loopOneCount,
+    toggleLoopOne,
   } = useMusicPlayer();
   const { startDownload, isDownloading } = useDownloadManager();
 
@@ -537,9 +539,25 @@ const FullscreenPlayer = ({
                 <SkipForward className="w-6 h-6 fill-current" />
              </button>
 
-             <button onClick={onCycleLoopMode} className={cn("p-2.5 rounded-2xl transition-all active:scale-90", loopMode !== 'off' ? "text-primary bg-primary/15 shadow-[0_0_15px_hsl(var(--primary)/0.3)]" : "text-muted-foreground hover:text-foreground hover:bg-white/5")}>
+              <button onClick={onCycleLoopMode} className={cn("p-2.5 rounded-2xl transition-all active:scale-90", loopMode === 'all' ? "text-primary bg-primary/15 shadow-[0_0_15px_hsl(var(--primary)/0.3)]" : "text-muted-foreground hover:text-foreground hover:bg-white/5")}>
                 {loopMode === 'one' ? <Repeat1 className="w-5 h-5" /> : <Repeat className="w-5 h-5" />}
              </button>
+              <button
+                onClick={toggleLoopOne}
+                className={cn(
+                  "relative p-2.5 rounded-2xl transition-all active:scale-90",
+                  loopOneCount > 0 ? "text-primary bg-primary/15 shadow-[0_0_15px_hsl(var(--primary)/0.3)]" : "text-muted-foreground hover:text-foreground hover:bg-white/5"
+                )}
+                aria-label={loopOneCount > 0 ? `Replay ${loopOneCount} more times` : 'Add one song replay'}
+                title={loopOneCount > 0 ? `Replay ${loopOneCount} more time${loopOneCount === 1 ? '' : 's'}` : 'Add one replay'}
+              >
+                <Repeat1 className="w-5 h-5" />
+                {loopOneCount > 0 && (
+                  <span className="absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-primary px-1 text-[9px] font-black leading-none text-primary-foreground ring-1 ring-background/50">
+                    {loopOneCount}
+                  </span>
+                )}
+              </button>
           </div>
 
           {/* Volume Control Section */}

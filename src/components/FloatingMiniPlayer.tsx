@@ -41,6 +41,7 @@ const FloatingMiniPlayer = () => {
     handlePlayFromQueue,
     handlePlayFromPlaylist,
     loopMode,
+    loopOneCount,
     toggleLoopOne,
   } = useMusicPlayer();
 
@@ -378,15 +379,20 @@ const FloatingMiniPlayer = () => {
                 toggleLoopOne();
               }}
               className={cn(
-                "p-1 rounded-md transition-all active:scale-[0.85]",
-                loopMode === 'one'
+                "relative p-1 rounded-md transition-all active:scale-[0.85]",
+                loopOneCount > 0
                   ? "text-primary bg-primary/15"
                   : "text-muted-foreground hover:text-foreground hover:bg-white/5"
               )}
-              aria-label={loopMode === 'one' ? 'Repeat this song on' : 'Repeat this song'}
-              title={loopMode === 'one' ? 'Repeat song on' : 'Repeat this song'}
+              aria-label={loopOneCount > 0 ? `Replay ${loopOneCount} more times` : 'Add one replay'}
+              title={loopOneCount > 0 ? `Replay ${loopOneCount} more time${loopOneCount === 1 ? '' : 's'}` : 'Add one replay'}
             >
               <Repeat1 className="h-3.5 w-3.5" />
+              {loopOneCount > 0 && (
+                <span className="absolute -right-1 -top-1 flex h-3.5 min-w-3.5 items-center justify-center rounded-full bg-primary px-0.5 text-[8px] font-black leading-none text-primary-foreground">
+                  {loopOneCount}
+                </span>
+              )}
             </button>
 
             <button
