@@ -293,6 +293,11 @@ const Settings = () => {
     updateSettings({ rgbConfig: { ...settings.rgbConfig, speed } });
   };
 
+  const updateBackgroundVideoBrightness = (nextBrightness: number) => {
+    const backgroundVideoBrightness = Math.min(100, Math.max(0, Math.round(nextBrightness / 5) * 5));
+    updateSettings({ backgroundVideoBrightness });
+  };
+
   return (
     <div className="min-h-screen bg-background/80">
       <Sidebar activeTab={activeTab} onTabChange={setActiveTab} />
@@ -922,14 +927,39 @@ const Settings = () => {
                       {settings.backgroundVideoBrightness ?? 30}%
                     </span>
                   </div>
-                  <Slider
-                    value={[settings.backgroundVideoBrightness ?? 30]}
-                    onValueChange={([value]) => updateSettings({ backgroundVideoBrightness: value })}
-                    min={0}
-                    max={100}
-                    step={5}
-                    className="w-full"
-                  />
+                  <div className="flex items-center gap-3">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="icon"
+                      disabled={(settings.backgroundVideoBrightness ?? 30) <= 0}
+                      onClick={() => updateBackgroundVideoBrightness((settings.backgroundVideoBrightness ?? 30) - 5)}
+                      aria-label="Decrease fullscreen video brightness"
+                      className="h-9 w-9 shrink-0"
+                    >
+                      <Minus className="h-4 w-4" />
+                    </Button>
+                    <Slider
+                      value={[settings.backgroundVideoBrightness ?? 30]}
+                      onValueChange={([value]) => updateBackgroundVideoBrightness(value)}
+                      onValueCommit={([value]) => updateBackgroundVideoBrightness(value)}
+                      min={0}
+                      max={100}
+                      step={5}
+                      className="w-full"
+                    />
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="icon"
+                      disabled={(settings.backgroundVideoBrightness ?? 30) >= 100}
+                      onClick={() => updateBackgroundVideoBrightness((settings.backgroundVideoBrightness ?? 30) + 5)}
+                      aria-label="Increase fullscreen video brightness"
+                      className="h-9 w-9 shrink-0"
+                    >
+                      <Plus className="h-4 w-4" />
+                    </Button>
+                  </div>
                   <div className="flex justify-between text-[10px] text-muted-foreground uppercase tracking-widest">
                     <span>Dim</span>
                     <span>Bright</span>

@@ -111,6 +111,7 @@ const MusicPlayer = ({
     shuffleMode: ctxShuffleMode,
     toggleShuffle,
     loopMode: ctxLoopMode,
+    loopOneCount,
     cycleLoopMode,
     toggleLoopOne,
     isFavorite,
@@ -338,10 +339,15 @@ const MusicPlayer = ({
               </button>
               <button 
                 onClick={toggleLoopOne} 
-                className={cn("p-1.5 rounded-full transition-all", ctxLoopMode === 'one' ? "text-primary bg-primary/10" : "text-muted-foreground hover:text-foreground")}
-                title={ctxLoopMode === 'one' ? 'Repeat song on' : 'Repeat this song'}
+                className={cn("relative p-1.5 rounded-full transition-all", loopOneCount > 0 ? "text-primary bg-primary/10" : "text-muted-foreground hover:text-foreground")}
+                title={loopOneCount > 0 ? `Replay ${loopOneCount} more time${loopOneCount === 1 ? '' : 's'}` : 'Add one replay'}
               >
                 <Repeat1 className="w-3.5 h-3.5" />
+                {loopOneCount > 0 && (
+                  <span className="absolute -right-1 -top-1 flex h-3.5 min-w-3.5 items-center justify-center rounded-full bg-primary px-0.5 text-[8px] font-black leading-none text-primary-foreground">
+                    {loopOneCount}
+                  </span>
+                )}
               </button>
               <button 
                 onClick={handleShare} 
@@ -455,19 +461,18 @@ const MusicPlayer = ({
           </div>
 
           {/* Right: Actions & Volume */}
-          <div className={cn(
-            "flex items-center justify-end gap-3 transition-all duration-500 shrink-0",
-            nowPlayingOpen ? "w-48 lg:w-60" : "w-64 lg:w-76"
-          )}>
             <div className={cn(
-              "flex items-center rounded-xl bg-white/5 border border-white/5 shadow-inner transition-all",
-              nowPlayingOpen ? "gap-0.5 p-0.5" : "gap-1 p-1 lg:p-1.5"
+              "flex items-center justify-end gap-2 transition-all duration-500 shrink-0",
+              nowPlayingOpen ? "w-48 lg:w-60" : "w-64 lg:w-76"
+            )}>
+            <div className={cn(
+                "grid grid-flow-col auto-cols-[2rem] items-center justify-center rounded-xl bg-white/5 border border-white/5 shadow-inner transition-all",
+                nowPlayingOpen ? "gap-0.5 p-0.5" : "gap-1 p-1"
             )}>
               <button 
                 onClick={() => setLyricsOpen(!lyricsOpen)} 
                 className={cn(
-                  "rounded-lg transition-all",
-                  nowPlayingOpen ? "p-1" : "p-1.5 lg:p-2",
+                  "h-8 w-8 rounded-lg transition-all flex items-center justify-center",
                   lyricsOpen ? "bg-primary text-primary-foreground shadow-sm" : "text-muted-foreground hover:text-foreground hover:bg-white/5"
                 )}
                 title="Lyrics"
@@ -477,8 +482,8 @@ const MusicPlayer = ({
               <button 
                 onClick={() => setNowPlayingOpen(!nowPlayingOpen)} 
                 className={cn(
-                  "rounded-lg transition-all",
-                  nowPlayingOpen ? "p-1 animate-pulse" : "p-1.5 lg:p-2",
+                  "h-8 w-8 rounded-lg transition-all flex items-center justify-center",
+                  nowPlayingOpen ? "animate-pulse" : "",
                   nowPlayingOpen ? "bg-primary text-primary-foreground shadow-sm" : "text-muted-foreground hover:text-foreground hover:bg-white/5"
                 )}
                 title="Now Playing"
@@ -488,8 +493,7 @@ const MusicPlayer = ({
               <button 
                 onClick={() => setShowEQ(!showEQ)} 
                 className={cn(
-                  "rounded-lg transition-all",
-                  nowPlayingOpen ? "p-1" : "p-1.5 lg:p-2",
+                  "h-8 w-8 rounded-lg transition-all flex items-center justify-center",
                   showEQ ? "bg-primary text-primary-foreground shadow-sm" : "text-muted-foreground hover:text-foreground hover:bg-white/5"
                 )}
                 title="Equalizer"
@@ -499,20 +503,21 @@ const MusicPlayer = ({
               <button 
                 onClick={toggleLoopOne} 
                 className={cn(
-                  "rounded-lg transition-all",
-                  nowPlayingOpen ? "p-1" : "p-1.5 lg:p-2",
-                  ctxLoopMode === 'one' ? "bg-primary text-primary-foreground shadow-sm" : "text-muted-foreground hover:text-foreground hover:bg-white/5"
+                  "relative h-8 w-8 rounded-lg transition-all flex items-center justify-center",
+                  loopOneCount > 0 ? "bg-primary text-primary-foreground shadow-sm" : "text-muted-foreground hover:text-foreground hover:bg-white/5"
                 )}
-                title={ctxLoopMode === 'one' ? 'Repeat song on' : 'Repeat this song'}
+                title={loopOneCount > 0 ? `Replay ${loopOneCount} more time${loopOneCount === 1 ? '' : 's'}` : 'Add one replay'}
               >
                 <Repeat1 className="w-4 h-4" />
+                {loopOneCount > 0 && (
+                  <span className="absolute -right-1 -top-1 flex h-3.5 min-w-3.5 items-center justify-center rounded-full bg-background px-0.5 text-[8px] font-black leading-none text-primary ring-1 ring-primary/40">
+                    {loopOneCount}
+                  </span>
+                )}
               </button>
               <button 
                 onClick={handleShare} 
-                className={cn(
-                  "rounded-lg text-muted-foreground hover:text-foreground hover:bg-white/5 transition-all",
-                  nowPlayingOpen ? "p-1" : "p-1.5 lg:p-2"
-                )}
+                className="h-8 w-8 rounded-lg text-muted-foreground hover:text-foreground hover:bg-white/5 transition-all flex items-center justify-center"
                 title="Share"
               >
                 <Share2 className="w-4 h-4" />
