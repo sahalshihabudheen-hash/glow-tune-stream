@@ -1248,11 +1248,9 @@ export function MusicPlayerProvider({ children }: { children: React.ReactNode })
   const cycleLoopMode = useCallback(() => {
     setLoopMode(prev => {
       const next = prev === 'off' ? 'all' : 'off';
-      if (next !== 'one') {
-        loopOneCountRef.current = 0;
-        setLoopOneCount(0);
-        localStorage.setItem('nyra-loop-one-count', '0');
-      }
+      loopOneCountRef.current = 0;
+      setLoopOneCount(0);
+      localStorage.setItem('nyra-loop-one-count', '0');
       localStorage.setItem('nyra-loop-mode', next);
       return next;
     });
