@@ -242,6 +242,7 @@ interface MusicPlayerContextType {
   shuffleMode: boolean;
   toggleShuffle: () => void;
   loopMode: 'off' | 'all' | 'one';
+  loopOneCount: number;
   cycleLoopMode: () => void;
   toggleLoopOne: () => void;
 
@@ -311,8 +312,15 @@ export function MusicPlayerProvider({ children }: { children: React.ReactNode })
   const [ytApiReady, setYtApiReady] = useState(false);
   const [showMiniPlayer, setShowMiniPlayer] = useState(false);
   const [loopMode, setLoopMode] = useState<'off' | 'all' | 'one'>(() => {
+    const savedCount = Number(localStorage.getItem('nyra-loop-one-count') || '0');
+    if (savedCount > 0) return 'one';
     return (localStorage.getItem('nyra-loop-mode') as 'off' | 'all' | 'one') || 'off';
   });
+  const [loopOneCount, setLoopOneCount] = useState(() => {
+    const saved = Number(localStorage.getItem('nyra-loop-one-count') || '0');
+    return Number.isFinite(saved) ? Math.max(0, Math.min(9, saved)) : 0;
+  });
+  const loopOneCountRef = useRef(loopOneCount);
   const [volume, setVolume] = useState(() => {
     const saved = localStorage.getItem('nyra-volume');
     return saved ? parseInt(saved, 10) : 80;
@@ -377,7 +385,7 @@ export function MusicPlayerProvider({ children }: { children: React.ReactNode })
     targetAudio.src = src;
     targetAudio.currentTime = currentTime;
     targetAudio.volume = isMuted ? 0 : volume / 100;
-    targetAudio.loop = loopMode === 'one';
+      targetAudio.loop = false;
 
     // Point the context-wide active audioRef to the target
     audioRef.current = targetAudio;
@@ -511,13 +519,14 @@ export function MusicPlayerProvider({ children }: { children: React.ReactNode })
 
     // Sync loop mode with audio elements
     useEffect(() => {
+      loopOneCountRef.current = loopOneCount;
       if (primaryAudioRef.current) {
-        primaryAudioRef.current.loop = loopMode === 'one';
+        primaryAudioRef.current.loop = false;
       }
       if (secondaryAudioRef.current) {
-        secondaryAudioRef.current.loop = loopMode === 'one';
+        secondaryAudioRef.current.loop = false;
       }
-    }, [loopMode]);
+    }, [loopOneCount]);
 
   // Audio event listeners bound to both elements to track state seamlessly
   useEffect(() => {
@@ -525,8 +534,21 @@ export function MusicPlayerProvider({ children }: { children: React.ReactNode })
     const secondary = secondaryAudioRef.current;
 
     const handleEnded = () => {
-      if (loopMode === 'one') {
-        // Native loop handles it, but just in case
+      if (loopOneCountRef.current > 0) {
+        loopOneCountRef.current -= 1;
+        const nextCount = loopOneCountRef.current;
+        setLoopOneCount(nextCount);
+        localStorage.setItem('nyra-loop-one-count', String(nextCount));
+        if (nextCount === 0) {
+          setLoopMode('off');
+          localStorage.setItem('nyra-loop-mode', 'off');
+        }
+        const audio = audioRef.current;
+        if (audio) {
+          audio.currentTime = 0;
+          audio.play().catch(() => {});
+          setIsPlaying(true);
+        }
         return;
       }
       if (settings.autoPlayNext && handleNextRef.current) {
@@ -588,7 +610,7 @@ export function MusicPlayerProvider({ children }: { children: React.ReactNode })
         secondary.removeEventListener('pause', handlePause);
       }
     };
-    }, [settings.autoPlayNext, loopMode]);
+    }, [settings.autoPlayNext]);
 
   // Sync isPlaying with actual audio or youtube playing state periodically to avoid state desyncs
   // Also updates lockscreen Media Session position progress
@@ -702,7 +724,15 @@ export function MusicPlayerProvider({ children }: { children: React.ReactNode })
           } else if (e.data === yt.PlayerState.PAUSED) {
             setIsPlaying(false);
           } else if (e.data === yt.PlayerState.ENDED) {
-            if (loopMode === 'one') {
+            if (loopOneCountRef.current > 0) {
+              loopOneCountRef.current -= 1;
+              const nextCount = loopOneCountRef.current;
+              setLoopOneCount(nextCount);
+              localStorage.setItem('nyra-loop-one-count', String(nextCount));
+              if (nextCount === 0) {
+                setLoopMode('off');
+                localStorage.setItem('nyra-loop-mode', 'off');
+              }
               try { e.target.seekTo(0, true); e.target.playVideo(); } catch {}
               setIsPlaying(true);
               return;
@@ -1217,32 +1247,28 @@ export function MusicPlayerProvider({ children }: { children: React.ReactNode })
 
   const cycleLoopMode = useCallback(() => {
     setLoopMode(prev => {
-      const next = prev === 'off' ? 'all' : prev === 'all' ? 'one' : 'off';
+      const next = prev === 'off' ? 'all' : 'off';
+      loopOneCountRef.current = 0;
+      setLoopOneCount(0);
+      localStorage.setItem('nyra-loop-one-count', '0');
       localStorage.setItem('nyra-loop-mode', next);
       return next;
     });
   }, []);
 
   const toggleLoopOne = useCallback(() => {
-    setLoopMode(prev => {
-      const next = prev === 'one' ? 'off' : 'one';
-      localStorage.setItem('nyra-loop-mode', next);
+    setLoopOneCount(prev => {
+      const next = prev >= 9 ? 0 : prev + 1;
+      loopOneCountRef.current = next;
+      localStorage.setItem('nyra-loop-one-count', String(next));
+      setLoopMode(next > 0 ? 'one' : 'off');
+      localStorage.setItem('nyra-loop-mode', next > 0 ? 'one' : 'off');
+      toast.success(next > 0 ? `Song will replay ${next} more time${next === 1 ? '' : 's'}` : 'Song repeat off');
       return next;
     });
   }, []);
 
   const handleNext = useCallback(async () => {
-    if (loopMode === 'one' && currentTrack) {
-      if (audioRef.current && audioRef.current.src) {
-        audioRef.current.currentTime = 0;
-        audioRef.current.play().catch(() => {});
-      } else if (ytPlayerRef.current) {
-        try { ytPlayerRef.current.seekTo(0); ytPlayerRef.current.playVideo(); } catch {}
-      }
-      setIsPlaying(true);
-      return;
-    }
-
     const nextFromQueue = getNextFromQueue(playlist);
     if (nextFromQueue) {
       setCurrentTrack(nextFromQueue);
@@ -1430,7 +1456,7 @@ export function MusicPlayerProvider({ children }: { children: React.ReactNode })
       handleRemoveFromPlaylist, handleClearPlaylist,
       playlist, queue, isInPlaylist, removeFromQueue, reorderPlaylist,
       shuffleMode, toggleShuffle,
-      loopMode, cycleLoopMode, toggleLoopOne,
+      loopMode, loopOneCount, cycleLoopMode, toggleLoopOne,
       nowPlayingOpen, setNowPlayingOpen,
       isFavorite, toggleFavorite,
       tracks, setTracks,

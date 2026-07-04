@@ -333,7 +333,16 @@ export const ThemeProvider = ({ children }: { children: ReactNode }) => {
   }, []);
 
   const updateSettings = useCallback((newSettings: Partial<AppSettings>) => {
-    setSettings(prev => ({ ...prev, ...newSettings }));
+    setSettings(prev => {
+      const next = { ...prev, ...newSettings };
+      if (newSettings.backgroundVideoBrightness !== undefined) {
+        const value = Number(newSettings.backgroundVideoBrightness);
+        next.backgroundVideoBrightness = Number.isFinite(value)
+          ? Math.max(0, Math.min(100, Math.round(value)))
+          : prev.backgroundVideoBrightness;
+      }
+      return next;
+    });
   }, []);
 
   const contextValue = useMemo(() => ({
