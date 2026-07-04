@@ -343,18 +343,22 @@ export function DownloadManagerProvider({ children }: { children: React.ReactNod
         let mimeType = 'audio/webm';
 
         try {
-          const serverAudio = await resolveServerAudioUrl(track);
-          mimeType = serverAudio.mimeType;
-          // Lock the browser download to the exact stream that passed resolve.
-          // This avoids a second random resolve on the final download request.
-          downloadUrl = buildAudioFunctionUrl(track, { proxyUrl: serverAudio.url, download: true });
+          downloadUrl = buildAudioFunctionUrl(track, { download: true });
           mimeType = await assertDownloadUrlReady(downloadUrl);
-        } catch (primaryErr) {
-          console.warn('[Download] Primary proxy preflight failed, trying client-resolved proxy:', primaryErr);
-          const fallbackUrl = await resolveAudioUrl(track.id);
-          if (!fallbackUrl) throw new Error('Audio stream unavailable for this song');
-          downloadUrl = buildAudioFunctionUrl(track, { proxyUrl: fallbackUrl, download: true });
-          mimeType = await assertDownloadUrlReady(downloadUrl);
+        } catch (directErr) {
+          console.warn('[Download] Direct backend download failed, trying locked proxy URL:', directErr);
+          try {
+            const serverAudio = await resolveServerAudioUrl(track);
+            mimeType = serverAudio.mimeType;
+            downloadUrl = buildAudioFunctionUrl(track, { proxyUrl: serverAudio.url, download: true });
+            mimeType = await assertDownloadUrlReady(downloadUrl);
+          } catch (proxyErr) {
+            console.warn('[Download] Locked proxy preflight failed, trying browser resolver:', proxyErr);
+            const fallbackUrl = await resolveAudioUrl(track.id);
+            if (!fallbackUrl) throw new Error('Audio stream unavailable for this song');
+            downloadUrl = buildAudioFunctionUrl(track, { proxyUrl: fallbackUrl, download: true });
+            mimeType = await assertDownloadUrlReady(downloadUrl);
+          }
         }
 
         toast.dismiss(`dl-${track.id}`);
@@ -386,21 +390,30 @@ export function DownloadManagerProvider({ children }: { children: React.ReactNod
 
         let audioBlob: Blob | null = null;
         try {
-          const serverAudio = await resolveServerAudioUrl(track);
-          const streamUrl = buildAudioFunctionUrl(track, { proxyUrl: serverAudio.url, stream: true });
+          const streamUrl = buildAudioFunctionUrl(track, { stream: true });
           const result = await fetchAudioBlob(streamUrl, (p) =>
             updateItem(track.id, { progress: Math.round(10 + p * 0.75) })
           );
           audioBlob = result.blob;
-        } catch (proxyErr) {
-          console.warn('[Download] Primary cache proxy failed, retrying with client-resolved proxy:', proxyErr);
-          const fallbackUrl = await resolveAudioUrl(track.id);
-          if (!fallbackUrl) throw new Error('Audio stream unavailable for this song');
-          const streamUrl = buildAudioFunctionUrl(track, { proxyUrl: fallbackUrl, stream: true });
-          const result = await fetchAudioBlob(streamUrl, (p) =>
-            updateItem(track.id, { progress: Math.round(20 + p * 0.7) })
-          );
-          audioBlob = result.blob;
+        } catch (directErr) {
+          console.warn('[Download] Direct cache stream failed, retrying with resolved proxy:', directErr);
+          try {
+            const serverAudio = await resolveServerAudioUrl(track);
+            const streamUrl = buildAudioFunctionUrl(track, { proxyUrl: serverAudio.url, stream: true });
+            const result = await fetchAudioBlob(streamUrl, (p) =>
+              updateItem(track.id, { progress: Math.round(15 + p * 0.75) })
+            );
+            audioBlob = result.blob;
+          } catch (proxyErr) {
+            console.warn('[Download] Primary cache proxy failed, retrying with browser-resolved proxy:', proxyErr);
+            const fallbackUrl = await resolveAudioUrl(track.id);
+            if (!fallbackUrl) throw new Error('Audio stream unavailable for this song');
+            const streamUrl = buildAudioFunctionUrl(track, { proxyUrl: fallbackUrl, stream: true });
+            const result = await fetchAudioBlob(streamUrl, (p) =>
+              updateItem(track.id, { progress: Math.round(20 + p * 0.7) })
+            );
+            audioBlob = result.blob;
+          }
         }
         toast.dismiss(`dl-app-${track.id}`);
 
