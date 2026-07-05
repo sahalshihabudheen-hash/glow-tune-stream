@@ -641,9 +641,13 @@ const PlaylistView = () => {
                 <div
                   key={track.id}
                   draggable={canReorder}
-                  onDragStart={(e) => canReorder && handleDragStart(e, index)}
+                  onDragStart={(e) => {
+                    if (canReorder) handleDragStart(e, index);
+                  }}
                   onDragOver={handleDragOver}
-                  onDrop={(e) => canReorder && handleDrop(e, index)}
+                  onDrop={(e) => {
+                    if (canReorder) handleDrop(e, index);
+                  }}
                   onDragEnd={() => setDraggedIndex(null)}
                   onTouchMove={canReorder ? handleTouchMove : undefined}
                   onTouchEnd={canReorder ? handleTouchEnd : undefined}
@@ -666,7 +670,9 @@ const PlaylistView = () => {
                       'touch-manipulation flex-shrink-0 transition-all p-2 rounded-xl',
                       canReorder ? 'cursor-grab active:cursor-grabbing opacity-20 group-hover:opacity-100 hover:bg-white/5' : 'opacity-10 cursor-default'
                     )}
-                    onTouchStart={(e) => canReorder && handleTouchStart(index, e)}
+                    onTouchStart={(e) => {
+                      if (canReorder) handleTouchStart(index, e);
+                    }}
                   >
                     <div className="flex flex-col gap-1 w-4">
                       <div className="h-0.5 w-full bg-foreground rounded-full"></div>
