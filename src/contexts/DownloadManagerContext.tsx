@@ -267,11 +267,8 @@ async function fetchAudioBlob(
 // still work if the app is deployed without VITE_SUPABASE_URL.
 const getAudioFunctionBases = () => {
   const backendUrl = (import.meta.env.VITE_SUPABASE_URL || '').replace(/\/$/, '');
-  const host = typeof window !== 'undefined' ? window.location.hostname : '';
-  const canUseNodeApi = host === 'localhost' || host === '127.0.0.1' || host.includes('vercel.app');
-  const bases = canUseNodeApi ? ['/api/get-audio-url'] : [];
+  const bases = ['/api/get-audio-url'];
   if (backendUrl) bases.push(`${backendUrl}/functions/v1/get-audio-url`);
-  if (!bases.length) bases.push('/api/get-audio-url');
   return [...new Set(bases)];
 };
 
