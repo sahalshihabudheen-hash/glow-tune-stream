@@ -66,7 +66,7 @@ async function resolveYtDlp(videoId: string): Promise<{ url: string; mimeType: s
     return await new Promise((resolve) => {
       const child = spawn(bin, [
         '--no-playlist',
-        '--extractor-args', 'youtube:player_client=ios,web,android',
+        '--extractor-args', 'youtube:player_client=web,ios,android',
         '--user-agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120 Safari/537.36',
         '-f', 'bestaudio[ext=m4a]/bestaudio/best',
         '-g',
@@ -84,6 +84,36 @@ async function resolveYtDlp(videoId: string): Promise<{ url: string; mimeType: s
     });
   } catch {
     return null;
+  }
+}
+
+async function resolvePlayableYtDlp(videoId: string): Promise<{ url: string; mimeType: string } | null> {
+  const info = await resolveYtDlp(videoId);
+  if (!info) return null;
+  try {
+    await probeAudioUrl(info.url, info.mimeType);
+    return info;
+  } catch {
+    return null;
+  }
+}
+
+async function probeAudioUrl(sourceUrl: string, mimeType = 'audio/webm') {
+  const res = await fetch(sourceUrl, {
+    headers: {
+      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120 Safari/537.36',
+      Accept: '*/*',
+      Range: 'bytes=0-2047',
+    },
+    redirect: 'follow',
+    signal: AbortSignal.timeout(20_000),
+  });
+  if (!res.ok && res.status !== 206) throw new Error(`Upstream ${res.status}`);
+  const bytes = Buffer.from(await res.arrayBuffer());
+  const text = bytes.subarray(0, 96).toString('utf8').trim().toLowerCase();
+  const type = res.headers.get('content-type') || mimeType;
+  if (!bytes.length || text.startsWith('<!doctype') || text.startsWith('<html') || text.startsWith('{"error"') || !looksLikeAudio(type)) {
+    throw new Error('Resolved URL was not audio');
   }
 }
 
@@ -137,11 +167,11 @@ export default async function handler(req: any, res: any) {
 
     let videoId = cleanId(String(req.query.videoId || req.query.id || ''));
     if (videoId.length !== 11) return res.status(400).json({ error: 'Video ID required' });
-    let info = await resolveYtDlp(videoId);
+    let info = await resolvePlayableYtDlp(videoId);
     if (!info) {
       const replacementId = await searchVideoIdByTitle(title);
       if (replacementId && replacementId !== videoId) {
-        const replacementInfo = await resolveYtDlp(replacementId);
+        const replacementInfo = await resolvePlayableYtDlp(replacementId);
         if (replacementInfo) {
           videoId = replacementId;
           info = replacementInfo;
@@ -155,7 +185,7 @@ export default async function handler(req: any, res: any) {
       } catch (streamError) {
         const replacementId = await searchVideoIdByTitle(title);
         if (replacementId && replacementId !== videoId) {
-          const replacementInfo = await resolveYtDlp(replacementId);
+          const replacementInfo = await resolvePlayableYtDlp(replacementId);
           if (replacementInfo) return streamProxy(req, res, replacementInfo.url, replacementInfo.mimeType, download, title);
         }
         throw streamError;
