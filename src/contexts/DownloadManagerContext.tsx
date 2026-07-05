@@ -276,23 +276,33 @@ const resolveServerAudioUrl = async (track: { id: string; title: string }) => {
 };
 
 const assertDownloadUrlReady = async (url: string) => {
+  const controller = new AbortController();
+  const timer = window.setTimeout(() => controller.abort(), 45_000);
   const response = await fetch(url, {
     headers: { Range: 'bytes=0-4095' },
-    signal: getTimeoutSignal(45_000),
+    signal: controller.signal,
   });
-  if (!response.ok && response.status !== 206) {
-    throw new Error(`HTTP ${response.status}`);
+  try {
+    if (!response.ok && response.status !== 206) {
+      throw new Error(`HTTP ${response.status}`);
+    }
+    const mimeType = (response.headers.get('content-type') || 'audio/webm').split(';')[0];
+    const reader = response.body?.getReader();
+    const first = reader ? await reader.read() : null;
+    const probe = first?.value || new Uint8Array();
+    try { await reader?.cancel(); } catch { /* ignore */ }
+    const head = new TextDecoder().decode(probe.slice(0, Math.min(probe.length, 96))).trim().toLowerCase();
+    if (!probe.length || head.startsWith('<!doctype') || head.startsWith('<html') || head.startsWith('{"error"')) {
+      throw new Error('Audio stream returned a webpage instead of music');
+    }
+    if (mimeType.includes('text/html') || mimeType.includes('application/json')) {
+      throw new Error('Audio stream unavailable');
+    }
+    return mimeType;
+  } finally {
+    window.clearTimeout(timer);
+    controller.abort();
   }
-  const mimeType = (response.headers.get('content-type') || 'audio/webm').split(';')[0];
-  const probe = new Uint8Array(await response.clone().arrayBuffer());
-  const head = new TextDecoder().decode(probe.slice(0, Math.min(probe.length, 96))).trim().toLowerCase();
-  if (!probe.length || head.startsWith('<!doctype') || head.startsWith('<html') || head.startsWith('{"error"')) {
-    throw new Error('Audio stream returned a webpage instead of music');
-  }
-  if (mimeType.includes('text/html') || mimeType.includes('application/json')) {
-    throw new Error('Audio stream unavailable');
-  }
-  return mimeType;
 };
 
 const firstReadyDownload = async (track: { id: string; title: string }, options: { download?: boolean; stream?: boolean; proxyUrl?: string } = {}) => {
