@@ -102,6 +102,34 @@ function safeTitle(title: string) {
   return (title || 'audio').replace(/[^\w\s-]/g, '').trim() || 'audio';
 }
 
+async function searchVideoIdByTitle(title: string): Promise<string | null> {
+  const query = safeTitle(title);
+  if (!query || query.toLowerCase() === 'audio') return null;
+
+  try {
+    const res = await fetch(`https://api.piped.private.coffee/search?q=${encodeURIComponent(query)}&filter=videos`, {
+      signal: AbortSignal.timeout(8000),
+      headers: { 'Accept': 'application/json', 'User-Agent': 'Mozilla/5.0' },
+    });
+    if (res.ok) {
+      const data = await res.json();
+      const item = data?.items?.find((entry: any) => entry?.type === 'stream' && /watch\?v=/.test(entry?.url || ''));
+      const id = item?.url?.match(/[?&]v=([a-zA-Z0-9_-]{11})/)?.[1];
+      if (id) return id;
+    }
+  } catch { /* try YouTube search */ }
+
+  try {
+    const html = await fetch(`https://www.youtube.com/results?search_query=${encodeURIComponent(query)}`, {
+      signal: AbortSignal.timeout(8000),
+      headers: { 'User-Agent': 'Mozilla/5.0' },
+    }).then((r) => r.text());
+    return html.match(/"videoId":"([a-zA-Z0-9_-]{11})"/)?.[1] || null;
+  } catch {
+    return null;
+  }
+}
+
 function looksLikeAudio(contentType: string | null, url = '') {
   const type = (contentType || '').toLowerCase();
   return type.startsWith('audio/') || type.includes('octet-stream') || url.includes('/videoplayback');
@@ -363,7 +391,18 @@ serve(async (req) => {
     }
     videoId = videoId.trim().substring(0, 11);
 
-    const streamInfo = await getStreamInfo(videoId);
+    let streamInfo = await getStreamInfo(videoId);
+
+    if (!streamInfo) {
+      const replacementId = await searchVideoIdByTitle(title);
+      if (replacementId && replacementId !== videoId) {
+        const replacementInfo = await getStreamInfo(replacementId);
+        if (replacementInfo) {
+          videoId = replacementId;
+          streamInfo = replacementInfo;
+        }
+      }
+    }
 
     if (!streamInfo) {
       return new Response(
