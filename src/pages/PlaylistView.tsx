@@ -1,6 +1,6 @@
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { Play, Pause, Trash2, Shuffle, Repeat, Repeat1, ArrowLeft, Search, Music2, Download, Check } from 'lucide-react';
+import { Play, Pause, Trash2, Shuffle, Repeat, Repeat1, ArrowLeft, Search, Music2, Download, Check, Filter, Flame, Heart, Zap, Moon, Dumbbell, Sparkles } from 'lucide-react';
 import { getFunctionAuthHeaders } from '@/lib/functionAuth';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
@@ -38,6 +38,47 @@ interface Playlist {
   description: string | null;
 }
 
+type MoodFilter = 'all' | 'hype' | 'chill' | 'sad' | 'romance' | 'workout';
+type PlaylistMode = 'original' | 'mood-flow' | 'energy' | 'artist';
+
+const MOOD_FILTERS: { id: MoodFilter; label: string; icon: typeof Music2; keywords: string[] }[] = [
+  { id: 'all', label: 'All', icon: Music2, keywords: [] },
+  { id: 'hype', label: 'Hype', icon: Flame, keywords: ['hype', 'party', 'dance', 'club', 'remix', 'edm', 'trap', 'bass', 'funk', 'rock', 'gangnam', 'uptown', 'empire'] },
+  { id: 'chill', label: 'Chill', icon: Moon, keywords: ['chill', 'lofi', 'slow', 'soft', 'acoustic', 'ambient', 'faded', 'calm', 'relax', 'night'] },
+  { id: 'sad', label: 'Sad', icon: Heart, keywords: ['sad', 'alone', 'tears', 'cry', 'lost', 'goodbye', 'see you again', 'hurt', 'broken', 'miss'] },
+  { id: 'romance', label: 'Love', icon: Sparkles, keywords: ['love', 'baby', 'girl', 'shape of you', 'despacito', 'sorry', 'heart', 'romance', 'kiss'] },
+  { id: 'workout', label: 'Workout', icon: Dumbbell, keywords: ['workout', 'run', 'power', 'strong', 'roar', 'waka waka', 'lights', 'energy', 'speed', 'pump'] },
+];
+
+const PLAYLIST_MODES: { id: PlaylistMode; label: string; icon: typeof Music2 }[] = [
+  { id: 'original', label: 'Original', icon: Music2 },
+  { id: 'mood-flow', label: 'Mood Flow', icon: Filter },
+  { id: 'energy', label: 'Energy', icon: Zap },
+  { id: 'artist', label: 'Artist', icon: Sparkles },
+];
+
+const normalizeTrackText = (track: Track) => `${track.title} ${track.channel}`.toLowerCase();
+
+const getMoodScore = (track: Track, mood: MoodFilter) => {
+  if (mood === 'all') return 1;
+  const text = normalizeTrackText(track);
+  const filter = MOOD_FILTERS.find(item => item.id === mood);
+  return filter?.keywords.reduce((score, keyword) => score + (text.includes(keyword) ? 1 : 0), 0) || 0;
+};
+
+const getDominantMoodIndex = (track: Track) => {
+  const scores = MOOD_FILTERS.slice(1).map((mood, index) => ({ index, score: getMoodScore(track, mood.id) }));
+  return scores.sort((a, b) => b.score - a.score)[0]?.index ?? 0;
+};
+
+const getEnergyScore = (track: Track) => (
+  getMoodScore(track, 'hype') * 3 +
+  getMoodScore(track, 'workout') * 2 +
+  (normalizeTrackText(track).includes('remix') ? 2 : 0) -
+  getMoodScore(track, 'chill') -
+  getMoodScore(track, 'sad')
+);
+
 const PlaylistView = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
@@ -61,11 +102,30 @@ const PlaylistView = () => {
   const [searchResults, setSearchResults] = useState<Track[]>([]);
   const [isSearching, setIsSearching] = useState(false);
   const [activeTab, setActiveTab] = useState('playlists');
+  const [activeMoodFilter, setActiveMoodFilter] = useState<MoodFilter>('all');
+  const [playlistMode, setPlaylistMode] = useState<PlaylistMode>('original');
   
   const [loading, setLoading] = useState(true);
   const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
   const [touchStartY, setTouchStartY] = useState<number | null>(null);
   const [touchDragIndex, setTouchDragIndex] = useState<number | null>(null);
+
+  const visiblePlaylistTracks = useMemo(() => {
+    const filtered = activeMoodFilter === 'all'
+      ? [...playlistTracks]
+      : playlistTracks.filter(track => getMoodScore(track, activeMoodFilter) > 0);
+
+    switch (playlistMode) {
+      case 'mood-flow':
+        return filtered.sort((a, b) => getDominantMoodIndex(a) - getDominantMoodIndex(b));
+      case 'energy':
+        return filtered.sort((a, b) => getEnergyScore(b) - getEnergyScore(a));
+      case 'artist':
+        return filtered.sort((a, b) => a.channel.localeCompare(b.channel));
+      default:
+        return filtered;
+    }
+  }, [activeMoodFilter, playlistMode, playlistTracks]);
 
   useEffect(() => {
     const checkDownloadedTracks = async () => {
@@ -91,7 +151,7 @@ const PlaylistView = () => {
       return;
     }
     
-    const tracksToDownload = playlistTracks.filter(track => {
+    const tracksToDownload = visiblePlaylistTracks.filter(track => {
       const isDownloaded = downloadedTrackIds.has(track.id);
       const downloading = isDownloading(track.id);
       return !isDownloaded && !downloading;
@@ -159,12 +219,12 @@ const PlaylistView = () => {
   };
 
   const handlePlayFromPlaylistView = useCallback((track: Track) => {
-    handlePlayTrack(track, playlistTracks);
-  }, [handlePlayTrack, playlistTracks]);
+    handlePlayTrack(track, visiblePlaylistTracks);
+  }, [handlePlayTrack, visiblePlaylistTracks]);
 
   const handleNextInPlaylist = useCallback(() => {
-    if (!currentTrack || playlistTracks.length === 0) return;
-    const currentIndex = playlistTracks.findIndex(t => t.id === currentTrack.id);
+    if (!currentTrack || visiblePlaylistTracks.length === 0) return;
+    const currentIndex = visiblePlaylistTracks.findIndex(t => t.id === currentTrack.id);
 
     if (loopMode === 'one') {
       if (audioRef.current && audioRef.current.src) {
@@ -179,23 +239,23 @@ const PlaylistView = () => {
 
     let nextIndex: number;
     if (loopMode === 'all') {
-      nextIndex = (currentIndex + 1) % playlistTracks.length;
+      nextIndex = (currentIndex + 1) % visiblePlaylistTracks.length;
     } else {
       nextIndex = currentIndex + 1;
-      if (nextIndex >= playlistTracks.length) {
+      if (nextIndex >= visiblePlaylistTracks.length) {
         toast.info('Playlist ended');
         return;
       }
     }
-    handlePlayTrack(playlistTracks[nextIndex], playlistTracks);
-  }, [currentTrack, playlistTracks, loopMode, handlePlayTrack, audioRef, ytPlayerRef]);
+    handlePlayTrack(visiblePlaylistTracks[nextIndex], visiblePlaylistTracks);
+  }, [currentTrack, visiblePlaylistTracks, loopMode, handlePlayTrack, audioRef, ytPlayerRef]);
 
   const handlePreviousInPlaylist = useCallback(() => {
-    if (!currentTrack || playlistTracks.length === 0) return;
-    const currentIndex = playlistTracks.findIndex(t => t.id === currentTrack.id);
-    const prevIndex = currentIndex <= 0 ? playlistTracks.length - 1 : currentIndex - 1;
-    handlePlayTrack(playlistTracks[prevIndex], playlistTracks);
-  }, [currentTrack, playlistTracks, handlePlayTrack]);
+    if (!currentTrack || visiblePlaylistTracks.length === 0) return;
+    const currentIndex = visiblePlaylistTracks.findIndex(t => t.id === currentTrack.id);
+    const prevIndex = currentIndex <= 0 ? visiblePlaylistTracks.length - 1 : currentIndex - 1;
+    handlePlayTrack(visiblePlaylistTracks[prevIndex], visiblePlaylistTracks);
+  }, [currentTrack, visiblePlaylistTracks, handlePlayTrack]);
 
   const handleRemoveTrack = async (trackId: string) => {
     try {
