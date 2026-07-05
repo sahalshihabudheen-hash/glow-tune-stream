@@ -228,17 +228,16 @@ async function fetchAudioBlob(
 // Edge-function endpoint that resolves + proxies YouTube audio server-side.
 // Prefer Supabase when configured; fall back to the Vercel /api route so exports
 // still work if the app is deployed without VITE_SUPABASE_URL.
-const getAudioFunctionBase = () => {
-  if (typeof window !== 'undefined' && window.location.hostname.includes('vercel.app')) {
-    return '/api/get-audio-url';
-  }
-  const supabaseUrl = (import.meta.env.VITE_SUPABASE_URL || '').replace(/\/$/, '');
-  return supabaseUrl ? `${supabaseUrl}/functions/v1/get-audio-url` : '/api/get-audio-url';
+const getAudioFunctionBases = () => {
+  const backendUrl = (import.meta.env.VITE_SUPABASE_URL || '').replace(/\/$/, '');
+  const bases = ['/api/get-audio-url'];
+  if (backendUrl) bases.push(`${backendUrl}/functions/v1/get-audio-url`);
+  return [...new Set(bases)];
 };
 
 const buildAudioFunctionUrl = (
   track: { id: string; title: string },
-  options: { stream?: boolean; download?: boolean; proxyUrl?: string } = {}
+  options: { stream?: boolean; download?: boolean; proxyUrl?: string; base?: string } = {}
 ) => {
   const params = new URLSearchParams();
   if (options.proxyUrl) params.set('proxyUrl', options.proxyUrl);
@@ -246,7 +245,7 @@ const buildAudioFunctionUrl = (
   if (options.stream) params.set('stream', '1');
   if (options.download) params.set('download', '1');
   params.set('title', sanitizeFilename(track.title) || 'audio');
-  return `${getAudioFunctionBase()}?${params.toString()}`;
+  return `${options.base || getAudioFunctionBases()[0]}?${params.toString()}`;
 };
 
 const extForMime = (mimeType: string) => {
@@ -256,27 +255,58 @@ const extForMime = (mimeType: string) => {
 };
 
 const resolveServerAudioUrl = async (track: { id: string; title: string }) => {
-  const response = await fetch(buildAudioFunctionUrl(track), {
-    signal: getTimeoutSignal(25_000),
-  });
-  if (!response.ok) {
-    throw new Error(`Audio link failed (HTTP ${response.status})`);
+  let lastError: unknown;
+  for (const base of getAudioFunctionBases()) {
+    try {
+      const response = await fetch(buildAudioFunctionUrl(track, { base }), {
+        signal: getTimeoutSignal(35_000),
+      });
+      if (!response.ok) {
+        throw new Error(`Audio link failed (HTTP ${response.status})`);
+      }
+      const data = await response.json();
+      const url = data?.audioUrl || data?.audioUrl1;
+      if (!url) throw new Error('No audio link found');
+      return { url, mimeType: data?.mimeType || 'audio/webm', base };
+    } catch (err) {
+      lastError = err;
+    }
   }
-  const data = await response.json();
-  const url = data?.audioUrl || data?.audioUrl1;
-  if (!url) throw new Error('No audio link found');
-  return { url, mimeType: data?.mimeType || 'audio/webm' };
+  throw lastError instanceof Error ? lastError : new Error('No audio link found');
 };
 
 const assertDownloadUrlReady = async (url: string) => {
   const response = await fetch(url, {
     headers: { Range: 'bytes=0-4095' },
-    signal: getTimeoutSignal(30_000),
+    signal: getTimeoutSignal(45_000),
   });
   if (!response.ok && response.status !== 206) {
     throw new Error(`HTTP ${response.status}`);
   }
-  return (response.headers.get('content-type') || 'audio/webm').split(';')[0];
+  const mimeType = (response.headers.get('content-type') || 'audio/webm').split(';')[0];
+  const probe = new Uint8Array(await response.clone().arrayBuffer());
+  const head = new TextDecoder().decode(probe.slice(0, Math.min(probe.length, 96))).trim().toLowerCase();
+  if (!probe.length || head.startsWith('<!doctype') || head.startsWith('<html') || head.startsWith('{"error"')) {
+    throw new Error('Audio stream returned a webpage instead of music');
+  }
+  if (mimeType.includes('text/html') || mimeType.includes('application/json')) {
+    throw new Error('Audio stream unavailable');
+  }
+  return mimeType;
+};
+
+const firstReadyDownload = async (track: { id: string; title: string }, options: { download?: boolean; stream?: boolean; proxyUrl?: string } = {}) => {
+  let lastError: unknown;
+  for (const base of getAudioFunctionBases()) {
+    const url = buildAudioFunctionUrl(track, { ...options, base });
+    try {
+      const mimeType = await assertDownloadUrlReady(url);
+      return { url, mimeType, base };
+    } catch (err) {
+      lastError = err;
+    }
+  }
+  throw lastError instanceof Error ? lastError : new Error('Audio stream unavailable');
 };
 
 const triggerBrowserDownload = (url: string, title: string, mimeType = 'audio/webm') => {
@@ -343,21 +373,24 @@ export function DownloadManagerProvider({ children }: { children: React.ReactNod
         let mimeType = 'audio/webm';
 
         try {
-          downloadUrl = buildAudioFunctionUrl(track, { download: true });
-          mimeType = await assertDownloadUrlReady(downloadUrl);
+          const ready = await firstReadyDownload(track, { download: true });
+          downloadUrl = ready.url;
+          mimeType = ready.mimeType;
         } catch (directErr) {
           console.warn('[Download] Direct backend download failed, trying locked proxy URL:', directErr);
           try {
             const serverAudio = await resolveServerAudioUrl(track);
             mimeType = serverAudio.mimeType;
-            downloadUrl = buildAudioFunctionUrl(track, { proxyUrl: serverAudio.url, download: true });
-            mimeType = await assertDownloadUrlReady(downloadUrl);
+            const ready = await firstReadyDownload(track, { proxyUrl: serverAudio.url, download: true });
+            downloadUrl = ready.url;
+            mimeType = ready.mimeType;
           } catch (proxyErr) {
             console.warn('[Download] Locked proxy preflight failed, trying browser resolver:', proxyErr);
             const fallbackUrl = await resolveAudioUrl(track.id);
             if (!fallbackUrl) throw new Error('Audio stream unavailable for this song');
-            downloadUrl = buildAudioFunctionUrl(track, { proxyUrl: fallbackUrl, download: true });
-            mimeType = await assertDownloadUrlReady(downloadUrl);
+            const ready = await firstReadyDownload(track, { proxyUrl: fallbackUrl, download: true });
+            downloadUrl = ready.url;
+            mimeType = ready.mimeType;
           }
         }
 
@@ -390,7 +423,7 @@ export function DownloadManagerProvider({ children }: { children: React.ReactNod
 
         let audioBlob: Blob | null = null;
         try {
-          const streamUrl = buildAudioFunctionUrl(track, { stream: true });
+            const streamUrl = (await firstReadyDownload(track, { stream: true })).url;
           const result = await fetchAudioBlob(streamUrl, (p) =>
             updateItem(track.id, { progress: Math.round(10 + p * 0.75) })
           );
@@ -399,7 +432,7 @@ export function DownloadManagerProvider({ children }: { children: React.ReactNod
           console.warn('[Download] Direct cache stream failed, retrying with resolved proxy:', directErr);
           try {
             const serverAudio = await resolveServerAudioUrl(track);
-            const streamUrl = buildAudioFunctionUrl(track, { proxyUrl: serverAudio.url, stream: true });
+              const streamUrl = (await firstReadyDownload(track, { proxyUrl: serverAudio.url, stream: true })).url;
             const result = await fetchAudioBlob(streamUrl, (p) =>
               updateItem(track.id, { progress: Math.round(15 + p * 0.75) })
             );
@@ -408,7 +441,7 @@ export function DownloadManagerProvider({ children }: { children: React.ReactNod
             console.warn('[Download] Primary cache proxy failed, retrying with browser-resolved proxy:', proxyErr);
             const fallbackUrl = await resolveAudioUrl(track.id);
             if (!fallbackUrl) throw new Error('Audio stream unavailable for this song');
-            const streamUrl = buildAudioFunctionUrl(track, { proxyUrl: fallbackUrl, stream: true });
+            const streamUrl = (await firstReadyDownload(track, { proxyUrl: fallbackUrl, stream: true })).url;
             const result = await fetchAudioBlob(streamUrl, (p) =>
               updateItem(track.id, { progress: Math.round(20 + p * 0.7) })
             );
