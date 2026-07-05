@@ -550,6 +550,69 @@ const PlaylistView = () => {
           )}
         </div>
 
+        {/* Mood filters and playlist modes */}
+        {playlistTracks.length > 0 && (
+          <div className="mb-6 space-y-4 animate-in-up">
+            <div className="flex items-center gap-3">
+              <div className="w-9 h-9 rounded-2xl bg-primary/15 flex items-center justify-center">
+                <Filter className="w-4 h-4 text-primary" />
+              </div>
+              <div>
+                <h3 className="text-sm font-black text-foreground uppercase italic tracking-widest">Mood Filter</h3>
+                <p className="text-[10px] font-bold text-muted-foreground/60 uppercase tracking-widest">
+                  {visiblePlaylistTracks.length} of {playlistTracks.length} tracks showing
+                </p>
+              </div>
+            </div>
+
+            <div className="flex gap-2 overflow-x-auto pb-1 custom-scrollbar">
+              {MOOD_FILTERS.map((mood) => {
+                const Icon = mood.icon;
+                const selected = activeMoodFilter === mood.id;
+                const count = mood.id === 'all' ? playlistTracks.length : playlistTracks.filter(track => getMoodScore(track, mood.id) > 0).length;
+                return (
+                  <button
+                    key={mood.id}
+                    onClick={() => setActiveMoodFilter(mood.id)}
+                    className={cn(
+                      'h-11 px-4 rounded-2xl flex items-center gap-2 shrink-0 border transition-all active:scale-95',
+                      selected
+                        ? 'bg-primary text-primary-foreground border-primary neon-glow'
+                        : 'bg-white/5 text-muted-foreground border-white/10 hover:text-foreground hover:border-primary/30'
+                    )}
+                  >
+                    <Icon className="w-4 h-4" />
+                    <span className="text-xs font-black uppercase tracking-widest">{mood.label}</span>
+                    <span className={cn('text-[10px] font-black', selected ? 'text-primary-foreground/70' : 'text-muted-foreground/50')}>{count}</span>
+                  </button>
+                );
+              })}
+            </div>
+
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+              {PLAYLIST_MODES.map((mode) => {
+                const Icon = mode.icon;
+                const selected = playlistMode === mode.id;
+                return (
+                  <button
+                    key={mode.id}
+                    onClick={() => setPlaylistMode(mode.id)}
+                    className={cn(
+                      'h-12 rounded-2xl flex items-center justify-center gap-2 border transition-all active:scale-95',
+                      selected
+                        ? 'bg-primary/15 text-primary border-primary/40'
+                        : 'bg-white/5 text-muted-foreground border-white/10 hover:text-foreground hover:border-white/20'
+                    )}
+                  >
+                    <Icon className="w-4 h-4" />
+                    <span className="text-[10px] md:text-xs font-black uppercase tracking-widest">{mode.label}</span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
         {/* Playlist Tracks */}
         {playlistTracks.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-64 text-muted-foreground">
@@ -557,19 +620,33 @@ const PlaylistView = () => {
             <p className="text-xl font-medium">This playlist is empty</p>
             <p className="text-sm">Use the search above to add songs</p>
           </div>
+        ) : visiblePlaylistTracks.length === 0 ? (
+          <div className="flex flex-col items-center justify-center h-48 text-muted-foreground glass-premium border border-white/5 rounded-[2rem]">
+            <Filter className="w-12 h-12 mb-3 opacity-50" />
+            <p className="text-lg font-black uppercase italic tracking-tight">No tracks match this mood</p>
+            <button
+              onClick={() => setActiveMoodFilter('all')}
+              className="mt-4 px-5 py-2 rounded-xl bg-primary/10 text-primary hover:bg-primary hover:text-primary-foreground transition-all text-xs font-black uppercase tracking-widest"
+            >
+              Show All
+            </button>
+          </div>
         ) : (
           <div className="h-[calc(100vh-500px)] min-h-64 overflow-y-auto pr-2 custom-scrollbar">
             <div className="space-y-3">
-              {playlistTracks.map((track, index) => (
+              {visiblePlaylistTracks.map((track) => {
+                const index = playlistTracks.findIndex(item => item.id === track.id);
+                const canReorder = activeMoodFilter === 'all' && playlistMode === 'original';
+                return (
                 <div
                   key={track.id}
-                  draggable
-                  onDragStart={(e) => handleDragStart(e, index)}
+                  draggable={canReorder}
+                  onDragStart={(e) => canReorder && handleDragStart(e, index)}
                   onDragOver={handleDragOver}
-                  onDrop={(e) => handleDrop(e, index)}
+                  onDrop={(e) => canReorder && handleDrop(e, index)}
                   onDragEnd={() => setDraggedIndex(null)}
-                  onTouchMove={handleTouchMove}
-                  onTouchEnd={handleTouchEnd}
+                  onTouchMove={canReorder ? handleTouchMove : undefined}
+                  onTouchEnd={canReorder ? handleTouchEnd : undefined}
                   className={cn(
                     'w-full flex items-center gap-4 p-3 rounded-2xl transition-all duration-500 group relative overflow-hidden',
                     currentTrack?.id === track.id
@@ -585,8 +662,11 @@ const PlaylistView = () => {
 
                   {/* Drag Handle */}
                   <div
-                    className="cursor-grab active:cursor-grabbing touch-manipulation flex-shrink-0 opacity-20 group-hover:opacity-100 transition-all p-2 hover:bg-white/5 rounded-xl"
-                    onTouchStart={(e) => handleTouchStart(index, e)}
+                    className={cn(
+                      'touch-manipulation flex-shrink-0 transition-all p-2 rounded-xl',
+                      canReorder ? 'cursor-grab active:cursor-grabbing opacity-20 group-hover:opacity-100 hover:bg-white/5' : 'opacity-10 cursor-default'
+                    )}
+                    onTouchStart={(e) => canReorder && handleTouchStart(index, e)}
                   >
                     <div className="flex flex-col gap-1 w-4">
                       <div className="h-0.5 w-full bg-foreground rounded-full"></div>
@@ -684,7 +764,7 @@ const PlaylistView = () => {
                     </button>
                   </div>
                 </div>
-              ))}
+              );})}
             </div>
           </div>
         )}
@@ -697,7 +777,7 @@ const PlaylistView = () => {
           onPlayPause={handlePlayPause}
           onNext={handleNextInPlaylist}
           onPrevious={handlePreviousInPlaylist}
-          playlist={playlistTracks}
+          playlist={visiblePlaylistTracks}
           onPlayFromPlaylist={handlePlayFromPlaylistView}
           onRemoveFromPlaylist={handleRemoveTrack}
           onClearPlaylist={() => {}}
