@@ -17,6 +17,39 @@ const cleanId = (raw = '') => {
 
 const safeTitle = (title = 'audio') => title.replace(/[^\w\s-]/g, '').trim() || 'audio';
 
+const looksLikeAudio = (contentType: string | null) => {
+  const type = (contentType || '').toLowerCase();
+  return type.startsWith('audio/') || type.includes('video/') || type.includes('octet-stream');
+};
+
+async function searchVideoIdByTitle(title: string): Promise<string | null> {
+  const query = safeTitle(title);
+  if (!query || query.toLowerCase() === 'audio') return null;
+
+  try {
+    const piped = await fetch(`https://api.piped.private.coffee/search?q=${encodeURIComponent(query)}&filter=videos`, {
+      headers: { Accept: 'application/json', 'User-Agent': 'Mozilla/5.0' },
+      signal: AbortSignal.timeout(8000),
+    });
+    if (piped.ok) {
+      const data = await piped.json();
+      const item = data?.items?.find((entry: any) => entry?.type === 'stream' && /watch\?v=/.test(entry?.url || ''));
+      const id = item?.url?.match(/[?&]v=([a-zA-Z0-9_-]{11})/)?.[1];
+      if (id) return id;
+    }
+  } catch { /* try html search */ }
+
+  try {
+    const html = await fetch(`https://www.youtube.com/results?search_query=${encodeURIComponent(query)}`, {
+      headers: { 'User-Agent': 'Mozilla/5.0' },
+      signal: AbortSignal.timeout(8000),
+    }).then((r) => r.text());
+    return html.match(/"videoId":"([a-zA-Z0-9_-]{11})"/)?.[1] || null;
+  } catch {
+    return null;
+  }
+}
+
 async function ensureYtDlp() {
   const bin = path.join('/tmp', 'yt-dlp');
   if (fs.existsSync(bin)) return bin;
@@ -61,10 +94,20 @@ async function streamProxy(req: any, res: any, sourceUrl: string, mimeType = 'au
   };
   if (req.headers.range) headers.Range = req.headers.range;
   const upstream = await fetch(sourceUrl, { headers, redirect: 'follow' });
-  if (!upstream.ok && upstream.status !== 206) return res.status(502).json({ error: `Upstream ${upstream.status}` });
+  if (!upstream.ok && upstream.status !== 206) throw new Error(`Upstream ${upstream.status}`);
+
+  const reader = upstream.body?.getReader();
+  const first = reader ? await reader.read() : null;
+  const firstBytes = first?.value ? Buffer.from(first.value) : Buffer.alloc(0);
+  const firstText = firstBytes.subarray(0, 96).toString('utf8').trim().toLowerCase();
+  const upstreamType = upstream.headers.get('content-type');
+  if (!firstBytes.length || firstText.startsWith('<!doctype') || firstText.startsWith('<html') || firstText.startsWith('{"error"') || !looksLikeAudio(upstreamType || mimeType)) {
+    try { await reader?.cancel(); } catch { /* ignore */ }
+    throw new Error('Resolved URL was not an audio stream');
+  }
 
   cors(res);
-  const type = (upstream.headers.get('content-type') || mimeType).split(';')[0];
+  const type = (upstreamType || mimeType).split(';')[0];
   res.setHeader('Content-Type', type);
   res.setHeader('Accept-Ranges', 'bytes');
   if (download) res.setHeader('Content-Disposition', `attachment; filename="${safeTitle(title)}.${type.includes('mp4') ? 'm4a' : 'webm'}"`);
@@ -73,8 +116,8 @@ async function streamProxy(req: any, res: any, sourceUrl: string, mimeType = 'au
   if (len) res.setHeader('Content-Length', len);
   if (range) res.setHeader('Content-Range', range);
   res.status(upstream.status);
-  if (!upstream.body) return res.end();
-  const reader = upstream.body.getReader();
+  if (firstBytes.length) res.write(firstBytes);
+  if (!reader) return res.end();
   while (true) {
     const { done, value } = await reader.read();
     if (done) break;
@@ -92,11 +135,32 @@ export default async function handler(req: any, res: any) {
     const download = req.query.download === '1';
     if (proxyUrl) return streamProxy(req, res, String(proxyUrl), '', download, title);
 
-    const videoId = cleanId(String(req.query.videoId || req.query.id || ''));
+    let videoId = cleanId(String(req.query.videoId || req.query.id || ''));
     if (videoId.length !== 11) return res.status(400).json({ error: 'Video ID required' });
-    const info = await resolveYtDlp(videoId);
+    let info = await resolveYtDlp(videoId);
+    if (!info) {
+      const replacementId = await searchVideoIdByTitle(title);
+      if (replacementId && replacementId !== videoId) {
+        const replacementInfo = await resolveYtDlp(replacementId);
+        if (replacementInfo) {
+          videoId = replacementId;
+          info = replacementInfo;
+        }
+      }
+    }
     if (!info) return res.status(500).json({ error: 'Audio stream unavailable', videoId });
-    if (req.query.stream === '1' || download) return streamProxy(req, res, info.url, info.mimeType, download, title);
+    if (req.query.stream === '1' || download) {
+      try {
+        return await streamProxy(req, res, info.url, info.mimeType, download, title);
+      } catch (streamError) {
+        const replacementId = await searchVideoIdByTitle(title);
+        if (replacementId && replacementId !== videoId) {
+          const replacementInfo = await resolveYtDlp(replacementId);
+          if (replacementInfo) return streamProxy(req, res, replacementInfo.url, replacementInfo.mimeType, download, title);
+        }
+        throw streamError;
+      }
+    }
     return res.status(200).json({ audioUrl: info.url, audioUrl1: info.url, mimeType: info.mimeType, success: true });
   } catch (e: any) {
     return res.status(500).json({ error: e?.message || 'Audio resolver failed' });
