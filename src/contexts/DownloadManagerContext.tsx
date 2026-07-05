@@ -512,13 +512,13 @@ export function DownloadManagerProvider({ children }: { children: React.ReactNod
       } catch (err: any) {
         console.error('[Download] In-app download failed:', err);
         toast.dismiss(`dl-app-${track.id}`);
-        updateItem(track.id, { status: 'error', progress: 0 });
-        toast.error(err.message || 'Failed to save for offline. Try Download to Device.');
-        removeItem(track.id, 8_000);
+        toast.info('Offline save failed, switching to device download…');
+        removeItem(track.id);
+        await downloadToDevice(track);
       }
 
     },
-    [addItem, updateItem, removeItem]
+    [addItem, updateItem, removeItem, downloadToDevice]
   );
 
   // ── Entry point ─────────────────────────────────────────────────────────────
