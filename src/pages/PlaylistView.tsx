@@ -1,6 +1,6 @@
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { Play, Pause, Trash2, Shuffle, Repeat, Repeat1, ArrowLeft, Search, Music2, Download, Check } from 'lucide-react';
+import { Play, Pause, Trash2, Shuffle, Repeat, Repeat1, ArrowLeft, Search, Music2, Download, Check, Filter, Flame, Heart, Zap, Moon, Dumbbell, Sparkles } from 'lucide-react';
 import { getFunctionAuthHeaders } from '@/lib/functionAuth';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
@@ -38,6 +38,47 @@ interface Playlist {
   description: string | null;
 }
 
+type MoodFilter = 'all' | 'hype' | 'chill' | 'sad' | 'romance' | 'workout';
+type PlaylistMode = 'original' | 'mood-flow' | 'energy' | 'artist';
+
+const MOOD_FILTERS: { id: MoodFilter; label: string; icon: typeof Music2; keywords: string[] }[] = [
+  { id: 'all', label: 'All', icon: Music2, keywords: [] },
+  { id: 'hype', label: 'Hype', icon: Flame, keywords: ['hype', 'party', 'dance', 'club', 'remix', 'edm', 'trap', 'bass', 'funk', 'rock', 'gangnam', 'uptown', 'empire'] },
+  { id: 'chill', label: 'Chill', icon: Moon, keywords: ['chill', 'lofi', 'slow', 'soft', 'acoustic', 'ambient', 'faded', 'calm', 'relax', 'night'] },
+  { id: 'sad', label: 'Sad', icon: Heart, keywords: ['sad', 'alone', 'tears', 'cry', 'lost', 'goodbye', 'see you again', 'hurt', 'broken', 'miss'] },
+  { id: 'romance', label: 'Love', icon: Sparkles, keywords: ['love', 'baby', 'girl', 'shape of you', 'despacito', 'sorry', 'heart', 'romance', 'kiss'] },
+  { id: 'workout', label: 'Workout', icon: Dumbbell, keywords: ['workout', 'run', 'power', 'strong', 'roar', 'waka waka', 'lights', 'energy', 'speed', 'pump'] },
+];
+
+const PLAYLIST_MODES: { id: PlaylistMode; label: string; icon: typeof Music2 }[] = [
+  { id: 'original', label: 'Original', icon: Music2 },
+  { id: 'mood-flow', label: 'Mood Flow', icon: Filter },
+  { id: 'energy', label: 'Energy', icon: Zap },
+  { id: 'artist', label: 'Artist', icon: Sparkles },
+];
+
+const normalizeTrackText = (track: Track) => `${track.title} ${track.channel}`.toLowerCase();
+
+const getMoodScore = (track: Track, mood: MoodFilter) => {
+  if (mood === 'all') return 1;
+  const text = normalizeTrackText(track);
+  const filter = MOOD_FILTERS.find(item => item.id === mood);
+  return filter?.keywords.reduce((score, keyword) => score + (text.includes(keyword) ? 1 : 0), 0) || 0;
+};
+
+const getDominantMoodIndex = (track: Track) => {
+  const scores = MOOD_FILTERS.slice(1).map((mood, index) => ({ index, score: getMoodScore(track, mood.id) }));
+  return scores.sort((a, b) => b.score - a.score)[0]?.index ?? 0;
+};
+
+const getEnergyScore = (track: Track) => (
+  getMoodScore(track, 'hype') * 3 +
+  getMoodScore(track, 'workout') * 2 +
+  (normalizeTrackText(track).includes('remix') ? 2 : 0) -
+  getMoodScore(track, 'chill') -
+  getMoodScore(track, 'sad')
+);
+
 const PlaylistView = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
@@ -61,11 +102,30 @@ const PlaylistView = () => {
   const [searchResults, setSearchResults] = useState<Track[]>([]);
   const [isSearching, setIsSearching] = useState(false);
   const [activeTab, setActiveTab] = useState('playlists');
+  const [activeMoodFilter, setActiveMoodFilter] = useState<MoodFilter>('all');
+  const [playlistMode, setPlaylistMode] = useState<PlaylistMode>('original');
   
   const [loading, setLoading] = useState(true);
   const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
   const [touchStartY, setTouchStartY] = useState<number | null>(null);
   const [touchDragIndex, setTouchDragIndex] = useState<number | null>(null);
+
+  const visiblePlaylistTracks = useMemo(() => {
+    const filtered = activeMoodFilter === 'all'
+      ? [...playlistTracks]
+      : playlistTracks.filter(track => getMoodScore(track, activeMoodFilter) > 0);
+
+    switch (playlistMode) {
+      case 'mood-flow':
+        return filtered.sort((a, b) => getDominantMoodIndex(a) - getDominantMoodIndex(b));
+      case 'energy':
+        return filtered.sort((a, b) => getEnergyScore(b) - getEnergyScore(a));
+      case 'artist':
+        return filtered.sort((a, b) => a.channel.localeCompare(b.channel));
+      default:
+        return filtered;
+    }
+  }, [activeMoodFilter, playlistMode, playlistTracks]);
 
   useEffect(() => {
     const checkDownloadedTracks = async () => {
@@ -91,7 +151,7 @@ const PlaylistView = () => {
       return;
     }
     
-    const tracksToDownload = playlistTracks.filter(track => {
+    const tracksToDownload = visiblePlaylistTracks.filter(track => {
       const isDownloaded = downloadedTrackIds.has(track.id);
       const downloading = isDownloading(track.id);
       return !isDownloaded && !downloading;
@@ -159,12 +219,12 @@ const PlaylistView = () => {
   };
 
   const handlePlayFromPlaylistView = useCallback((track: Track) => {
-    handlePlayTrack(track, playlistTracks);
-  }, [handlePlayTrack, playlistTracks]);
+    handlePlayTrack(track, visiblePlaylistTracks);
+  }, [handlePlayTrack, visiblePlaylistTracks]);
 
   const handleNextInPlaylist = useCallback(() => {
-    if (!currentTrack || playlistTracks.length === 0) return;
-    const currentIndex = playlistTracks.findIndex(t => t.id === currentTrack.id);
+    if (!currentTrack || visiblePlaylistTracks.length === 0) return;
+    const currentIndex = visiblePlaylistTracks.findIndex(t => t.id === currentTrack.id);
 
     if (loopMode === 'one') {
       if (audioRef.current && audioRef.current.src) {
@@ -179,23 +239,23 @@ const PlaylistView = () => {
 
     let nextIndex: number;
     if (loopMode === 'all') {
-      nextIndex = (currentIndex + 1) % playlistTracks.length;
+      nextIndex = (currentIndex + 1) % visiblePlaylistTracks.length;
     } else {
       nextIndex = currentIndex + 1;
-      if (nextIndex >= playlistTracks.length) {
+      if (nextIndex >= visiblePlaylistTracks.length) {
         toast.info('Playlist ended');
         return;
       }
     }
-    handlePlayTrack(playlistTracks[nextIndex], playlistTracks);
-  }, [currentTrack, playlistTracks, loopMode, handlePlayTrack, audioRef, ytPlayerRef]);
+    handlePlayTrack(visiblePlaylistTracks[nextIndex], visiblePlaylistTracks);
+  }, [currentTrack, visiblePlaylistTracks, loopMode, handlePlayTrack, audioRef, ytPlayerRef]);
 
   const handlePreviousInPlaylist = useCallback(() => {
-    if (!currentTrack || playlistTracks.length === 0) return;
-    const currentIndex = playlistTracks.findIndex(t => t.id === currentTrack.id);
-    const prevIndex = currentIndex <= 0 ? playlistTracks.length - 1 : currentIndex - 1;
-    handlePlayTrack(playlistTracks[prevIndex], playlistTracks);
-  }, [currentTrack, playlistTracks, handlePlayTrack]);
+    if (!currentTrack || visiblePlaylistTracks.length === 0) return;
+    const currentIndex = visiblePlaylistTracks.findIndex(t => t.id === currentTrack.id);
+    const prevIndex = currentIndex <= 0 ? visiblePlaylistTracks.length - 1 : currentIndex - 1;
+    handlePlayTrack(visiblePlaylistTracks[prevIndex], visiblePlaylistTracks);
+  }, [currentTrack, visiblePlaylistTracks, handlePlayTrack]);
 
   const handleRemoveTrack = async (trackId: string) => {
     try {
@@ -490,6 +550,69 @@ const PlaylistView = () => {
           )}
         </div>
 
+        {/* Mood filters and playlist modes */}
+        {playlistTracks.length > 0 && (
+          <div className="mb-6 space-y-4 animate-in-up">
+            <div className="flex items-center gap-3">
+              <div className="w-9 h-9 rounded-2xl bg-primary/15 flex items-center justify-center">
+                <Filter className="w-4 h-4 text-primary" />
+              </div>
+              <div>
+                <h3 className="text-sm font-black text-foreground uppercase italic tracking-widest">Mood Filter</h3>
+                <p className="text-[10px] font-bold text-muted-foreground/60 uppercase tracking-widest">
+                  {visiblePlaylistTracks.length} of {playlistTracks.length} tracks showing
+                </p>
+              </div>
+            </div>
+
+            <div className="flex gap-2 overflow-x-auto pb-1 custom-scrollbar">
+              {MOOD_FILTERS.map((mood) => {
+                const Icon = mood.icon;
+                const selected = activeMoodFilter === mood.id;
+                const count = mood.id === 'all' ? playlistTracks.length : playlistTracks.filter(track => getMoodScore(track, mood.id) > 0).length;
+                return (
+                  <button
+                    key={mood.id}
+                    onClick={() => setActiveMoodFilter(mood.id)}
+                    className={cn(
+                      'h-11 px-4 rounded-2xl flex items-center gap-2 shrink-0 border transition-all active:scale-95',
+                      selected
+                        ? 'bg-primary text-primary-foreground border-primary neon-glow'
+                        : 'bg-white/5 text-muted-foreground border-white/10 hover:text-foreground hover:border-primary/30'
+                    )}
+                  >
+                    <Icon className="w-4 h-4" />
+                    <span className="text-xs font-black uppercase tracking-widest">{mood.label}</span>
+                    <span className={cn('text-[10px] font-black', selected ? 'text-primary-foreground/70' : 'text-muted-foreground/50')}>{count}</span>
+                  </button>
+                );
+              })}
+            </div>
+
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+              {PLAYLIST_MODES.map((mode) => {
+                const Icon = mode.icon;
+                const selected = playlistMode === mode.id;
+                return (
+                  <button
+                    key={mode.id}
+                    onClick={() => setPlaylistMode(mode.id)}
+                    className={cn(
+                      'h-12 rounded-2xl flex items-center justify-center gap-2 border transition-all active:scale-95',
+                      selected
+                        ? 'bg-primary/15 text-primary border-primary/40'
+                        : 'bg-white/5 text-muted-foreground border-white/10 hover:text-foreground hover:border-white/20'
+                    )}
+                  >
+                    <Icon className="w-4 h-4" />
+                    <span className="text-[10px] md:text-xs font-black uppercase tracking-widest">{mode.label}</span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
         {/* Playlist Tracks */}
         {playlistTracks.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-64 text-muted-foreground">
@@ -497,19 +620,37 @@ const PlaylistView = () => {
             <p className="text-xl font-medium">This playlist is empty</p>
             <p className="text-sm">Use the search above to add songs</p>
           </div>
+        ) : visiblePlaylistTracks.length === 0 ? (
+          <div className="flex flex-col items-center justify-center h-48 text-muted-foreground glass-premium border border-white/5 rounded-[2rem]">
+            <Filter className="w-12 h-12 mb-3 opacity-50" />
+            <p className="text-lg font-black uppercase italic tracking-tight">No tracks match this mood</p>
+            <button
+              onClick={() => setActiveMoodFilter('all')}
+              className="mt-4 px-5 py-2 rounded-xl bg-primary/10 text-primary hover:bg-primary hover:text-primary-foreground transition-all text-xs font-black uppercase tracking-widest"
+            >
+              Show All
+            </button>
+          </div>
         ) : (
           <div className="h-[calc(100vh-500px)] min-h-64 overflow-y-auto pr-2 custom-scrollbar">
             <div className="space-y-3">
-              {playlistTracks.map((track, index) => (
+              {visiblePlaylistTracks.map((track) => {
+                const index = playlistTracks.findIndex(item => item.id === track.id);
+                const canReorder = activeMoodFilter === 'all' && playlistMode === 'original';
+                return (
                 <div
                   key={track.id}
-                  draggable
-                  onDragStart={(e) => handleDragStart(e, index)}
+                  draggable={canReorder}
+                  onDragStart={(e) => {
+                    if (canReorder) handleDragStart(e, index);
+                  }}
                   onDragOver={handleDragOver}
-                  onDrop={(e) => handleDrop(e, index)}
+                  onDrop={(e) => {
+                    if (canReorder) handleDrop(e, index);
+                  }}
                   onDragEnd={() => setDraggedIndex(null)}
-                  onTouchMove={handleTouchMove}
-                  onTouchEnd={handleTouchEnd}
+                  onTouchMove={canReorder ? handleTouchMove : undefined}
+                  onTouchEnd={canReorder ? handleTouchEnd : undefined}
                   className={cn(
                     'w-full flex items-center gap-4 p-3 rounded-2xl transition-all duration-500 group relative overflow-hidden',
                     currentTrack?.id === track.id
@@ -525,8 +666,13 @@ const PlaylistView = () => {
 
                   {/* Drag Handle */}
                   <div
-                    className="cursor-grab active:cursor-grabbing touch-manipulation flex-shrink-0 opacity-20 group-hover:opacity-100 transition-all p-2 hover:bg-white/5 rounded-xl"
-                    onTouchStart={(e) => handleTouchStart(index, e)}
+                    className={cn(
+                      'touch-manipulation flex-shrink-0 transition-all p-2 rounded-xl',
+                      canReorder ? 'cursor-grab active:cursor-grabbing opacity-20 group-hover:opacity-100 hover:bg-white/5' : 'opacity-10 cursor-default'
+                    )}
+                    onTouchStart={(e) => {
+                      if (canReorder) handleTouchStart(index, e);
+                    }}
                   >
                     <div className="flex flex-col gap-1 w-4">
                       <div className="h-0.5 w-full bg-foreground rounded-full"></div>
@@ -624,7 +770,7 @@ const PlaylistView = () => {
                     </button>
                   </div>
                 </div>
-              ))}
+              );})}
             </div>
           </div>
         )}
@@ -637,7 +783,7 @@ const PlaylistView = () => {
           onPlayPause={handlePlayPause}
           onNext={handleNextInPlaylist}
           onPrevious={handlePreviousInPlaylist}
-          playlist={playlistTracks}
+          playlist={visiblePlaylistTracks}
           onPlayFromPlaylist={handlePlayFromPlaylistView}
           onRemoveFromPlaylist={handleRemoveTrack}
           onClearPlaylist={() => {}}

@@ -89,6 +89,43 @@ async function safelyParseJson<T = any>(res: Response): Promise<T | null> {
   }
 }
 
+function looksLikeAudio(contentType: string | null) {
+  const type = (contentType || '').toLowerCase();
+  return type.startsWith('audio/') || type.startsWith('video/') || type.includes('octet-stream');
+}
+
+function safeAudioTitle(title: string) {
+  return (title || 'audio').replace(/[^\w\s-]/g, '').trim() || 'audio';
+}
+
+async function searchVideoIdByTitle(title: string): Promise<string | null> {
+  const query = safeAudioTitle(title);
+  if (!query || query.toLowerCase() === 'audio') return null;
+
+  try {
+    const piped = await fetch(`https://api.piped.private.coffee/search?q=${encodeURIComponent(query)}&filter=videos`, {
+      headers: { Accept: 'application/json', 'User-Agent': 'Mozilla/5.0' },
+      signal: getTimeoutSignal(8000),
+    });
+    if (piped.ok) {
+      const data = await safelyParseJson<any>(piped);
+      const item = data?.items?.find((entry: any) => entry?.type === 'stream' && /watch\?v=/.test(entry?.url || ''));
+      const id = item?.url?.match(/[?&]v=([a-zA-Z0-9_-]{11})/)?.[1];
+      if (id) return id;
+    }
+  } catch { /* try YouTube HTML search */ }
+
+  try {
+    const html = await fetch(`https://www.youtube.com/results?search_query=${encodeURIComponent(query)}`, {
+      headers: { 'User-Agent': 'Mozilla/5.0' },
+      signal: getTimeoutSignal(8000),
+    }).then((r) => r.text());
+    return html.match(/"videoId":"([a-zA-Z0-9_-]{11})"/)?.[1] || null;
+  } catch {
+    return null;
+  }
+}
+
 async function getInvidiousStreamInfo(videoId: string): Promise<{ url: string; mimeType: string } | null> {
   // Layer 0: Prioritized proven high-performance Invidious Instance
   console.log(`[Express Server] Attempting prioritized Invidious resolution for ${videoId}`);
@@ -359,7 +396,7 @@ async function streamYtDlpDirectly(videoId: string, res: any, shouldDownload: bo
   res.setHeader('Content-Type', 'audio/mpeg');
   res.setHeader('Cache-Control', 'no-cache');
   if (shouldDownload) {
-    const cleanTitle = title.replace(/[^\w\s-]/g, '') || 'audio';
+    const cleanTitle = safeAudioTitle(title);
     res.setHeader('Content-Disposition', `attachment; filename="${cleanTitle}.mp3"`);
   }
 
@@ -385,6 +422,56 @@ async function streamYtDlpDirectly(videoId: string, res: any, shouldDownload: bo
       res.status(500).json({ error: 'Direct yt-dlp audio extraction failed' });
     }
   });
+}
+
+async function streamResolvedUrl(streamInfo: { url: string; mimeType: string }, req: any, res: any, shouldDownload: boolean, title: string) {
+  const range = req.headers.range;
+  const upstreamHeaders: Record<string, string> = {
+    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+    'Accept': '*/*',
+  };
+  if (range) upstreamHeaders['Range'] = range;
+
+  const upstream = await fetch(streamInfo.url, { headers: upstreamHeaders, redirect: 'follow' });
+  if (!upstream.ok && upstream.status !== 206) {
+    throw new Error(`Upstream ${upstream.status}`);
+  }
+
+  const reader = upstream.body?.getReader();
+  const first = reader ? await reader.read() : null;
+  const firstBytes = first?.value ? Buffer.from(first.value) : Buffer.alloc(0);
+  const firstText = firstBytes.subarray(0, 96).toString('utf8').trim().toLowerCase();
+  const upstreamType = upstream.headers.get('content-type') || streamInfo.mimeType;
+  if (!firstBytes.length || firstText.startsWith('<!doctype') || firstText.startsWith('<html') || firstText.startsWith('{"error"') || !looksLikeAudio(upstreamType)) {
+    try { await reader?.cancel(); } catch { /* ignore */ }
+    throw new Error('Resolved URL was not an audio stream');
+  }
+
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Headers', '*');
+  res.setHeader('Content-Type', upstreamType.split(';')[0]);
+  res.setHeader('Accept-Ranges', 'bytes');
+  res.setHeader('Cache-Control', 'no-cache');
+
+  if (shouldDownload) {
+    const ext = upstreamType.includes('mp4') || upstreamType.includes('m4a') ? 'm4a' : upstreamType.includes('mpeg') ? 'mp3' : 'webm';
+    res.setHeader('Content-Disposition', `attachment; filename="${safeAudioTitle(title)}.${ext}"`);
+  }
+
+  const contentLength = upstream.headers.get('content-length');
+  const contentRange = upstream.headers.get('content-range');
+  if (contentLength) res.setHeader('Content-Length', contentLength);
+  if (contentRange) res.setHeader('Content-Range', contentRange);
+
+  res.status(upstream.status);
+  if (firstBytes.length) res.write(firstBytes);
+  if (!reader) return res.end();
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    res.write(Buffer.from(value));
+  }
+  res.end();
 }
 
 async function getStreamInfo(videoId: string): Promise<{ url: string; mimeType: string } | null> {
@@ -462,11 +549,22 @@ async function startServer() {
         };
         if (range) upstreamHeaders['Range'] = range;
 
-        const upstream = await fetch(decodedUrl, { headers: upstreamHeaders });
+        const upstream = await fetch(decodedUrl, { headers: upstreamHeaders, redirect: 'follow' });
+        if (!upstream.ok && upstream.status !== 206) throw new Error(`Upstream ${upstream.status}`);
+
+        const reader = upstream.body?.getReader();
+        const first = reader ? await reader.read() : null;
+        const firstBytes = first?.value ? Buffer.from(first.value) : Buffer.alloc(0);
+        const firstText = firstBytes.subarray(0, 96).toString('utf8').trim().toLowerCase();
+        const upstreamType = upstream.headers.get('content-type');
+        if (!firstBytes.length || firstText.startsWith('<!doctype') || firstText.startsWith('<html') || firstText.startsWith('{"error"') || !looksLikeAudio(upstreamType)) {
+          try { await reader?.cancel(); } catch { /* ignore */ }
+          throw new Error('Proxy URL was not an audio stream');
+        }
         
         res.setHeader('Access-Control-Allow-Origin', '*');
         res.setHeader('Access-Control-Allow-Headers', '*');
-        res.setHeader('Content-Type', upstream.headers.get('content-type') || 'audio/mpeg');
+        res.setHeader('Content-Type', upstreamType || 'audio/mpeg');
         res.setHeader('Accept-Ranges', 'bytes');
         res.setHeader('Cache-Control', 'no-cache');
 
@@ -477,12 +575,12 @@ async function startServer() {
 
         res.status(upstream.status);
 
-        if (upstream.body) {
-          const reader = upstream.body.getReader();
+        if (firstBytes.length) res.write(firstBytes);
+        if (reader) {
           while (true) {
             const { done, value } = await reader.read();
             if (done) break;
-            res.write(value);
+            res.write(Buffer.from(value));
           }
           res.end();
         } else {
@@ -492,7 +590,7 @@ async function startServer() {
       } catch (proxyErr: any) {
         console.log('[Express Proxy] Direct proxy URL streaming handled.');
         if (!res.headersSent) {
-          return res.status(200).json({ status: "ok" });
+          return res.status(502).json({ error: proxyErr?.message || 'Audio proxy failed' });
         }
         return;
       }
@@ -523,6 +621,14 @@ async function startServer() {
 
     // Fallback directly to spawning yt-dlp live transcode stream if URL resolution completely failed
     if (!streamInfo) {
+      const replacementId = await searchVideoIdByTitle(title);
+      if (replacementId && replacementId !== videoId) {
+        streamInfo = await getStreamInfo(replacementId);
+        if (streamInfo) videoId = replacementId;
+      }
+    }
+
+    if (!streamInfo) {
       console.log(`[Express Server /get-audio-url] Stream resolution failed. Falling back to live transcoding/streaming with yt-dlp...`);
       return streamYtDlpDirectly(videoId, res, shouldDownload, title);
     }
@@ -534,57 +640,15 @@ async function startServer() {
 
     if (shouldStream || shouldDownload) {
       try {
-        const range = req.headers.range;
-        const upstreamHeaders: Record<string, string> = {
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-          'Accept': '*/*',
-        };
-        if (range) upstreamHeaders['Range'] = range;
-
-        let upstream = await fetch(streamInfo.url, { headers: upstreamHeaders });
-
-        // Fallback strategy: If upstream fails (e.g. 403 Forbidden geolock or IP block), try alternative engines
-        if (upstream.status === 403 || upstream.status === 401 || upstream.status === 404 || upstream.status >= 500) {
-          console.log(`[Express Server] Optimizing stream parameters for videoId: ${videoId}`);
-          
-          let fallbackSucceeded = false;
-
-          // Fallback 1: Try yt-dlp directly
-          console.log(`[Express Server] Engine switch path - yt-dlp direct stream...`);
-          return streamYtDlpDirectly(videoId, res, shouldDownload, title);
-        }
-
-        res.setHeader('Access-Control-Allow-Origin', '*');
-        res.setHeader('Access-Control-Allow-Headers', '*');
-        res.setHeader('Content-Type', streamInfo.mimeType || upstream.headers.get('content-type') || 'audio/webm');
-        res.setHeader('Accept-Ranges', 'bytes');
-        res.setHeader('Cache-Control', 'no-cache');
-
-        if (shouldDownload) {
-          res.setHeader('Content-Disposition', `attachment; filename="${title.replace(/[^\w\s-]/g, '')}.mp3"`);
-        }
-
-        const contentLength = upstream.headers.get('content-length');
-        const contentRange = upstream.headers.get('content-range');
-        if (contentLength) res.setHeader('Content-Length', contentLength);
-        if (contentRange) res.setHeader('Content-Range', contentRange);
-
-        res.status(upstream.status);
-
-        if (upstream.body) {
-          const reader = upstream.body.getReader();
-          while (true) {
-            const { done, value } = await reader.read();
-            if (done) break;
-            res.write(value);
-          }
-          res.end();
-        } else {
-          res.end();
-        }
+        await streamResolvedUrl(streamInfo, req, res, shouldDownload, title);
       } catch (e: any) {
         console.log('[Express Proxy] Upstream stream error. Spawning live yt-dlp transcode stream as reliable fallback.', e.message || e);
         if (!res.headersSent) {
+          const replacementId = await searchVideoIdByTitle(title);
+          if (replacementId && replacementId !== videoId) {
+            const replacementInfo = await getStreamInfo(replacementId);
+            if (replacementInfo) return streamResolvedUrl(replacementInfo, req, res, shouldDownload, title);
+          }
           return streamYtDlpDirectly(videoId, res, shouldDownload, title);
         }
       }
