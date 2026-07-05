@@ -158,6 +158,34 @@ async function tryInnertube(videoId: string): Promise<string | null> {
   }
 }
 
+async function searchVideoIdByTitle(title: string): Promise<string | null> {
+  const query = sanitizeFilename(title);
+  if (!query) return null;
+
+  try {
+    const res = await fetch(`https://api.piped.private.coffee/search?q=${encodeURIComponent(query)}&filter=videos`, {
+      headers: { Accept: 'application/json' },
+      signal: getTimeoutSignal(8000),
+    });
+    if (res.ok) {
+      const data = await res.json();
+      const item = data?.items?.find((entry: any) => entry?.type === 'stream' && /watch\?v=/.test(entry?.url || ''));
+      const id = item?.url?.match(/[?&]v=([a-zA-Z0-9_-]{11})/)?.[1];
+      if (id) return id;
+    }
+  } catch { /* try next source */ }
+
+  try {
+    const res = await fetch(`https://www.youtube.com/results?search_query=${encodeURIComponent(query)}`, {
+      signal: getTimeoutSignal(8000),
+    });
+    const html = await res.text();
+    return html.match(/"videoId":"([a-zA-Z0-9_-]{11})"/)?.[1] || null;
+  } catch {
+    return null;
+  }
+}
+
 // Race ALL resolvers in parallel — first one to return a non-null URL wins
 async function resolveAudioUrl(videoId: string): Promise<string | null> {
   const promises: Promise<string | null>[] = [
@@ -186,6 +214,15 @@ async function resolveAudioUrl(videoId: string): Promise<string | null> {
       });
     }
   });
+}
+
+async function resolveAudioUrlForTrack(track: { id: string; title: string }): Promise<string | null> {
+  const original = await resolveAudioUrl(track.id);
+  if (original) return original;
+
+  const replacementId = await searchVideoIdByTitle(track.title);
+  if (!replacementId || replacementId === track.id) return null;
+  return resolveAudioUrl(replacementId);
 }
 
 // ── Blob fetcher for in-app (IndexedDB) downloads ──────────────────────────
@@ -399,7 +436,7 @@ export function DownloadManagerProvider({ children }: { children: React.ReactNod
             mimeType = ready.mimeType;
           } catch (proxyErr) {
             console.warn('[Download] Locked proxy preflight failed, trying browser resolver:', proxyErr);
-            const fallbackUrl = await resolveAudioUrl(track.id);
+            const fallbackUrl = await resolveAudioUrlForTrack(track);
             if (!fallbackUrl) throw new Error('Audio stream unavailable for this song');
             try {
               const ready = await firstReadyDownload(track, { proxyUrl: fallbackUrl, download: true });
@@ -457,7 +494,7 @@ export function DownloadManagerProvider({ children }: { children: React.ReactNod
             audioBlob = result.blob;
           } catch (proxyErr) {
             console.warn('[Download] Primary cache proxy failed, retrying with browser-resolved proxy:', proxyErr);
-            const fallbackUrl = await resolveAudioUrl(track.id);
+            const fallbackUrl = await resolveAudioUrlForTrack(track);
             if (!fallbackUrl) throw new Error('Audio stream unavailable for this song');
             const streamUrl = (await firstReadyDownload(track, { proxyUrl: fallbackUrl, stream: true })).url;
             const result = await fetchAudioBlob(streamUrl, (p) =>
