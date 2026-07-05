@@ -230,8 +230,11 @@ async function fetchAudioBlob(
 // still work if the app is deployed without VITE_SUPABASE_URL.
 const getAudioFunctionBases = () => {
   const backendUrl = (import.meta.env.VITE_SUPABASE_URL || '').replace(/\/$/, '');
-  const bases = ['/api/get-audio-url'];
+  const host = typeof window !== 'undefined' ? window.location.hostname : '';
+  const canUseNodeApi = host === 'localhost' || host === '127.0.0.1' || host.includes('vercel.app');
+  const bases = canUseNodeApi ? ['/api/get-audio-url'] : [];
   if (backendUrl) bases.push(`${backendUrl}/functions/v1/get-audio-url`);
+  if (!bases.length) bases.push('/api/get-audio-url');
   return [...new Set(bases)];
 };
 
@@ -398,9 +401,14 @@ export function DownloadManagerProvider({ children }: { children: React.ReactNod
             console.warn('[Download] Locked proxy preflight failed, trying browser resolver:', proxyErr);
             const fallbackUrl = await resolveAudioUrl(track.id);
             if (!fallbackUrl) throw new Error('Audio stream unavailable for this song');
-            const ready = await firstReadyDownload(track, { proxyUrl: fallbackUrl, download: true });
-            downloadUrl = ready.url;
-            mimeType = ready.mimeType;
+            try {
+              const ready = await firstReadyDownload(track, { proxyUrl: fallbackUrl, download: true });
+              downloadUrl = ready.url;
+              mimeType = ready.mimeType;
+            } catch {
+              downloadUrl = fallbackUrl;
+              mimeType = fallbackUrl.includes('mime=audio%2Fmp4') || fallbackUrl.includes('.m4a') ? 'audio/mp4' : 'audio/webm';
+            }
           }
         }
 
