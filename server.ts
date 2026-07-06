@@ -667,10 +667,17 @@ async function startServer() {
           const replacementId = await searchVideoIdByTitle(title);
           if (replacementId && replacementId !== videoId) {
             const replacementInfo = await getStreamInfo(replacementId);
-            if (replacementInfo) return streamResolvedUrl(replacementInfo, req, res, shouldDownload, title);
+            if (replacementInfo) {
+              try {
+                return await streamResolvedUrl(replacementInfo, req, res, shouldDownload, title);
+              } catch (replacementErr: any) {
+                console.warn('[Express Proxy] Replacement stream failed, using live yt-dlp fallback.', replacementErr?.message || replacementErr);
+              }
+            }
           }
           return streamYtDlpDirectly(videoId, res, shouldDownload, title);
         }
+        return;
       }
     } else {
       res.setHeader('Access-Control-Allow-Origin', '*');
