@@ -225,40 +225,104 @@ async function resolveAudioUrlForTrack(track: { id: string; title: string }): Pr
   return resolveAudioUrl(replacementId);
 }
 
-// ── Blob fetcher for in-app (IndexedDB) downloads ──────────────────────────
+// ── Bulletproof audio blob pipeline ─────────────────────────────────────────
+
+const MIN_AUDIO_BYTES = 50_000;
+const MAX_FETCH_RETRIES = 3;
+
+type AudioBlobResult = { blob: Blob; mimeType: string; source: string };
+type AudioCandidate = { url: string; label: string };
+
+const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+const looksLikeAudioMime = (mimeType: string) => {
+  const type = mimeType.toLowerCase();
+  return (
+    type.startsWith('audio/') ||
+    type.startsWith('video/') ||
+    type.includes('application/octet-stream') ||
+    type.includes('binary/octet-stream')
+  );
+};
+
+const sniffTextHeader = (bytes: Uint8Array) =>
+  new TextDecoder()
+    .decode(bytes.slice(0, Math.min(bytes.length, 160)))
+    .trim()
+    .toLowerCase();
+
+const validateAudioHeader = (bytes: Uint8Array, mimeType: string) => {
+  const head = sniffTextHeader(bytes);
+  if (!bytes.length) throw new Error('No audio bytes received');
+  if (
+    head.startsWith('<!doctype') ||
+    head.startsWith('<html') ||
+    head.startsWith('{"error"') ||
+    head.startsWith('{"message"') ||
+    head.includes('<body') ||
+    mimeType.includes('text/html') ||
+    mimeType.includes('application/json')
+  ) {
+    throw new Error('Provider returned a webpage/error instead of audio');
+  }
+  if (!looksLikeAudioMime(mimeType)) {
+    throw new Error(`Unexpected content type: ${mimeType || 'unknown'}`);
+  }
+};
 
 async function fetchAudioBlob(
   audioUrl: string,
   onProgress: (p: number) => void
 ): Promise<{ blob: Blob; mimeType: string }> {
   onProgress(10);
-  const response = await fetch(audioUrl, { signal: getTimeoutSignal(180_000) });
-  if (!response.ok) throw new Error(`HTTP ${response.status}`);
+  const response = await fetch(audioUrl, {
+    headers: { Accept: 'audio/*,video/*,application/octet-stream,*/*;q=0.5' },
+    signal: getTimeoutSignal(180_000),
+  });
 
-  const mimeType = (response.headers.get('content-type') || 'audio/webm').split(';')[0];
+  const responseType = (response.headers.get('content-type') || '').split(';')[0].trim().toLowerCase();
+  if (!response.ok) {
+    let detail = '';
+    try {
+      const body = await response.text();
+      detail = body ? ` — ${body.slice(0, 120)}` : '';
+    } catch { /* ignore body parse errors */ }
+    throw new Error(`HTTP ${response.status}${detail}`);
+  }
+
+  const mimeType = responseType || 'audio/webm';
   const contentLength = response.headers.get('content-length');
   const total = contentLength ? parseInt(contentLength, 10) : 0;
   const reader = response.body?.getReader();
 
   if (!reader) {
     const blob = await response.blob();
-    if (blob.size < 50_000) throw new Error('File too small');
-    return { blob, mimeType };
+    const head = new Uint8Array(await blob.slice(0, 4096).arrayBuffer());
+    validateAudioHeader(head, mimeType);
+    if (blob.size < MIN_AUDIO_BYTES) throw new Error('Audio file was incomplete');
+    return { blob: blob.type ? blob : new Blob([blob], { type: mimeType }), mimeType };
   }
 
   let received = 0;
   const chunks: Uint8Array[] = [];
+  let firstChunkChecked = false;
+
   while (true) {
     const { done, value } = await reader.read();
     if (done) break;
+    if (!firstChunkChecked) {
+      validateAudioHeader(value, mimeType);
+      firstChunkChecked = true;
+    }
     chunks.push(value);
     received += value.length;
     if (total > 0) onProgress(Math.min(Math.max(Math.round((received / total) * 100), 15), 98));
-    else onProgress(50);
+    else onProgress(Math.min(95, 25 + Math.round(received / 300_000)));
   }
 
   const blob = new Blob(chunks as BlobPart[], { type: mimeType });
-  if (blob.size < 50_000) throw new Error('File too small');
+  if (!firstChunkChecked) throw new Error('No audio bytes received');
+  if (blob.size < MIN_AUDIO_BYTES) throw new Error('Audio file was incomplete');
   return { blob, mimeType };
 }
 
@@ -301,6 +365,8 @@ const resolveServerAudioUrl = async (track: { id: string; title: string }) => {
       if (!response.ok) {
         throw new Error(`Audio link failed (HTTP ${response.status})`);
       }
+      const responseType = response.headers.get('content-type') || '';
+      if (responseType.includes('text/html')) throw new Error('Resolver returned HTML');
       const data = await response.json();
       const url = data?.audioUrl || data?.audioUrl1;
       if (!url) throw new Error('No audio link found');
@@ -328,13 +394,7 @@ const assertDownloadUrlReady = async (url: string) => {
     const first = reader ? await reader.read() : null;
     const probe = first?.value || new Uint8Array();
     try { await reader?.cancel(); } catch { /* ignore */ }
-    const head = new TextDecoder().decode(probe.slice(0, Math.min(probe.length, 96))).trim().toLowerCase();
-    if (!probe.length || head.startsWith('<!doctype') || head.startsWith('<html') || head.startsWith('{"error"')) {
-      throw new Error('Audio stream returned a webpage instead of music');
-    }
-    if (mimeType.includes('text/html') || mimeType.includes('application/json')) {
-      throw new Error('Audio stream unavailable');
-    }
+    validateAudioHeader(probe, mimeType);
     return mimeType;
   } finally {
     window.clearTimeout(timer);
@@ -356,15 +416,92 @@ const firstReadyDownload = async (track: { id: string; title: string }, options:
   throw lastError instanceof Error ? lastError : new Error('Audio stream unavailable');
 };
 
-const triggerBrowserDownload = (url: string, title: string, mimeType = 'audio/webm') => {
+const fetchAudioBlobWithRetries = async (
+  candidate: AudioCandidate,
+  onProgress: (p: number) => void
+): Promise<AudioBlobResult> => {
+  let lastError: unknown;
+  for (let attempt = 1; attempt <= MAX_FETCH_RETRIES; attempt++) {
+    try {
+      const result = await fetchAudioBlob(candidate.url, onProgress);
+      return { ...result, source: candidate.label };
+    } catch (err) {
+      lastError = err;
+      console.warn(`[Download] ${candidate.label} attempt ${attempt} failed:`, err);
+      if (attempt < MAX_FETCH_RETRIES) await wait(700 * attempt);
+    }
+  }
+  throw lastError instanceof Error ? lastError : new Error(`${candidate.label} failed`);
+};
+
+const buildBackendCandidates = (
+  track: { id: string; title: string },
+  mode: 'download' | 'stream',
+  proxyUrl?: string
+): AudioCandidate[] =>
+  getAudioFunctionBases().map((base) => ({
+    url: buildAudioFunctionUrl(track, {
+      base,
+      proxyUrl,
+      download: mode === 'download',
+      stream: mode === 'stream',
+    }),
+    label: `${base.includes('/api/') ? 'Vercel' : 'Backend'} ${proxyUrl ? 'proxy' : 'resolver'}`,
+  }));
+
+const fetchFirstAudioBlob = async (
+  track: { id: string; title: string },
+  mode: 'download' | 'stream',
+  onProgress: (p: number) => void
+): Promise<AudioBlobResult> => {
+  const errors: string[] = [];
+
+  const tryCandidates = async (candidates: AudioCandidate[]) => {
+    for (const candidate of candidates) {
+      try {
+        return await fetchAudioBlobWithRetries(candidate, onProgress);
+      } catch (err: any) {
+        errors.push(`${candidate.label}: ${err?.message || 'failed'}`);
+      }
+    }
+    return null;
+  };
+
+  const direct = await tryCandidates(buildBackendCandidates(track, mode));
+  if (direct) return direct;
+
+  try {
+    const serverAudio = await resolveServerAudioUrl(track);
+    const proxied = await tryCandidates(buildBackendCandidates(track, mode, serverAudio.url));
+    if (proxied) return proxied;
+  } catch (err: any) {
+    errors.push(`Backend resolver: ${err?.message || 'failed'}`);
+  }
+
+  try {
+    const fallbackUrl = await resolveAudioUrlForTrack(track);
+    if (fallbackUrl) {
+      const clientProxied = await tryCandidates(buildBackendCandidates(track, mode, fallbackUrl));
+      if (clientProxied) return clientProxied;
+    } else {
+      errors.push('Browser resolver: no audio URL found');
+    }
+  } catch (err: any) {
+    errors.push(`Browser resolver: ${err?.message || 'failed'}`);
+  }
+
+  throw new Error(`No valid audio blob found. ${errors.slice(-3).join(' | ')}`);
+};
+
+const triggerBrowserDownload = (blob: Blob, title: string, mimeType = 'audio/webm') => {
+  const blobUrl = URL.createObjectURL(blob.type ? blob : new Blob([blob], { type: mimeType }));
   const link = document.createElement('a');
-  link.href = url;
+  link.href = blobUrl;
   link.download = `${sanitizeFilename(title)}.${extForMime(mimeType)}`;
-  link.target = '_blank';
-  link.rel = 'noreferrer noopener';
   document.body.appendChild(link);
   link.click();
   document.body.removeChild(link);
+  window.setTimeout(() => URL.revokeObjectURL(blobUrl), 30_000);
 };
 
 // ── Provider ──────────────────────────────────────────────────────────────────
