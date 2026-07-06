@@ -368,6 +368,7 @@ export function MusicPlayerProvider({ children }: { children: React.ReactNode })
   const primaryAudioRef = useRef<HTMLAudioElement | null>(null);
   const secondaryAudioRef = useRef<HTMLAudioElement | null>(null);
   const handleNextRef = useRef<() => void>();
+  const forceBackgroundPlaybackRef = useRef<((track?: Track, options?: { trackList?: Track[]; fromPlaylist?: boolean }) => Promise<boolean>) | null>(null);
   const audioPlayAttemptRef = useRef(0);
 
   const setPlaybackSource = useCallback((source: 'youtube' | 'background' | null) => {
@@ -1191,6 +1192,10 @@ export function MusicPlayerProvider({ children }: { children: React.ReactNode })
       return false;
     }
   }, [currentTrack, setLastPlayed, recordPlay, setPlaybackSource, ytApiReady, createPlayer, playAudioUrl]);
+
+  useEffect(() => {
+    forceBackgroundPlaybackRef.current = forceBackgroundPlayback;
+  }, [forceBackgroundPlayback]);
 
   const playStandardOrOffline = useCallback(async (trackId: string) => {
     const isDownloaded = await isTrackDownloadedOffline(trackId);
