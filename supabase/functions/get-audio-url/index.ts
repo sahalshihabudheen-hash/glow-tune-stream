@@ -135,6 +135,24 @@ function looksLikeAudio(contentType: string | null, url = '') {
   return type.startsWith('audio/') || type.includes('octet-stream') || url.includes('/videoplayback');
 }
 
+function assertAudioBytes(bytes: Uint8Array, contentType: string | null, url = '') {
+  const type = (contentType || '').toLowerCase();
+  const head = new TextDecoder().decode(bytes.slice(0, Math.min(bytes.length, 160))).trim().toLowerCase();
+  if (!bytes.length) throw new Error('No audio bytes received');
+  if (
+    head.startsWith('<!doctype') ||
+    head.startsWith('<html') ||
+    head.startsWith('{"error"') ||
+    head.startsWith('{"message"') ||
+    head.includes('<body') ||
+    type.includes('text/html') ||
+    type.includes('application/json') ||
+    !looksLikeAudio(type, url)
+  ) {
+    throw new Error('Provider returned non-audio content');
+  }
+}
+
 async function canProxyAudio(url: string) {
   try {
     const res = await fetch(url, {
@@ -327,8 +345,18 @@ async function streamProxy(req: Request, sourceUrl: string, mimeType: string, do
       );
     }
 
-    const responseHeaders = new Headers(corsHeaders);
+    const reader = upstream.body?.getReader();
+    const first = reader ? await reader.read() : null;
+    const firstBytes = first?.value || new Uint8Array();
     const resolvedMimeType = (mimeType || upstream.headers.get('content-type') || 'audio/webm').split(';')[0];
+    try {
+      assertAudioBytes(firstBytes, resolvedMimeType, upstream.url || sourceUrl);
+    } catch (error) {
+      try { await reader?.cancel(); } catch { /* ignore */ }
+      throw error;
+    }
+
+    const responseHeaders = new Headers(corsHeaders);
     responseHeaders.set('Content-Type', resolvedMimeType);
     responseHeaders.set('Accept-Ranges', 'bytes');
     responseHeaders.set('Cache-Control', 'no-cache');
@@ -342,7 +370,27 @@ async function streamProxy(req: Request, sourceUrl: string, mimeType: string, do
     if (contentLength) responseHeaders.set('Content-Length', contentLength);
     if (contentRange) responseHeaders.set('Content-Range', contentRange);
 
-    return new Response(upstream.body, {
+    const stream = reader
+      ? new ReadableStream({
+          start(controller) {
+            if (firstBytes.length) controller.enqueue(firstBytes);
+            const pump = (): Promise<void> => reader.read().then(({ done, value }) => {
+              if (done) {
+                controller.close();
+                return;
+              }
+              if (value) controller.enqueue(value);
+              return pump();
+            }).catch((error) => controller.error(error));
+            return pump();
+          },
+          cancel() {
+            try { reader.cancel(); } catch { /* ignore */ }
+          },
+        })
+      : upstream.body;
+
+    return new Response(stream, {
       status: upstream.status,
       headers: responseHeaders,
     });
