@@ -22,6 +22,24 @@ const looksLikeAudio = (contentType: string | null) => {
   return type.startsWith('audio/') || type.includes('video/') || type.includes('octet-stream');
 };
 
+const assertAudioBytes = (bytes: Buffer, contentType: string | null) => {
+  const type = (contentType || '').toLowerCase();
+  const head = bytes.subarray(0, 160).toString('utf8').trim().toLowerCase();
+  if (!bytes.length) throw new Error('No audio bytes received');
+  if (
+    head.startsWith('<!doctype') ||
+    head.startsWith('<html') ||
+    head.startsWith('{"error"') ||
+    head.startsWith('{"message"') ||
+    head.includes('<body') ||
+    type.includes('text/html') ||
+    type.includes('application/json') ||
+    !looksLikeAudio(type)
+  ) {
+    throw new Error('Resolved provider response was not audio');
+  }
+};
+
 async function searchVideoIdByTitle(title: string): Promise<string | null> {
   const query = safeTitle(title);
   if (!query || query.toLowerCase() === 'audio') return null;
@@ -110,11 +128,8 @@ async function probeAudioUrl(sourceUrl: string, mimeType = 'audio/webm') {
   });
   if (!res.ok && res.status !== 206) throw new Error(`Upstream ${res.status}`);
   const bytes = Buffer.from(await res.arrayBuffer());
-  const text = bytes.subarray(0, 96).toString('utf8').trim().toLowerCase();
   const type = res.headers.get('content-type') || mimeType;
-  if (!bytes.length || text.startsWith('<!doctype') || text.startsWith('<html') || text.startsWith('{"error"') || !looksLikeAudio(type)) {
-    throw new Error('Resolved URL was not audio');
-  }
+  assertAudioBytes(bytes, type);
 }
 
 async function streamProxy(req: any, res: any, sourceUrl: string, mimeType = 'audio/webm', download = false, title = 'audio') {
@@ -129,11 +144,12 @@ async function streamProxy(req: any, res: any, sourceUrl: string, mimeType = 'au
   const reader = upstream.body?.getReader();
   const first = reader ? await reader.read() : null;
   const firstBytes = first?.value ? Buffer.from(first.value) : Buffer.alloc(0);
-  const firstText = firstBytes.subarray(0, 96).toString('utf8').trim().toLowerCase();
   const upstreamType = upstream.headers.get('content-type');
-  if (!firstBytes.length || firstText.startsWith('<!doctype') || firstText.startsWith('<html') || firstText.startsWith('{"error"') || !looksLikeAudio(upstreamType || mimeType)) {
+  try {
+    assertAudioBytes(firstBytes, upstreamType || mimeType);
+  } catch (error) {
     try { await reader?.cancel(); } catch { /* ignore */ }
-    throw new Error('Resolved URL was not an audio stream');
+    throw error;
   }
 
   cors(res);

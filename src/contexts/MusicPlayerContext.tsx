@@ -33,6 +33,11 @@ const PLAYBACK_START_TIMEOUT_MS = 6500;
 
 const getTimeoutSignal = (ms: number): AbortSignal => AbortSignal.timeout(ms);
 
+const isMobileLikeDevice = () => {
+  if (typeof navigator === 'undefined') return false;
+  return /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent) || navigator.maxTouchPoints > 1;
+};
+
 const safelyParseJson = async <T,>(res: Response): Promise<T | null> => {
   try {
     return (await res.json()) as T;
@@ -297,14 +302,19 @@ export function MusicPlayerProvider({ children }: { children: React.ReactNode })
     localStorage.setItem('nyra-bg-audio-mode', String(val));
   }, []);
 
-  const [useBackgroundAudioOnly, setUseBackgroundAudioOnlyState] = useState(false);
-  const useBackgroundAudioOnlyRef = useRef(false);
+  const [useBackgroundAudioOnly, setUseBackgroundAudioOnlyState] = useState(() => {
+    const saved = localStorage.getItem('nyra-background-audio-only');
+    if (saved !== null) return saved === 'true';
+    return isMobileLikeDevice();
+  });
+  const useBackgroundAudioOnlyRef = useRef(useBackgroundAudioOnly);
   const isResolvingStreamRef = useRef(false);
 
   const setUseBackgroundAudioOnly = useCallback((val: boolean | ((prev: boolean) => boolean)) => {
     setUseBackgroundAudioOnlyState(prev => {
       const next = typeof val === 'function' ? val(prev) : val;
       useBackgroundAudioOnlyRef.current = next;
+      localStorage.setItem('nyra-background-audio-only', String(next));
       return next;
     });
   }, []);
@@ -358,6 +368,7 @@ export function MusicPlayerProvider({ children }: { children: React.ReactNode })
   const primaryAudioRef = useRef<HTMLAudioElement | null>(null);
   const secondaryAudioRef = useRef<HTMLAudioElement | null>(null);
   const handleNextRef = useRef<() => void>();
+  const forceBackgroundPlaybackRef = useRef<((track?: Track, options?: { trackList?: Track[]; fromPlaylist?: boolean }) => Promise<boolean>) | null>(null);
   const audioPlayAttemptRef = useRef(0);
 
   const setPlaybackSource = useCallback((source: 'youtube' | 'background' | null) => {
@@ -486,18 +497,24 @@ export function MusicPlayerProvider({ children }: { children: React.ReactNode })
         const audio = new Audio();
         audio.id = 'primary-audio';
         audio.preload = 'auto';
+        audio.controls = false;
+        audio.disableRemotePlayback = false;
         (audio as any).playsInline = true;
         audio.setAttribute('playsinline', 'true');
         audio.setAttribute('webkit-playsinline', 'true');
+        audio.setAttribute('x-webkit-airplay', 'allow');
         primaryAudioRef.current = audio;
       }
       if (!secondaryAudioRef.current) {
         const audio = new Audio();
         audio.id = 'secondary-audio';
         audio.preload = 'auto';
+        audio.controls = false;
+        audio.disableRemotePlayback = false;
         (audio as any).playsInline = true;
         audio.setAttribute('playsinline', 'true');
         audio.setAttribute('webkit-playsinline', 'true');
+        audio.setAttribute('x-webkit-airplay', 'allow');
         secondaryAudioRef.current = audio;
       }
 
@@ -674,6 +691,42 @@ export function MusicPlayerProvider({ children }: { children: React.ReactNode })
 
     return () => clearInterval(syncInterval);
   }, [isPlaying]);
+
+  // Mobile browsers suspend iframe/video playback aggressively in background.
+  // Keep music on the native HTMLAudioElement path before the page is hidden.
+  useEffect(() => {
+    if (!isMobileLikeDevice()) return;
+
+    const keepAudioAlive = () => {
+      useBackgroundAudioOnlyRef.current = true;
+      localStorage.setItem('nyra-background-audio-only', 'true');
+
+      if (!currentTrack || !isPlaying) return;
+
+      if (activeSourceRef.current !== 'background' || !audioRef.current?.src) {
+        void forceBackgroundPlaybackRef.current?.(currentTrack, {
+          trackList: tracks.length ? tracks : [currentTrack],
+          fromPlaylist: playingFromPlaylist,
+        });
+        return;
+      }
+
+      audioRef.current.play().catch(() => {
+        // Background policies vary by OS; the next foreground tap can resume.
+      });
+    };
+
+    const handleVisibility = () => {
+      if (document.visibilityState === 'hidden') keepAudioAlive();
+    };
+
+    window.addEventListener('pagehide', keepAudioAlive);
+    document.addEventListener('visibilitychange', handleVisibility);
+    return () => {
+      window.removeEventListener('pagehide', keepAudioAlive);
+      document.removeEventListener('visibilitychange', handleVisibility);
+    };
+  }, [currentTrack, isPlaying, tracks, playingFromPlaylist]);
 
   // Load YouTube IFrame API
   useEffect(() => {
@@ -1139,6 +1192,10 @@ export function MusicPlayerProvider({ children }: { children: React.ReactNode })
       return false;
     }
   }, [currentTrack, setLastPlayed, recordPlay, setPlaybackSource, ytApiReady, createPlayer, playAudioUrl]);
+
+  useEffect(() => {
+    forceBackgroundPlaybackRef.current = forceBackgroundPlayback;
+  }, [forceBackgroundPlayback]);
 
   const playStandardOrOffline = useCallback(async (trackId: string) => {
     const isDownloaded = await isTrackDownloadedOffline(trackId);

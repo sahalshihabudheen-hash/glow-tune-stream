@@ -94,6 +94,24 @@ function looksLikeAudio(contentType: string | null) {
   return type.startsWith('audio/') || type.startsWith('video/') || type.includes('octet-stream');
 }
 
+function assertAudioBytes(bytes: Buffer, contentType: string | null) {
+  const type = (contentType || '').toLowerCase();
+  const head = bytes.subarray(0, 160).toString('utf8').trim().toLowerCase();
+  if (!bytes.length) throw new Error('No audio bytes received');
+  if (
+    head.startsWith('<!doctype') ||
+    head.startsWith('<html') ||
+    head.startsWith('{"error"') ||
+    head.startsWith('{"message"') ||
+    head.includes('<body') ||
+    type.includes('text/html') ||
+    type.includes('application/json') ||
+    !looksLikeAudio(type)
+  ) {
+    throw new Error('Provider returned non-audio content');
+  }
+}
+
 function safeAudioTitle(title: string) {
   return (title || 'audio').replace(/[^\w\s-]/g, '').trim() || 'audio';
 }
@@ -440,11 +458,12 @@ async function streamResolvedUrl(streamInfo: { url: string; mimeType: string }, 
   const reader = upstream.body?.getReader();
   const first = reader ? await reader.read() : null;
   const firstBytes = first?.value ? Buffer.from(first.value) : Buffer.alloc(0);
-  const firstText = firstBytes.subarray(0, 96).toString('utf8').trim().toLowerCase();
   const upstreamType = upstream.headers.get('content-type') || streamInfo.mimeType;
-  if (!firstBytes.length || firstText.startsWith('<!doctype') || firstText.startsWith('<html') || firstText.startsWith('{"error"') || !looksLikeAudio(upstreamType)) {
+  try {
+    assertAudioBytes(firstBytes, upstreamType);
+  } catch (error) {
     try { await reader?.cancel(); } catch { /* ignore */ }
-    throw new Error('Resolved URL was not an audio stream');
+    throw error;
   }
 
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -555,11 +574,12 @@ async function startServer() {
         const reader = upstream.body?.getReader();
         const first = reader ? await reader.read() : null;
         const firstBytes = first?.value ? Buffer.from(first.value) : Buffer.alloc(0);
-        const firstText = firstBytes.subarray(0, 96).toString('utf8').trim().toLowerCase();
         const upstreamType = upstream.headers.get('content-type');
-        if (!firstBytes.length || firstText.startsWith('<!doctype') || firstText.startsWith('<html') || firstText.startsWith('{"error"') || !looksLikeAudio(upstreamType)) {
+        try {
+          assertAudioBytes(firstBytes, upstreamType);
+        } catch (error) {
           try { await reader?.cancel(); } catch { /* ignore */ }
-          throw new Error('Proxy URL was not an audio stream');
+          throw error;
         }
         
         res.setHeader('Access-Control-Allow-Origin', '*');
@@ -647,10 +667,17 @@ async function startServer() {
           const replacementId = await searchVideoIdByTitle(title);
           if (replacementId && replacementId !== videoId) {
             const replacementInfo = await getStreamInfo(replacementId);
-            if (replacementInfo) return streamResolvedUrl(replacementInfo, req, res, shouldDownload, title);
+            if (replacementInfo) {
+              try {
+                return await streamResolvedUrl(replacementInfo, req, res, shouldDownload, title);
+              } catch (replacementErr: any) {
+                console.warn('[Express Proxy] Replacement stream failed, using live yt-dlp fallback.', replacementErr?.message || replacementErr);
+              }
+            }
           }
           return streamYtDlpDirectly(videoId, res, shouldDownload, title);
         }
+        return;
       }
     } else {
       res.setHeader('Access-Control-Allow-Origin', '*');
@@ -772,6 +799,15 @@ async function startServer() {
     } catch (err: any) {
       console.error('[Express Server] Failed to compile source zip:', err);
       res.status(500).json({ error: 'Zip compilation failed', details: err?.message });
+    }
+  });
+
+  app.use('/api', (err: any, req: any, res: any, _next: any) => {
+    console.error('[Express API] Unhandled API error:', err?.message || err);
+    if (!res.headersSent) {
+      res.setHeader('Access-Control-Allow-Origin', '*');
+      res.setHeader('Content-Type', 'application/json');
+      res.status(502).json({ error: err?.message || 'Audio request failed' });
     }
   });
 
