@@ -802,6 +802,15 @@ async function startServer() {
     }
   });
 
+  app.use('/api', (err: any, req: any, res: any, _next: any) => {
+    console.error('[Express API] Unhandled API error:', err?.message || err);
+    if (!res.headersSent) {
+      res.setHeader('Access-Control-Allow-Origin', '*');
+      res.setHeader('Content-Type', 'application/json');
+      res.status(502).json({ error: err?.message || 'Audio request failed' });
+    }
+  });
+
   // Setup dev / production static asset routing
   if (process.env.NODE_ENV !== 'production') {
     const { createServer: createViteServer } = await import('vite');
