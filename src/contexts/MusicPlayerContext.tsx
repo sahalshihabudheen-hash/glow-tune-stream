@@ -691,6 +691,42 @@ export function MusicPlayerProvider({ children }: { children: React.ReactNode })
     return () => clearInterval(syncInterval);
   }, [isPlaying]);
 
+  // Mobile browsers suspend iframe/video playback aggressively in background.
+  // Keep music on the native HTMLAudioElement path before the page is hidden.
+  useEffect(() => {
+    if (!isMobileLikeDevice()) return;
+
+    const keepAudioAlive = () => {
+      useBackgroundAudioOnlyRef.current = true;
+      localStorage.setItem('nyra-background-audio-only', 'true');
+
+      if (!currentTrack || !isPlaying) return;
+
+      if (activeSourceRef.current !== 'background' || !audioRef.current?.src) {
+        void forceBackgroundPlaybackRef.current?.(currentTrack, {
+          trackList: tracks.length ? tracks : [currentTrack],
+          fromPlaylist: playingFromPlaylist,
+        });
+        return;
+      }
+
+      audioRef.current.play().catch(() => {
+        // Background policies vary by OS; the next foreground tap can resume.
+      });
+    };
+
+    const handleVisibility = () => {
+      if (document.visibilityState === 'hidden') keepAudioAlive();
+    };
+
+    window.addEventListener('pagehide', keepAudioAlive);
+    document.addEventListener('visibilitychange', handleVisibility);
+    return () => {
+      window.removeEventListener('pagehide', keepAudioAlive);
+      document.removeEventListener('visibilitychange', handleVisibility);
+    };
+  }, [currentTrack, isPlaying, tracks, playingFromPlaylist]);
+
   // Load YouTube IFrame API
   useEffect(() => {
     const yt = (window as any).YT;
