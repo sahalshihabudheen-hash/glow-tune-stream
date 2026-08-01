@@ -20,6 +20,8 @@ import { famousSongs } from '@/data/famousSongs';
 import { cn } from '@/lib/utils';
 import { Sparkles, TrendingUp, Compass, Users } from 'lucide-react';
 import FavoriteArtistsSection from '@/components/FavoriteArtistsSection';
+import MadeForYouSection from '@/components/MadeForYouSection';
+
 import { getFunctionAuthHeaders } from '@/lib/functionAuth';
 
 
@@ -110,11 +112,14 @@ const Index = () => {
   return (
     <div className="min-h-screen bg-[#050505] text-foreground relative overflow-hidden">
       {/* Immersive Background Effects */}
-      <div className="fixed inset-0 z-0 pointer-events-none">
+      <div className="fixed inset-0 z-0 pointer-events-none hidden md:block">
         <div className="absolute top-[-10%] right-[-5%] w-[50%] h-[50%] rounded-full bg-primary/10 blur-[150px] animate-pulse-slow" />
         <div className="absolute bottom-[10%] left-[-5%] w-[40%] h-[40%] rounded-full bg-blue-500/5 blur-[120px] animate-pulse-slow" style={{ animationDelay: '3s' }} />
         <div className="absolute inset-0 bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-[0.03] brightness-100 contrast-150" />
       </div>
+      {/* Lightweight mobile backdrop (heavy blurs cause playback jank on phones) */}
+      <div className="fixed inset-0 z-0 pointer-events-none md:hidden bg-gradient-to-b from-primary/5 via-transparent to-transparent" />
+
 
       <Sidebar activeTab={activeTab} onTabChange={setActiveTab} />
       
