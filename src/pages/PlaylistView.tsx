@@ -10,6 +10,8 @@ import Navbar from '@/components/Navbar';
 import MusicPlayer from '@/components/MusicPlayer';
 import Sidebar from '@/components/Sidebar';
 import PlaylistGridPhoto from '@/components/PlaylistGridPhoto';
+import MadeForYouSection from '@/components/MadeForYouSection';
+
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
