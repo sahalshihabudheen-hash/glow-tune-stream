@@ -159,10 +159,24 @@ const Index = () => {
             )}
 
             {!searchPerformed && (
+              <section className="animate-in-up" style={{ animationDelay: '0.22s' }}>
+                <MadeForYouSection
+                  onPlayTrack={handlePlayTrack}
+                  currentTrack={currentTrack}
+                  isPlaying={isPlaying}
+                  onAddToQueue={handleAddToQueue}
+                  isFavorite={isFavorite}
+                  onToggleFavorite={toggleFavorite}
+                />
+              </section>
+            )}
+
+            {!searchPerformed && (
               <section className="animate-in-up" style={{ animationDelay: '0.25s' }}>
                 <FavoriteArtistsSection />
               </section>
             )}
+
 
             {!searchPerformed && (
 
