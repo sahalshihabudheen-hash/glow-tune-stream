@@ -297,7 +297,18 @@ const PlaylistView = () => {
     try {
       const exists = playlistTracks.some(t => t.id === track.id);
       if (exists) { toast.info('Track already in playlist'); return; }
-      const nextPosition = playlistTracks.length;
+
+      // Always append to the very end: read the real max position from the DB
+      // instead of assuming it equals the local track count (gaps break ordering).
+      const { data: lastItem } = await supabase
+        .from('playlist_items')
+        .select('position')
+        .eq('playlist_id', id!)
+        .order('position', { ascending: false })
+        .limit(1);
+
+      const nextPosition = lastItem && lastItem.length > 0 ? (lastItem[0].position ?? 0) + 1 : 0;
+
       const { error } = await supabase.from('playlist_items').insert({
         playlist_id: id!,
         track_id: track.id,
@@ -307,14 +318,17 @@ const PlaylistView = () => {
         position: nextPosition,
       });
       if (error) throw error;
-      toast.success('Added to playlist!');
-      fetchPlaylist();
+      toast.success('Added to the end of the playlist!');
+      setActiveMoodFilter('all');
+      setPlaylistMode('original');
+      await fetchPlaylist();
       setSearchResults([]);
       setPlaylistSearchQuery('');
     } catch {
       toast.error('Failed to add track');
     }
   };
+
 
   const getLoopIcon = () => {
     switch (loopMode) {
