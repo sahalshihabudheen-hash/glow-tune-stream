@@ -200,7 +200,8 @@ const PlaylistView = () => {
         .from('playlist_items')
         .select('*')
         .eq('playlist_id', id!)
-        .order('position', { ascending: true });
+        .order('position', { ascending: true })
+        .order('created_at', { ascending: true });
 
       if (itemsError) throw itemsError;
 
@@ -422,7 +423,7 @@ const PlaylistView = () => {
         onSearch={() => navigate('/')}
       />
       
-      <main className="flex-1 md:ml-64 pt-20 pb-64 px-4 md:px-8">
+      <main className="flex-1 md:ml-64 pt-20 pb-64 px-3 md:px-8">
         <div className="mb-8 animate-in-up">
           <button
             onClick={() => navigate('/playlists')}
@@ -432,7 +433,7 @@ const PlaylistView = () => {
             <span className="font-bold text-sm uppercase tracking-widest">Back to Playlists</span>
           </button>
           
-          <div className="flex flex-col md:flex-row items-center md:items-end gap-8">
+          <div className="flex flex-col md:flex-row items-center md:items-end gap-5 md:gap-8">
             <PlaylistGridPhoto 
               thumbnails={playlistTracks.map(t => t.thumbnail)} 
               size="lg"
@@ -440,7 +441,7 @@ const PlaylistView = () => {
             
             <div className="flex-1 flex flex-col items-center md:items-start text-center md:text-left">
               <p className="text-[10px] font-black text-primary uppercase tracking-[0.3em] mb-3">Private Playlist</p>
-              <h1 className="text-4xl md:text-7xl font-black tracking-tighter uppercase italic neon-text mb-4 leading-none">
+              <h1 className="text-3xl md:text-7xl font-black tracking-tighter uppercase italic neon-text mb-4 leading-none">
                 {playlist?.name}
               </h1>
               <div className="flex flex-col gap-4">
@@ -458,7 +459,7 @@ const PlaylistView = () => {
               </div>
             </div>
             
-            <div className="flex items-center gap-4">
+            <div className="flex items-center justify-center gap-3 md:gap-4 w-full md:w-auto">
                <button
                 onClick={toggleShuffle}
                 className={cn(
@@ -501,7 +502,7 @@ const PlaylistView = () => {
         </div>
 
         {/* Search within playlist page */}
-        <div className="mb-8 glass-premium border border-white/5 p-6 rounded-[2rem] shadow-xl animate-in-up">
+        <div className="mb-8 glass-premium border border-white/5 p-4 md:p-6 rounded-[2rem] shadow-xl animate-in-up">
           <div className="flex items-center gap-3 mb-6">
              <div className="w-10 h-10 rounded-2xl bg-primary/20 flex items-center justify-center">
                 <Search className="w-5 h-5 text-primary" />
