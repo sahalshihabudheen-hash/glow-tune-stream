@@ -43,9 +43,18 @@ const SoundwaveVisualizer = ({ isPlaying, className, shape: propShape }: Soundwa
     }
 
     let running = true;
+    // Phones get a slower refresh: heavy setState loops were causing audio/UI jank.
+    const isSmallScreen = typeof window !== 'undefined' && window.innerWidth < 768;
+    const frameDelay = isSmallScreen ? 140 : 60;
+    let timeoutId: ReturnType<typeof setTimeout> | undefined;
 
     const animate = () => {
       if (!running) return;
+
+      if (typeof document !== 'undefined' && document.hidden) {
+        timeoutId = setTimeout(animate, 500);
+        return;
+      }
 
       let freqArray: number[] = [];
       if (stateRef.current.active) {
@@ -77,7 +86,7 @@ const SoundwaveVisualizer = ({ isPlaying, className, shape: propShape }: Soundwa
       setPulseScale(0.85 + (bassValue / 300) * 0.35);
 
       animationRef.current = requestAnimationFrame(() => {
-        setTimeout(animate, 60);
+        timeoutId = setTimeout(animate, frameDelay);
       });
     };
 
@@ -85,9 +94,11 @@ const SoundwaveVisualizer = ({ isPlaying, className, shape: propShape }: Soundwa
 
     return () => {
       running = false;
+      if (timeoutId) clearTimeout(timeoutId);
       if (animationRef.current) cancelAnimationFrame(animationRef.current);
     };
   }, [isPlaying]);
+
 
   // Bars Shape (Classic) - heights in px, not % so they're visible in any container
   if (shape === 'bars') {

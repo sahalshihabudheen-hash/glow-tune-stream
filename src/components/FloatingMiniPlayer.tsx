@@ -249,7 +249,7 @@ const FloatingMiniPlayer = () => {
         top: `${position.y}px`,
       }}
     >
-      <div className="relative overflow-hidden rounded-[2rem] border border-primary/25 hover:border-primary/45 bg-zinc-950/95 backdrop-blur-3xl shadow-[0_20px_50px_rgba(0,0,0,0.7),0_0_20px_hsl(var(--primary)/0.1)] transition-all duration-300 hover:shadow-[0_25px_60px_rgba(0,0,0,0.8),0_0_30px_hsl(var(--primary)/0.2)]">
+      <div className="relative overflow-hidden rounded-[2rem] border border-primary/25 hover:border-primary/45 bg-zinc-950/95 backdrop-blur-md md:backdrop-blur-3xl shadow-[0_20px_50px_rgba(0,0,0,0.7),0_0_20px_hsl(var(--primary)/0.1)] transition-all duration-300 hover:shadow-[0_25px_60px_rgba(0,0,0,0.8),0_0_30px_hsl(var(--primary)/0.2)]">
         {/* Row 1: Drag Area, Artwork & Track Info, Close Button */}
         <div className="flex items-center gap-3 px-4 pt-3.5 pb-2">
           <button
@@ -280,7 +280,7 @@ const FloatingMiniPlayer = () => {
                 alt={currentTrack.title}
                 className={cn(
                   "relative h-12 w-12 rounded-full object-cover shadow-lg border-2 border-primary/25 transition-all duration-500",
-                  isPlaying ? "animate-spin" : ""
+                  isPlaying ? "md:animate-spin" : ""
                 )}
                 style={{ animationDuration: '8s' }}
                 loading="lazy"
