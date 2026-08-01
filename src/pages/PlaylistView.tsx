@@ -788,7 +788,23 @@ const PlaylistView = () => {
             </div>
           </div>
         )}
+
+        {playlistTracks.length > 0 && (
+          <div className="mt-12 pt-8 border-t border-white/5">
+            <MadeForYouSection
+              title="Smart Picks"
+              subtitle="Matched to this playlist & what you listen to"
+              seedTracks={playlistTracks.slice(0, 20)}
+              excludeIds={playlistTracks.map(t => t.id)}
+              onPlayTrack={handlePlayFromPlaylistView}
+              currentTrack={currentTrack}
+              isPlaying={isPlaying}
+              onAddToQueue={handleAddToPlaylistDB}
+            />
+          </div>
+        )}
       </main>
+
 
       {currentTrack && (
         <MusicPlayer
