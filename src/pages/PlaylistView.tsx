@@ -11,6 +11,7 @@ import MusicPlayer from '@/components/MusicPlayer';
 import Sidebar from '@/components/Sidebar';
 import PlaylistGridPhoto from '@/components/PlaylistGridPhoto';
 import MadeForYouSection from '@/components/MadeForYouSection';
+import { readCache, writeCache, prefetchThumbs } from '@/lib/offlineCache';
 
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
@@ -185,6 +186,13 @@ const PlaylistView = () => {
 
   const fetchPlaylist = async () => {
     if (!user) return;
+    // Instant paint from cache while the network request is in flight.
+    const cachedSnapshot = readCache<{ playlist: any; tracks: Track[] }>(`playlist:${id}`);
+    if (cachedSnapshot) {
+      setPlaylist(cachedSnapshot.playlist);
+      setPlaylistTracks(cachedSnapshot.tracks);
+      setLoading(false);
+    }
     try {
       const { data: playlistData, error: playlistError } = await supabase
         .from('playlists')
@@ -213,9 +221,18 @@ const PlaylistView = () => {
       })) || [];
 
       setPlaylistTracks(tracks);
+      writeCache(`playlist:${id}`, { playlist: playlistData, tracks });
+      prefetchThumbs(tracks.map(track => track.thumbnail));
     } catch (error: any) {
-      toast.error('Failed to load playlist');
-      navigate('/playlists');
+      // Fall back to the offline cache instead of bouncing the user out.
+      const cached = readCache<{ playlist: any; tracks: Track[] }>(`playlist:${id}`);
+      if (cached) {
+        setPlaylist(cached.playlist);
+        setPlaylistTracks(cached.tracks);
+      } else {
+        toast.error('Failed to load playlist');
+        navigate('/playlists');
+      }
     } finally {
       setLoading(false);
     }

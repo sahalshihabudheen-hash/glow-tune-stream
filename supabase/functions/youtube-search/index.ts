@@ -81,13 +81,40 @@ serve(async (req) => {
       );
     }
 
-    const results = (result.data.items || []).map((item: any) => ({
+    let results = (result.data.items || []).map((item: any) => ({
       id: item.id.videoId,
       title: item.snippet.title,
       thumbnail: item.snippet.thumbnails?.high?.url || item.snippet.thumbnails?.default?.url,
       channel: item.snippet.channelTitle,
       channelId: item.snippet.channelId,
     }));
+
+    // Drop YouTube Shorts / status clips so recommendations are full songs only.
+    try {
+      const ids = results.map((r: any) => r.id).filter(Boolean).join(',');
+      if (ids) {
+        const details = await fetchYouTubeWithBackupFailover(
+          keys,
+          (apiKey) => `https://www.googleapis.com/youtube/v3/videos?part=contentDetails&id=${ids}&key=${apiKey}`,
+        );
+        if (details.ok) {
+          const seconds = new Map<string, number>();
+          for (const item of details.data.items || []) {
+            const m = /^PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?$/.exec(item.contentDetails?.duration || '');
+            if (!m) continue;
+            seconds.set(item.id, (+(m[1] || 0)) * 3600 + (+(m[2] || 0)) * 60 + (+(m[3] || 0)));
+          }
+          const fullSongs = results.filter((r: any) => {
+            const dur = seconds.get(r.id);
+            if (dur !== undefined && dur < 75) return false;
+            return !/#shorts?\b|\bshorts?\b\s*[|\-]|\breels?\b|whatsapp\s*status|\bringtone\b/i.test(r.title || '');
+          });
+          if (fullSongs.length > 0) results = fullSongs;
+        }
+      }
+    } catch (e) {
+      console.warn('Shorts filtering skipped:', (e as Error).message);
+    }
 
 
     return new Response(JSON.stringify(results), {

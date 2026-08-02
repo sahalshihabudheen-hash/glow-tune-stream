@@ -2,7 +2,7 @@ import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { BrowserRouter, HashRouter, Routes, Route } from "react-router-dom";
 import { ThemeProvider } from "@/contexts/ThemeContext";
 import { MusicPlayerProvider } from "@/contexts/MusicPlayerContext";
 import { DownloadManagerProvider } from "@/contexts/DownloadManagerContext";
@@ -24,10 +24,15 @@ import Games from "./pages/Games";
 import AiDj from "./pages/AiDj";
 import YouTubeArtistPage from "./pages/YouTubeArtistPage";
 import OfflineDownloads from "./pages/OfflineDownloads";
+import GetApp from "./pages/GetApp";
+import DiscordPresence from "./hooks/useDiscordPresence";
 
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
+
+// Electron loads the bundle from file:// where history routing cannot work.
+const Router = typeof window !== "undefined" && window.location.protocol === "file:" ? HashRouter : BrowserRouter;
 
 const App = () => (
   <QueryClientProvider client={queryClient}>
@@ -35,9 +40,10 @@ const App = () => (
       <TooltipProvider>
         <Toaster />
         <Sonner />
-        <BrowserRouter>
+        <Router>
           <MusicPlayerProvider>
             <DownloadManagerProvider>
+            <DiscordPresence />
             <MaintenanceGuard>
               <Routes>
                 <Route path="/" element={<Index />} />
@@ -54,6 +60,7 @@ const App = () => (
                 <Route path="/games" element={<Games />} />
                 <Route path="/yt-artist/:channelId" element={<YouTubeArtistPage />} />
                 <Route path="/offline" element={<OfflineDownloads />} />
+                <Route path="/get-app" element={<GetApp />} />
                 
 
                 {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
@@ -65,7 +72,7 @@ const App = () => (
             </MaintenanceGuard>
             </DownloadManagerProvider>
           </MusicPlayerProvider>
-        </BrowserRouter>
+        </Router>
       </TooltipProvider>
     </ThemeProvider>
   </QueryClientProvider>

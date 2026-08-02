@@ -1,6 +1,6 @@
 {
   "appId": "com.nyra.pulse",
-  "appName": "Nyra Neon Pulse",
+  "appName": "NYRA",
   "webDir": "dist",
   "bundledWebRuntime": false,
   "server": {
