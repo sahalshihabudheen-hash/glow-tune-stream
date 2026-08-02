@@ -11,8 +11,8 @@
     "lint": "eslint .",
     "preview": "vite preview",
     "build:desktop": "vite build --base=./",
-    "desktop:dev": "npm run build:desktop && electron .",
-    "desktop:package": "npm run build:desktop && electron-packager . NYRA --overwrite --out=electron-release --ignore=\"^/src\" --ignore=\"^/public\" --ignore=\"^/android\" --ignore=\"^/supabase\" --ignore=\"^/electron-release\""
+    "desktop:dev": "npm run build:desktop && npx electron .",
+    "desktop:package": "npm run build:desktop && npx @electron/packager . NYRA --overwrite --out=electron-release --ignore=\"^/src\" --ignore=\"^/public\" --ignore=\"^/android\" --ignore=\"^/supabase\" --ignore=\"^/electron-release\""
   },
   "dependencies": {
     "@capacitor/android": "^8.3.4",

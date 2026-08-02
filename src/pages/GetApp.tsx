@@ -148,8 +148,9 @@ const GetApp = () => {
             </a>
           ) : (
             <p className="text-xs text-muted-foreground">
-              Desktop builds are produced from the repository with{' '}
-              <code className="px-1.5 py-0.5 rounded bg-white/10">npm run desktop:package</code>. The
+              Build it yourself from the repository: install the desktop toolchain with{' '}
+              <code className="px-1.5 py-0.5 rounded bg-white/10">npm i -D electron @electron/packager discord-rpc</code>{' '}
+              then run <code className="px-1.5 py-0.5 rounded bg-white/10">npm run desktop:package</code>. The
               packaged app opens NYRA in its own window with Discord Rich Presence enabled.
             </p>
           )}
