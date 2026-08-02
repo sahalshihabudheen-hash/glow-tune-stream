@@ -24,6 +24,8 @@ import Games from "./pages/Games";
 import AiDj from "./pages/AiDj";
 import YouTubeArtistPage from "./pages/YouTubeArtistPage";
 import OfflineDownloads from "./pages/OfflineDownloads";
+import GetApp from "./pages/GetApp";
+import DiscordPresence from "./hooks/useDiscordPresence";
 
 import NotFound from "./pages/NotFound";
 
@@ -38,6 +40,7 @@ const App = () => (
         <BrowserRouter>
           <MusicPlayerProvider>
             <DownloadManagerProvider>
+            <DiscordPresence />
             <MaintenanceGuard>
               <Routes>
                 <Route path="/" element={<Index />} />
@@ -54,6 +57,7 @@ const App = () => (
                 <Route path="/games" element={<Games />} />
                 <Route path="/yt-artist/:channelId" element={<YouTubeArtistPage />} />
                 <Route path="/offline" element={<OfflineDownloads />} />
+                <Route path="/get-app" element={<GetApp />} />
                 
 
                 {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}

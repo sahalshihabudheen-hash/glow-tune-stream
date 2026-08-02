@@ -1,4 +1,4 @@
-import { Home, Search, ListMusic, Heart, Settings, Menu, X, Users, Shield, Gamepad2, Sparkles, AlertTriangle, Wand2, Headphones, Play, Disc3, Download } from 'lucide-react';
+import { Home, Search, ListMusic, Heart, Settings, Menu, X, Users, Shield, Gamepad2, Sparkles, AlertTriangle, Wand2, Headphones, Play, Disc3, Download, MonitorSmartphone } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { cn } from '@/lib/utils';
@@ -45,6 +45,7 @@ const Sidebar = ({ activeTab, onTabChange }: SidebarProps) => {
     { id: 'playlists', label: 'Playlists', icon: ListMusic, path: '/playlists' },
     { id: 'favorites', label: 'Favorites', icon: Heart, path: '/favorites' },
     { id: 'offline', label: 'Downloads', icon: Download, path: '/offline' },
+    { id: 'get-app', label: 'Get App', icon: MonitorSmartphone, path: '/get-app' },
     { id: 'ai-dj', label: 'AI DJ', icon: Sparkles, path: '/ai-dj' },
     { id: 'games', label: 'Games', icon: Gamepad2, path: '/games' },
     { id: 'settings', label: 'Settings', icon: Settings, path: '/settings' },
@@ -76,6 +77,7 @@ const Sidebar = ({ activeTab, onTabChange }: SidebarProps) => {
     if (item.path === '/admin' && location.pathname === '/admin') return true;
     if (item.path === '/settings' && location.pathname === '/settings') return true;
     if (item.path === '/offline' && location.pathname === '/offline') return true;
+    if (item.path === '/get-app' && location.pathname === '/get-app') return true;
     if (item.path === '/games' && location.pathname === '/games') return true;
     if (item.path === '/ai-dj' && location.pathname === '/ai-dj') return true;
     if (item.id === 'playlists' && location.pathname.startsWith('/playlist')) return true;
