@@ -9,7 +9,10 @@
     "start": "node dist/server.cjs",
     "build:dev": "vite build --mode development",
     "lint": "eslint .",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "build:desktop": "vite build --base=./",
+    "desktop:dev": "npm run build:desktop && electron .",
+    "desktop:package": "npm run build:desktop && electron-packager . NYRA --overwrite --out=electron-release --ignore=\"^/src\" --ignore=\"^/public\" --ignore=\"^/android\" --ignore=\"^/supabase\" --ignore=\"^/electron-release\""
   },
   "dependencies": {
     "@capacitor/android": "^8.3.4",
@@ -98,5 +101,6 @@
     "typescript": "^5.8.3",
     "typescript-eslint": "^8.38.0",
     "vite": "^5.4.19"
-  }
+  },
+  "main": "electron/main.cjs"
 }
