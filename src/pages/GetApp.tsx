@@ -77,7 +77,7 @@ const GetApp = () => {
 
   return (
     <div className="min-h-screen bg-background">
-      <Navbar onSearch={() => {}} />
+      <Navbar searchQuery="" onSearchChange={() => {}} onSearch={() => {}} />
       <Sidebar activeTab={activeTab} onTabChange={setActiveTab} />
 
       <main className="md:ml-64 pt-20 pb-32 px-4 md:px-8 max-w-5xl mx-auto">
