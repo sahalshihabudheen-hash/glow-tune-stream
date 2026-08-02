@@ -5,6 +5,9 @@ import { cn } from '@/lib/utils';
 import { famousSongs } from '@/data/famousSongs';
 import { getFunctionAuthHeaders } from '@/lib/functionAuth';
 import { useTasteProfile } from '@/hooks/useTasteProfile';
+import { filterOutShorts } from '@/lib/shorts';
+import CachedImage from '@/components/CachedImage';
+import { readCache, writeCache, prefetchThumbs } from '@/lib/offlineCache';
 
 interface Track {
   id: string;
@@ -51,6 +54,11 @@ const MadeForYouSection = ({
 
     const fetchTracks = async () => {
       setLoading(true);
+      const cached = readCache<Track[]>(`madeforyou:${query}`);
+      if (cached && cached.length > 0) {
+        setTracks(cached);
+        setLoading(false);
+      }
       try {
         const response = await fetch(
           `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/youtube-search?q=${encodeURIComponent(query)}`,
@@ -60,12 +68,22 @@ const MadeForYouSection = ({
         const data = await response.json();
         if (data.error) throw new Error(data.error);
         if (cancelled) return;
-        const filtered = (data as Track[]).filter(track => !excludeIds.includes(track.id));
-        setTracks(filtered.slice(0, 12));
+        const filtered = filterOutShorts(
+          (data as Track[]).filter(track => !excludeIds.includes(track.id))
+        );
+        const picks = filtered.slice(0, 12);
+        setTracks(picks);
+        writeCache(`madeforyou:${query}`, picks);
+        prefetchThumbs(picks.map(track => track.thumbnail));
       } catch (error) {
         if (cancelled) return;
-        const shuffled = [...famousSongs].sort(() => Math.random() - 0.5);
-        setTracks(shuffled.slice(0, 10));
+        const cached = readCache<Track[]>(`madeforyou:${query}`);
+        if (cached && cached.length > 0) {
+          setTracks(cached);
+        } else {
+          const shuffled = filterOutShorts([...famousSongs].sort(() => Math.random() - 0.5));
+          setTracks(shuffled.slice(0, 10));
+        }
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -134,10 +152,9 @@ const MadeForYouSection = ({
                     isCurrent ? 'border-primary shadow-[0_0_25px_hsl(var(--primary)/0.35)]' : 'border-white/5'
                   )}
                 >
-                  <img
+                  <CachedImage
                     src={track.thumbnail}
                     alt={track.title}
-                    loading="lazy"
                     className="w-full h-full object-cover"
                   />
                   <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
