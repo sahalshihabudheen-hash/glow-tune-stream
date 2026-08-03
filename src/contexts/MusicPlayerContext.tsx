@@ -303,11 +303,11 @@ export function MusicPlayerProvider({ children }: { children: React.ReactNode })
   }, []);
 
   const [useBackgroundAudioOnly, setUseBackgroundAudioOnlyState] = useState(() => {
-    const saved = localStorage.getItem('nyra-background-audio-only');
-    if (saved !== null) return saved === 'true';
     // Native shells can sustain direct audio in the background. Mobile browsers
     // start with the faster iframe path and use cached audio whenever available.
-    return isNative();
+    const native = isNative();
+    if (!native) localStorage.removeItem('nyra-background-audio-only');
+    return native;
   });
   const useBackgroundAudioOnlyRef = useRef(useBackgroundAudioOnly);
   const isResolvingStreamRef = useRef(false);

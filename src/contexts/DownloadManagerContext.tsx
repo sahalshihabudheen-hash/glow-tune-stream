@@ -609,8 +609,8 @@ export function DownloadManagerProvider({ children }: { children: React.ReactNod
   // effort and intentionally silent: playback remains available while caching,
   // and a failed provider can be retried the next time the song is queued.
   useEffect(() => {
-    const handleQueuedTrack = async (event: Event) => {
-      const track = (event as CustomEvent<{ id: string; title: string; thumbnail: string; channel?: string }>).detail;
+    type QueuedTrack = { id: string; title: string; thumbnail: string; channel?: string };
+    const cacheQueuedTrack = async (track: QueuedTrack) => {
       if (!track?.id || queueCacheInFlight.current.has(track.id)) return;
       queueCacheInFlight.current.add(track.id);
       try {
@@ -624,7 +624,23 @@ export function DownloadManagerProvider({ children }: { children: React.ReactNod
       }
     };
 
+    const handleQueuedTrack = (event: Event) => {
+      const track = (event as CustomEvent<QueuedTrack>).detail;
+      void cacheQueuedTrack(track);
+    };
+
     window.addEventListener('nyra:cache-queued-track', handleQueuedTrack);
+    // Warm only the next few restored queue entries, sequentially, to avoid
+    // saturating a weak mobile connection when the app launches.
+    try {
+      const restored = JSON.parse(localStorage.getItem('nyra-queue') || '[]') as QueuedTrack[];
+      void restored.slice(0, 3).reduce(
+        (previous, track) => previous.then(() => cacheQueuedTrack(track)),
+        Promise.resolve(),
+      );
+    } catch {
+      // A malformed legacy queue should not block the player.
+    }
     return () => window.removeEventListener('nyra:cache-queued-track', handleQueuedTrack);
   }, []);
 
