@@ -108,6 +108,14 @@ export function useQueue() {
     return null;
   }, [queue, shuffleMode]);
 
+  const peekNextFromQueue = useCallback((playlist: Track[] = []) => {
+    if (queue.length > 0) return queue[0];
+    if (shuffleMode && playlist.length > 0) {
+      return playlist.find(track => track.id !== lastPlayedIdRef.current) || playlist[0];
+    }
+    return null;
+  }, [queue, shuffleMode]);
+
   const toggleShuffle = useCallback(() => {
     setShuffleMode(prev => !prev);
   }, []);
@@ -124,6 +132,7 @@ export function useQueue() {
     clearQueue,
     isInQueue,
     getNextFromQueue,
+    peekNextFromQueue,
     shuffleMode,
     toggleShuffle,
     setLastPlayed,

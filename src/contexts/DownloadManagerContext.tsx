@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useCallback } from 'react';
+import React, { createContext, useContext, useState, useCallback, useEffect, useRef } from 'react';
 import { toast } from 'sonner';
 import { useTheme } from '@/contexts/ThemeContext';
 import { saveTrackOffline } from '@/lib/offlineStore';
@@ -519,6 +519,7 @@ export function DownloadManagerProvider({ children }: { children: React.ReactNod
     duration?: number;
   } | null>(null);
   const [dontAskAgain, setDontAskAgain] = useState(false);
+  const queueCacheInFlight = useRef(new Set<string>());
 
   const addItem = useCallback((item: DownloadItem) => {
     setDownloads((prev) => [item, ...prev.filter((d) => d.id !== item.id)]);
@@ -603,6 +604,29 @@ export function DownloadManagerProvider({ children }: { children: React.ReactNod
     },
     [addItem, updateItem, removeItem, downloadToDevice]
   );
+
+  // Queueing a song also warms its full audio blob in IndexedDB. This is best
+  // effort and intentionally silent: playback remains available while caching,
+  // and a failed provider can be retried the next time the song is queued.
+  useEffect(() => {
+    const handleQueuedTrack = async (event: Event) => {
+      const track = (event as CustomEvent<{ id: string; title: string; thumbnail: string; channel?: string }>).detail;
+      if (!track?.id || queueCacheInFlight.current.has(track.id)) return;
+      queueCacheInFlight.current.add(track.id);
+      try {
+        const result = await fetchFirstAudioBlob(track, 'stream', () => {});
+        await saveTrackOffline({ ...track, artist: track.channel }, result.blob);
+        window.dispatchEvent(new CustomEvent('nyra:offline-cache-updated', { detail: { id: track.id } }));
+      } catch (error) {
+        console.warn('[Queue Cache] Could not cache queued track yet:', error);
+      } finally {
+        queueCacheInFlight.current.delete(track.id);
+      }
+    };
+
+    window.addEventListener('nyra:cache-queued-track', handleQueuedTrack);
+    return () => window.removeEventListener('nyra:cache-queued-track', handleQueuedTrack);
+  }, []);
 
   // ── Entry point ─────────────────────────────────────────────────────────────
   const startDownload = useCallback(

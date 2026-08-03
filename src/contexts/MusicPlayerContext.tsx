@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useRef, useCallback, useEffect } from 'react';
-import { notifyNativeTrack, notifyNativePlayback, listenCarCommands } from '@/lib/nyraMediaBridge';
+import { notifyNativeTrack, notifyNativePlayback, listenCarCommands, isNative } from '@/lib/nyraMediaBridge';
 import { toast } from 'sonner';
 import { usePlaylist } from '@/hooks/usePlaylist';
 import { useQueue } from '@/hooks/useQueue';
@@ -305,7 +305,9 @@ export function MusicPlayerProvider({ children }: { children: React.ReactNode })
   const [useBackgroundAudioOnly, setUseBackgroundAudioOnlyState] = useState(() => {
     const saved = localStorage.getItem('nyra-background-audio-only');
     if (saved !== null) return saved === 'true';
-    return isMobileLikeDevice();
+    // Native shells can sustain direct audio in the background. Mobile browsers
+    // start with the faster iframe path and use cached audio whenever available.
+    return isNative();
   });
   const useBackgroundAudioOnlyRef = useRef(useBackgroundAudioOnly);
   const isResolvingStreamRef = useRef(false);
@@ -483,7 +485,7 @@ export function MusicPlayerProvider({ children }: { children: React.ReactNode })
 
   const {
     queue, addToQueue, removeFromQueue, clearQueue,
-    getNextFromQueue, shuffleMode, toggleShuffle, setLastPlayed,
+    getNextFromQueue, peekNextFromQueue, shuffleMode, toggleShuffle, setLastPlayed,
   } = useQueue();
 
   const [nowPlayingOpen, setNowPlayingOpen] = useState(false);
@@ -692,10 +694,11 @@ export function MusicPlayerProvider({ children }: { children: React.ReactNode })
     return () => clearInterval(syncInterval);
   }, [isPlaying]);
 
-  // Mobile browsers suspend iframe/video playback aggressively in background.
-  // Keep music on the native HTMLAudioElement path before the page is hidden.
+  // Native builds sustain HTMLAudioElement playback while backgrounded. On the
+  // mobile web, switching sources after the page is hidden is unreliable and can
+  // interrupt otherwise healthy foreground playback, so leave the active source.
   useEffect(() => {
-    if (!isMobileLikeDevice()) return;
+    if (!isNative()) return;
 
     const keepAudioAlive = () => {
       useBackgroundAudioOnlyRef.current = true;
@@ -812,7 +815,8 @@ export function MusicPlayerProvider({ children }: { children: React.ReactNode })
     let nextTrack: Track | null = null;
 
     // Check queue first
-    const nextFromQueue = getNextFromQueue(playlist);
+    // Peek only: preloading must never consume or reorder the actual queue.
+    const nextFromQueue = peekNextFromQueue(playlist);
     if (nextFromQueue) {
       nextTrack = nextFromQueue;
     } else if (playingFromPlaylist) {
@@ -849,13 +853,13 @@ export function MusicPlayerProvider({ children }: { children: React.ReactNode })
       }
 
       // Resolve via proxy endpoint
-      const proxyStreamUrl = getAudioUrlEndpoint(nextId, { stream: true });
+      const proxyStreamUrl = getAudioUrlEndpoint(nextId, { stream: true, title: nextTrack.title });
       nextTrackResolvedUrlRef.current = { id: nextId, url: proxyStreamUrl, crossOriginSetting: 'anonymous' };
       console.log('[Background Preload] Next track stream proxy url pre-resolved.');
     } catch (e) {
       console.error('[Background Preload] Failed to pre-resolve next track:', e);
     }
-  }, [currentTrack, playlist, playingFromPlaylist, getNextTrack, getNextFromQueue, tracks, currentTrackIndex, loopMode]);
+  }, [currentTrack, playlist, playingFromPlaylist, getNextTrack, peekNextFromQueue, tracks, currentTrackIndex, loopMode]);
 
   // Preload next song as soon as current song starts
   useEffect(() => {
@@ -910,7 +914,8 @@ export function MusicPlayerProvider({ children }: { children: React.ReactNode })
 
         // 1. Try local/Supabase stream proxy
         console.log('Resolving stream via edge proxy...');
-        const proxyStreamUrl = getAudioUrlEndpoint(videoId, { stream: true });
+        const trackTitle = currentTrack?.id === videoId ? currentTrack.title : undefined;
+        const proxyStreamUrl = getAudioUrlEndpoint(videoId, { stream: true, title: trackTitle });
         let success = await playAudioUrl(proxyStreamUrl, 'anonymous');
         if (success) {
           isResolvingStreamRef.current = false;
@@ -920,7 +925,7 @@ export function MusicPlayerProvider({ children }: { children: React.ReactNode })
         // 2. Try direct audio URL from edge function
         try {
           console.log('Edge proxy failed. Querying direct url JSON...');
-          const response = await fetch(getAudioUrlEndpoint(videoId));
+          const response = await fetch(getAudioUrlEndpoint(videoId, { title: trackTitle }));
           const data = response.ok ? await response.json() : null;
           const directAudioUrl = data?.audioUrl || data?.audioUrl1;
           if (directAudioUrl) {
@@ -958,7 +963,7 @@ export function MusicPlayerProvider({ children }: { children: React.ReactNode })
             }
 
             // Proxy the direct URL through our edge function to guarantee CORS compatibility!
-            const proxiedUrl = getAudioUrlEndpoint(videoId, { proxyUrl: clientUrl });
+            const proxiedUrl = getAudioUrlEndpoint(videoId, { proxyUrl: clientUrl, title: trackTitle });
             success = await playAudioUrl(proxiedUrl, 'anonymous');
             if (success) {
               toast.success('High-quality stream connected!');
@@ -1047,7 +1052,7 @@ export function MusicPlayerProvider({ children }: { children: React.ReactNode })
     } else {
       toast.error('Player not ready. Please try again.');
     }
-  }, [ytApiReady, createPlayer, setPlaybackSource, playAudioUrl]);
+  }, [ytApiReady, createPlayer, setPlaybackSource, playAudioUrl, currentTrack]);
 
   const forceBackgroundPlayback = useCallback(async (track = currentTrack, options?: { trackList?: Track[]; fromPlaylist?: boolean }): Promise<boolean> => {
     if (!track || !audioRef.current) {
@@ -1092,7 +1097,7 @@ export function MusicPlayerProvider({ children }: { children: React.ReactNode })
 
           // 1. Try local/Supabase stream proxy
           console.log('Resolving force stream via edge proxy...');
-          const streamUrl = getAudioUrlEndpoint(track.id, { stream: true });
+          const streamUrl = getAudioUrlEndpoint(track.id, { stream: true, title: track.title });
           let success = await playAudioUrl(streamUrl, 'anonymous');
           if (success) {
             isResolvingStreamRef.current = false;
@@ -1102,7 +1107,7 @@ export function MusicPlayerProvider({ children }: { children: React.ReactNode })
           // 2. Try direct audio URL from edge function
           try {
             console.log('Edge proxy failed. Resolving direct url fallback...');
-            const response = await fetch(getAudioUrlEndpoint(track.id));
+            const response = await fetch(getAudioUrlEndpoint(track.id, { title: track.title }));
             const data = response.ok ? await response.json() : null;
             const directAudioUrl = data?.audioUrl || data?.audioUrl1;
             if (directAudioUrl) {
@@ -1138,7 +1143,7 @@ export function MusicPlayerProvider({ children }: { children: React.ReactNode })
               }
 
               // Proxy the direct URL through our edge function to guarantee CORS compatibility!
-              const proxiedUrl = getAudioUrlEndpoint(track.id, { proxyUrl: clientUrl });
+              const proxiedUrl = getAudioUrlEndpoint(track.id, { proxyUrl: clientUrl, title: track.title });
               success = await playAudioUrl(proxiedUrl, 'anonymous');
               if (success) {
                 toast.success('High-quality stream connected!');
@@ -1404,6 +1409,7 @@ export function MusicPlayerProvider({ children }: { children: React.ReactNode })
 
   const handleAddToQueue = useCallback((track: Track) => {
     addToQueue(track);
+    window.dispatchEvent(new CustomEvent('nyra:cache-queued-track', { detail: track }));
     toast.success(`⌛ "${track.title.slice(0, 30)}..." added to queue`);
   }, [addToQueue]);
 
