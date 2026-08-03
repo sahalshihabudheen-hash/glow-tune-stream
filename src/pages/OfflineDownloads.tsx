@@ -60,10 +60,12 @@ export default function OfflineDownloads() {
 
     window.addEventListener('online', handleOnline);
     window.addEventListener('offline', handleOffline);
+    window.addEventListener('nyra:offline-cache-updated', loadTracks);
 
     return () => {
       window.removeEventListener('online', handleOnline);
       window.removeEventListener('offline', handleOffline);
+      window.removeEventListener('nyra:offline-cache-updated', loadTracks);
     };
   }, []);
 
