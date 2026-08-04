@@ -26,6 +26,7 @@ import AiDj from "./pages/AiDj";
 import YouTubeArtistPage from "./pages/YouTubeArtistPage";
 import OfflineDownloads from "./pages/OfflineDownloads";
 import GetApp from "./pages/GetApp";
+import Debug from "./pages/Debug";
 import DiscordPresence from "./hooks/useDiscordPresence";
 
 import NotFound from "./pages/NotFound";
