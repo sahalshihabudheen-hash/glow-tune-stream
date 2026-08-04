@@ -63,6 +63,7 @@ const App = () => (
                 <Route path="/yt-artist/:channelId" element={<YouTubeArtistPage />} />
                 <Route path="/offline" element={<OfflineDownloads />} />
                 <Route path="/get-app" element={<GetApp />} />
+                <Route path="/debug" element={<Debug />} />
                 {/* Aliases so common/legacy links never hit the 404 page */}
                 <Route path="/home" element={<Index />} />
                 <Route path="/index" element={<Index />} />
