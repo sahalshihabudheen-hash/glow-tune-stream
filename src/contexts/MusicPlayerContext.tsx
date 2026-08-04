@@ -1204,11 +1204,15 @@ export function MusicPlayerProvider({ children }: { children: React.ReactNode })
 
   const playStandardOrOffline = useCallback(async (trackId: string) => {
     const isDownloaded = await isTrackDownloadedOffline(trackId);
+    // The YouTube iframe cannot start a new video while the tab/app is hidden,
+    // which used to stall auto-advance after the first song in the background.
+    const isHidden = typeof document !== 'undefined' && document.visibilityState === 'hidden';
 
-    if (isDownloaded || useBackgroundAudioOnlyRef.current || !navigator.onLine) {
+    if (isDownloaded || useBackgroundAudioOnlyRef.current || isHidden || !navigator.onLine) {
       playWithBackgroundAudio(trackId);
       return;
     }
+
 
     if (audioRef.current) {
       try {
