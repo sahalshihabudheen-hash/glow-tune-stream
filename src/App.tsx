@@ -7,6 +7,7 @@ import { ThemeProvider } from "@/contexts/ThemeContext";
 import { MusicPlayerProvider } from "@/contexts/MusicPlayerContext";
 import { DownloadManagerProvider } from "@/contexts/DownloadManagerContext";
 import FloatingMiniPlayer from "@/components/FloatingMiniPlayer";
+import MobileNowPlayingNotch from "@/components/MobileNowPlayingNotch";
 import DownloadQueue from "@/components/DownloadQueue";
 import MaintenanceGuard from "@/components/MaintenanceGuard";
 import TutorialWrapper from "@/components/TutorialWrapper";
@@ -61,12 +62,24 @@ const App = () => (
                 <Route path="/yt-artist/:channelId" element={<YouTubeArtistPage />} />
                 <Route path="/offline" element={<OfflineDownloads />} />
                 <Route path="/get-app" element={<GetApp />} />
-                
+                {/* Aliases so common/legacy links never hit the 404 page */}
+                <Route path="/home" element={<Index />} />
+                <Route path="/index" element={<Index />} />
+                <Route path="/search" element={<Index />} />
+                <Route path="/downloads" element={<OfflineDownloads />} />
+                <Route path="/offline-downloads" element={<OfflineDownloads />} />
+                <Route path="/playlist" element={<PlaylistsManager />} />
+                <Route path="/app" element={<GetApp />} />
+                <Route path="/download-app" element={<GetApp />} />
+                <Route path="/aidj" element={<AiDj />} />
+                <Route path="/dj" element={<AiDj />} />
+                <Route path="/dj-mode" element={<AiDj />} />
 
                 {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
                 <Route path="*" element={<NotFound />} />
               </Routes>
               <FloatingMiniPlayer />
+              <MobileNowPlayingNotch />
               <DownloadQueue />
               <TutorialWrapper />
             </MaintenanceGuard>

@@ -694,11 +694,11 @@ export function MusicPlayerProvider({ children }: { children: React.ReactNode })
     return () => clearInterval(syncInterval);
   }, [isPlaying]);
 
-  // Native builds sustain HTMLAudioElement playback while backgrounded. On the
-  // mobile web, switching sources after the page is hidden is unreliable and can
-  // interrupt otherwise healthy foreground playback, so leave the active source.
+  // Native builds and mobile browsers both suspend the YouTube iframe once the
+  // app/tab is backgrounded. Hand playback over to the HTMLAudioElement so music
+  // keeps running with lock-screen controls (no "desktop mode" workaround needed).
   useEffect(() => {
-    if (!isNative()) return;
+    if (!isNative() && !isMobileLikeDevice()) return;
 
     const keepAudioAlive = () => {
       useBackgroundAudioOnlyRef.current = true;
