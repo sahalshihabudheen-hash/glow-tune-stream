@@ -967,7 +967,7 @@ export function MusicPlayerProvider({ children }: { children: React.ReactNode })
             }
 
             // If CORS fails, raw playback is only useful outside DJ-only mode.
-            if (!useBackgroundAudioOnlyRef.current) {
+            if (!useBackgroundAudioOnlyRef.current || isNative()) {
               success = await playAudioUrl(directAudioUrl, null);
               if (success) {
                 toast.warning('Audio filters disabled for this track (raw stream fallback).');
@@ -1001,7 +1001,7 @@ export function MusicPlayerProvider({ children }: { children: React.ReactNode })
               return true;
             }
 
-            if (!useBackgroundAudioOnlyRef.current) {
+            if (!useBackgroundAudioOnlyRef.current || isNative()) {
               success = await playAudioUrl(clientUrl, null);
               if (success) {
                 toast.warning('Audio filters disabled for this track (CORS cloud fallback).');
@@ -1029,6 +1029,17 @@ export function MusicPlayerProvider({ children }: { children: React.ReactNode })
       }
       const resolved = await tryRobustResolution();
       if (!resolved) {
+        // Never leave the user staring at a dead pause button: if no direct
+        // audio stream could be resolved, fall back to the YouTube player.
+        if (!isDownloaded && navigator.onLine) {
+          console.warn('Direct audio failed, falling back to YouTube player.');
+          setPlaybackSource('youtube');
+          const yt = (window as any).YT;
+          if (ytApiReady && yt?.Player) {
+            createPlayer(videoId);
+            return;
+          }
+        }
         toast.error('Local audio failed to load. Tap play to retry.');
       }
       return;
@@ -1324,11 +1335,9 @@ export function MusicPlayerProvider({ children }: { children: React.ReactNode })
       } else {
         safePlay(audioRef.current).then(success => {
           if (!success) {
+            // Re-resolve the stream instead of leaving playback stuck on pause.
             toast.error("Playback failed. Reconnecting...");
-            // Switch to YouTube as last resort if we are online and not forcing background
-            if (!forceBackground) {
-              setPlaybackSource('youtube');
-            }
+            if (currentTrack) playWithBackgroundAudio(currentTrack.id);
           }
         });
       }
