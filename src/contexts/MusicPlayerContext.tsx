@@ -370,6 +370,7 @@ export function MusicPlayerProvider({ children }: { children: React.ReactNode })
   const primaryAudioRef = useRef<HTMLAudioElement | null>(null);
   const secondaryAudioRef = useRef<HTMLAudioElement | null>(null);
   const handleNextRef = useRef<() => void>();
+  const handlePreviousRef = useRef<() => void>();
   const forceBackgroundPlaybackRef = useRef<((track?: Track, options?: { trackList?: Track[]; fromPlaylist?: boolean }) => Promise<boolean>) | null>(null);
   const audioPlayAttemptRef = useRef(0);
 
