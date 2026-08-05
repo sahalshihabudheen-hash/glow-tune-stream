@@ -967,7 +967,7 @@ export function MusicPlayerProvider({ children }: { children: React.ReactNode })
             }
 
             // If CORS fails, raw playback is only useful outside DJ-only mode.
-            if (!useBackgroundAudioOnlyRef.current) {
+            if (!useBackgroundAudioOnlyRef.current || isNative()) {
               success = await playAudioUrl(directAudioUrl, null);
               if (success) {
                 toast.warning('Audio filters disabled for this track (raw stream fallback).');
