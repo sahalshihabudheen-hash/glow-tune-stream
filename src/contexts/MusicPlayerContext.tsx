@@ -1414,7 +1414,8 @@ export function MusicPlayerProvider({ children }: { children: React.ReactNode })
 
   useEffect(() => {
     handleNextRef.current = handleNext;
-  }, [handleNext]);
+    handlePreviousRef.current = handlePrevious;
+  }, [handleNext, handlePrevious]);
 
   const handleAddToPlaylist = useCallback((track: Track) => {
     if (isInPlaylist(track.id)) { toast.info('Track already in playlist'); return; }
