@@ -1481,7 +1481,9 @@ export function MusicPlayerProvider({ children }: { children: React.ReactNode })
       (ms) => {
         if (audioRef.current) audioRef.current.currentTime = ms / 1000;
         ytPlayerRef.current?.seekTo?.(ms / 1000, true);
-      }
+      },
+      () => handleNextRef.current?.(),
+      () => handlePreviousRef.current?.()
     );
     return unsub;
   }, []);
