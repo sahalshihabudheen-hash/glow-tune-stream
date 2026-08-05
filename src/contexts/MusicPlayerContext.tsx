@@ -1029,6 +1029,17 @@ export function MusicPlayerProvider({ children }: { children: React.ReactNode })
       }
       const resolved = await tryRobustResolution();
       if (!resolved) {
+        // Never leave the user staring at a dead pause button: if no direct
+        // audio stream could be resolved, fall back to the YouTube player.
+        if (!isDownloaded && navigator.onLine) {
+          console.warn('Direct audio failed, falling back to YouTube player.');
+          setPlaybackSource('youtube');
+          const yt = (window as any).YT;
+          if (ytApiReady && yt?.Player) {
+            createPlayer(videoId);
+            return;
+          }
+        }
         toast.error('Local audio failed to load. Tap play to retry.');
       }
       return;
