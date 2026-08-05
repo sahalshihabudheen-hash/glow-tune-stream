@@ -77,7 +77,15 @@ public class NyraVirtualPlayer extends SimpleBasePlayer {
 
     @Override
     protected ListenableFuture<?> handleSeek(int mediaItemIndex, long positionMs, int seekCommand) {
-        NyraMediaBridge.getInstance().commandWebPlayerSeek(positionMs);
+        if (seekCommand == Player.COMMAND_SEEK_TO_NEXT
+                || seekCommand == Player.COMMAND_SEEK_TO_NEXT_MEDIA_ITEM) {
+            NyraMediaBridge.getInstance().commandWebPlayer("next");
+        } else if (seekCommand == Player.COMMAND_SEEK_TO_PREVIOUS
+                || seekCommand == Player.COMMAND_SEEK_TO_PREVIOUS_MEDIA_ITEM) {
+            NyraMediaBridge.getInstance().commandWebPlayer("previous");
+        } else {
+            NyraMediaBridge.getInstance().commandWebPlayerSeek(positionMs);
+        }
         return Futures.immediateVoidFuture();
     }
 

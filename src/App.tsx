@@ -7,7 +7,7 @@ import { ThemeProvider } from "@/contexts/ThemeContext";
 import { MusicPlayerProvider } from "@/contexts/MusicPlayerContext";
 import { DownloadManagerProvider } from "@/contexts/DownloadManagerContext";
 import FloatingMiniPlayer from "@/components/FloatingMiniPlayer";
-import MobileNowPlayingNotch from "@/components/MobileNowPlayingNotch";
+
 import DownloadQueue from "@/components/DownloadQueue";
 import MaintenanceGuard from "@/components/MaintenanceGuard";
 import TutorialWrapper from "@/components/TutorialWrapper";
@@ -81,7 +81,6 @@ const App = () => (
                 <Route path="*" element={<NotFound />} />
               </Routes>
               <FloatingMiniPlayer />
-              <MobileNowPlayingNotch />
               <DownloadQueue />
               <TutorialWrapper />
             </MaintenanceGuard>
