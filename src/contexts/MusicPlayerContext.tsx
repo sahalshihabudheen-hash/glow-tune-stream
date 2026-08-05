@@ -695,6 +695,25 @@ export function MusicPlayerProvider({ children }: { children: React.ReactNode })
     return () => clearInterval(syncInterval);
   }, [isPlaying]);
 
+  // Background auto-advance watchdog: if the tab/app is hidden and the current
+  // audio element has finished (or stalled at the very end) without the "ended"
+  // event landing, force the next track so playlists keep rolling.
+  useEffect(() => {
+    if (!settings.autoPlayNext) return;
+    const id = setInterval(() => {
+      if (document.visibilityState !== 'hidden') return;
+      if (activeSourceRef.current !== 'background') return;
+      const audio = audioRef.current;
+      if (!audio || !audio.src) return;
+      const dur = audio.duration;
+      const atEnd = audio.ended || (!!dur && dur > 0 && dur - audio.currentTime < 0.4);
+      if (atEnd && audio.paused && loopOneCountRef.current === 0) {
+        handleNextRef.current?.();
+      }
+    }, 2000);
+    return () => clearInterval(id);
+  }, [settings.autoPlayNext]);
+
   // Native builds and mobile browsers both suspend the YouTube iframe once the
   // app/tab is backgrounded. Hand playback over to the HTMLAudioElement so music
   // keeps running with lock-screen controls (no "desktop mode" workaround needed).
