@@ -701,8 +701,9 @@ export function MusicPlayerProvider({ children }: { children: React.ReactNode })
     if (!isNative() && !isMobileLikeDevice()) return;
 
     const keepAudioAlive = () => {
+      // Session-only switch: never persisted for browsers, otherwise the app
+      // gets stuck on the audio-only path forever and nothing plays again.
       useBackgroundAudioOnlyRef.current = true;
-      localStorage.setItem('nyra-background-audio-only', 'true');
 
       if (!currentTrack || !isPlaying) return;
 
@@ -720,7 +721,16 @@ export function MusicPlayerProvider({ children }: { children: React.ReactNode })
     };
 
     const handleVisibility = () => {
-      if (document.visibilityState === 'hidden') keepAudioAlive();
+      if (document.visibilityState === 'hidden') {
+        keepAudioAlive();
+        return;
+      }
+      // Back in the foreground: mobile browsers can use the fast iframe path
+      // again, so release the audio-only lock (native shells keep it on).
+      if (!isNative()) {
+        useBackgroundAudioOnlyRef.current = false;
+        localStorage.removeItem('nyra-background-audio-only');
+      }
     };
 
     window.addEventListener('pagehide', keepAudioAlive);
