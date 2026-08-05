@@ -1001,7 +1001,7 @@ export function MusicPlayerProvider({ children }: { children: React.ReactNode })
               return true;
             }
 
-            if (!useBackgroundAudioOnlyRef.current) {
+            if (!useBackgroundAudioOnlyRef.current || isNative()) {
               success = await playAudioUrl(clientUrl, null);
               if (success) {
                 toast.warning('Audio filters disabled for this track (CORS cloud fallback).');
