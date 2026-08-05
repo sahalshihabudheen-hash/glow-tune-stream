@@ -1335,11 +1335,9 @@ export function MusicPlayerProvider({ children }: { children: React.ReactNode })
       } else {
         safePlay(audioRef.current).then(success => {
           if (!success) {
+            // Re-resolve the stream instead of leaving playback stuck on pause.
             toast.error("Playback failed. Reconnecting...");
-            // Switch to YouTube as last resort if we are online and not forcing background
-            if (!forceBackground) {
-              setPlaybackSource('youtube');
-            }
+            if (currentTrack) playWithBackgroundAudio(currentTrack.id);
           }
         });
       }
