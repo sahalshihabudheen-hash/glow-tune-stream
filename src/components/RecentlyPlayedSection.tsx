@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Clock, Play, Pause, ListPlus, Heart, Download } from 'lucide-react';
-
+import { useNavigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { ScrollArea, ScrollBar } from '@/components/ui/scroll-area';
@@ -35,6 +35,7 @@ const RecentlyPlayedSection = ({
 }: RecentlyPlayedSectionProps) => {
   const { user } = useAuth();
   const { startDownload } = useDownloadManager();
+  const navigate = useNavigate();
 
   const [recentTracks, setRecentTracks] = useState<Track[]>([]);
   const [loading, setLoading] = useState(true);
@@ -100,7 +101,7 @@ const RecentlyPlayedSection = ({
               <div
                 key={track.id}
                 className="group flex-shrink-0 w-36 md:w-44 text-left focus:outline-none cursor-pointer"
-                onClick={() => onPlayTrack(track)}
+                onClick={() => navigate(`/song/${track.id}`, { state: { track } })}
               >
                 <div className={cn(
                   "relative rounded-xl overflow-hidden mb-2 aspect-square bg-secondary transition-all duration-300",
@@ -113,12 +114,12 @@ const RecentlyPlayedSection = ({
                     loading="lazy"
                   />
                   
-                  {/* Action Overlay - Always visible */}
+                  {/* Action Overlay - pointer-events-none so card clicks pass through */}
                   <div className={cn(
-                    "absolute inset-0 bg-gradient-to-t from-black/90 via-black/20 to-transparent transition-opacity duration-300 flex flex-col justify-end p-3",
+                    "absolute inset-0 bg-gradient-to-t from-black/90 via-black/20 to-transparent transition-opacity duration-300 flex flex-col justify-end p-3 pointer-events-none",
                     "opacity-100"
                   )}>
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2 pointer-events-auto">
                       <button
                         onClick={(e) => {
                           e.stopPropagation();

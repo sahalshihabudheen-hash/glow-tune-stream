@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { Play, Pause, Heart, ListPlus, ChevronLeft, ChevronRight, MapPin, Music2, Download } from 'lucide-react';
-
+import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { useTheme } from '@/contexts/ThemeContext';
@@ -36,6 +36,7 @@ const PersonalizedSection = ({
 }: PersonalizedSectionProps) => {
   const { gradient } = useTheme();
   const { startDownload } = useDownloadManager();
+  const navigate = useNavigate();
 
   const [tracks, setTracks] = useState<Track[]>([]);
   const [loading, setLoading] = useState(true);
@@ -158,18 +159,18 @@ const PersonalizedSection = ({
             const isTrackPlaying = isCurrentTrack && isPlaying;
 
             return (
-              <div key={track.id} className="flex-shrink-0 w-40 md:w-48 group cursor-pointer">
+              <div key={track.id} className="flex-shrink-0 w-40 md:w-48 group cursor-pointer" onClick={() => navigate(`/song/${track.id}`, { state: { track } })}>
                 <div className={cn(
                   "relative w-full aspect-square rounded-2xl overflow-hidden bg-secondary transition-all duration-300",
                   isCurrentTrack ? "ring-2 ring-primary neon-glow scale-105" : "card-glow"
                 )}>
                   <img src={track.thumbnail} alt={track.title} className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110" />
                   <div className={cn(
-                    "absolute inset-0 bg-gradient-to-t from-black/90 via-black/20 to-transparent transition-opacity duration-300",
+                    "absolute inset-0 bg-gradient-to-t from-black/90 via-black/20 to-transparent transition-opacity duration-300 pointer-events-none",
                     "opacity-100"
                   )}>
-                    <div className="absolute bottom-3 left-3 right-3 flex items-center gap-2">
-                      <button onClick={() => onPlayTrack(track)}
+                    <div className="absolute bottom-3 left-3 right-3 flex items-center gap-2 pointer-events-auto">
+                      <button onClick={(e) => { e.stopPropagation(); onPlayTrack(track); }}
                         className={cn("w-11 h-11 rounded-full flex items-center justify-center transition-all shadow-lg",
                           isTrackPlaying ? "bg-primary text-primary-foreground neon-glow animate-pulse" : "bg-primary text-primary-foreground hover:neon-glow active:scale-95"
                         )}>
