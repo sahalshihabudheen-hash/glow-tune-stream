@@ -555,3 +555,15 @@ input[type="range"]::-moz-range-thumb:active {
   transition: all 0.3s ease;
   letter-spacing: 0.03em;
 }
+
+/* ===== Safe-area (notch / camera cutout / gesture bar) support ===== */
+@layer utilities {
+  .pt-safe { padding-top: env(safe-area-inset-top, 0px); }
+  .pb-safe { padding-bottom: env(safe-area-inset-bottom, 0px); }
+  .px-safe {
+    padding-left: max(env(safe-area-inset-left, 0px), 0px);
+    padding-right: max(env(safe-area-inset-right, 0px), 0px);
+  }
+  .mb-safe { margin-bottom: env(safe-area-inset-bottom, 0px); }
+  .h-safe-screen { height: 100dvh; }
+}
