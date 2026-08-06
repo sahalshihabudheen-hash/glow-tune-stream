@@ -64,6 +64,7 @@ const SongDetails = () => {
   const [track, setTrack] = useState<Track | null>(
     stateTrack?.id === id ? stateTrack : null
   );
+
   const [loadingTrack, setLoadingTrack] = useState(!track);
 
   const [related, setRelated] = useState<Track[]>([]);
