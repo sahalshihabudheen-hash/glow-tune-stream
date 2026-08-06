@@ -104,19 +104,18 @@ const SongDetails = () => {
     (async () => {
       try {
         const res = await fetch(
-          `https://noembed.com/embed?url=${encodeURIComponent(
-            `https://www.youtube.com/watch?v=${id}`
-          )}`
+          `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/youtube-search?q=${encodeURIComponent(id)}`,
+          { headers: await getFunctionAuthHeaders() }
         );
         if (!res.ok) throw new Error('not found');
-        const data = await res.json();
+        const results = await res.json();
         if (cancelled) return;
-        setTrack({
-          id,
-          title: data.title || 'Unknown track',
-          channel: data.author_name || 'Unknown artist',
-          thumbnail: `https://i.ytimg.com/vi/${id}/hqdefault.jpg`,
-        });
+        
+        if (results && results.length > 0) {
+          setTrack(results[0]);
+        } else {
+          throw new Error('not found');
+        }
       } catch {
         if (!cancelled) setTrack(null);
       } finally {
