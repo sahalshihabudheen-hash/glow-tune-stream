@@ -1502,7 +1502,22 @@ export function MusicPlayerProvider({ children }: { children: React.ReactNode })
 
   useEffect(() => {
     notifyNativePlayback(isPlaying, (audioRef.current?.currentTime || 0) * 1000);
-  }, [isPlaying]);
+    if (!isNative() || !isPlaying) return;
+    // Keep the Android notification / lock-screen progress + duration in sync
+    const id = setInterval(() => {
+      const el = audioRef.current;
+      const posMs = (el?.currentTime ?? ytPlayerRef.current?.getCurrentTime?.() ?? 0) * 1000;
+      const durMs = (el?.duration && isFinite(el.duration)
+        ? el.duration
+        : ytPlayerRef.current?.getDuration?.() ?? 0) * 1000;
+      if (currentTrack && durMs > 0) {
+        notifyNativeTrack(currentTrack.title, currentTrack.channel, currentTrack.thumbnail, durMs);
+      }
+      notifyNativePlayback(true, posMs);
+    }, 1000);
+    return () => clearInterval(id);
+  }, [isPlaying, currentTrack]);
+
 
   useEffect(() => {
     const unsub = listenCarCommands(
