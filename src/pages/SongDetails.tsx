@@ -104,9 +104,9 @@ const SongDetails = () => {
     (async () => {
       try {
         const res = await fetch(
-          `https://www.youtube.com/oembed?url=${encodeURIComponent(
+          `https://noembed.com/embed?url=${encodeURIComponent(
             `https://www.youtube.com/watch?v=${id}`
-          )}&format=json`
+          )}`
         );
         if (!res.ok) throw new Error('not found');
         const data = await res.json();
