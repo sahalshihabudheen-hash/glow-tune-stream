@@ -79,12 +79,12 @@ const TrackCard = ({ track, isCurrent, isPlaying, onPlay, onAddToQueue, isFavori
           className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110"
         />
         
-        {/* Action Overlay (Bottom) - Always visible for better discoverability */}
+        {/* Action Overlay (Bottom) - pointer-events-none so card body clicks pass through */}
         <div className={cn(
-          "absolute inset-0 bg-gradient-to-t from-black/90 via-black/20 to-transparent transition-opacity duration-500 flex flex-col justify-end p-4",
+          "absolute inset-0 bg-gradient-to-t from-black/90 via-black/20 to-transparent transition-opacity duration-500 flex flex-col justify-end p-4 pointer-events-none",
           "opacity-100"
         )}>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 pointer-events-auto">
             <button
               onClick={handlePlayNow}
               className={cn(
