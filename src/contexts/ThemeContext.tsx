@@ -75,6 +75,7 @@ interface AppSettings {
   mobileNavItems?: string[];
   downloadPreference?: 'ask' | 'device' | 'app';
   backgroundVideoBrightness: number;
+  lightMode: boolean;
 }
 
 interface ThemeContextType {
@@ -168,6 +169,7 @@ export const ThemeProvider = ({ children }: { children: ReactNode }) => {
       },
       downloadPreference: 'ask' as 'ask' | 'device' | 'app',
       backgroundVideoBrightness: 30,
+      lightMode: false,
     };
     const saved = localStorage.getItem('nyra-settings');
     if (!saved) return defaults;
@@ -182,6 +184,15 @@ export const ThemeProvider = ({ children }: { children: ReactNode }) => {
       return defaults;
     }
   });
+
+  // Apply / remove .light class on <html> whenever lightMode changes
+  useEffect(() => {
+    if (settings.lightMode) {
+      document.documentElement.classList.add('light');
+    } else {
+      document.documentElement.classList.remove('light');
+    }
+  }, [settings.lightMode]);
 
   // Use refs for RGB values to avoid re-rendering the whole app 60 times a second
   // since these only update CSS variables directly

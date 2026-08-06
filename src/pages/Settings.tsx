@@ -1,5 +1,5 @@
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, ArrowRight, Palette, Volume2, ListMusic, Trash2, Waves, Blend, User, Camera, KeyRound, Loader2, RotateCcw, Sliders, Shield, Sparkles, Smartphone, Home, Search, Users, Heart, Gamepad2, Settings as SettingsIcon, Menu, Download, Minus, Plus } from 'lucide-react';
+import { ArrowLeft, ArrowRight, Palette, Volume2, ListMusic, Trash2, Waves, Blend, User, Camera, KeyRound, Loader2, RotateCcw, Sliders, Shield, Sparkles, Smartphone, Home, Search, Users, Heart, Gamepad2, Settings as SettingsIcon, Menu, Download, Minus, Plus, Sun } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import { useTheme, themes, ThemeName, ProgressBarStyle } from '@/contexts/ThemeContext';
 import { Switch } from '@/components/ui/switch';
@@ -589,6 +589,27 @@ const Settings = () => {
                   </div>
                 </button>
               ))}
+            </div>
+          </section>
+
+          {/* Light Mode Toggle */}
+          <section className="mb-10">
+            <div className="flex items-center gap-3 mb-6">
+              <Sun className="w-6 h-6 text-primary" />
+              <h2 className="text-xl md:text-2xl font-semibold text-foreground">Light Mode</h2>
+            </div>
+            <div className="bg-card rounded-xl p-4 md:p-6 border border-border">
+              <div className="flex items-center justify-between gap-4">
+                <div className="flex-1">
+                  <p className="font-medium text-foreground text-sm md:text-base">Light Theme</p>
+                  <p className="text-xs md:text-sm text-muted-foreground">Switch to light background — better for bright environments &amp; saves battery on OLED displays. Also improves performance on low-end devices.</p>
+                </div>
+                <Switch
+                  checked={settings.lightMode}
+                  onCheckedChange={(checked) => updateSettings({ lightMode: checked })}
+                  className="data-[state=checked]:bg-primary"
+                />
+              </div>
             </div>
           </section>
 
