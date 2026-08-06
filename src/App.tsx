@@ -12,6 +12,7 @@ import DownloadQueue from "@/components/DownloadQueue";
 import MaintenanceGuard from "@/components/MaintenanceGuard";
 import TutorialWrapper from "@/components/TutorialWrapper";
 import Index from "./pages/Index";
+import SongDetails from "./pages/SongDetails";
 import PlaylistView from "./pages/PlaylistView";
 import PlaylistsManager from "./pages/PlaylistsManager";
 import Auth from "./pages/Auth";
@@ -49,6 +50,7 @@ const App = () => (
             <MaintenanceGuard>
               <Routes>
                 <Route path="/" element={<Index />} />
+                <Route path="/song/:id" element={<SongDetails />} />
                 <Route path="/playlists" element={<PlaylistsManager />} />
                 <Route path="/playlist/:id" element={<PlaylistView />} />
                 <Route path="/auth" element={<Auth />} />

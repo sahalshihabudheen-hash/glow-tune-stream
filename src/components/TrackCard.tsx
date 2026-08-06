@@ -3,6 +3,7 @@ import { cn } from '@/lib/utils';
 import AddToPlaylistDialog from './AddToPlaylistDialog';
 import { toast } from 'sonner';
 import { useDownloadManager } from '@/contexts/DownloadManagerContext';
+import { useNavigate } from 'react-router-dom';
 
 interface Track {
   id: string;
@@ -23,6 +24,7 @@ interface TrackCardProps {
 
 const TrackCard = ({ track, isCurrent, isPlaying, onPlay, onAddToQueue, isFavorite = false, onToggleFavorite }: TrackCardProps) => {
 
+  const navigate = useNavigate();
   const { startDownload, isDownloading } = useDownloadManager();
   const downloading = isDownloading(track.id);
 
@@ -43,7 +45,7 @@ const TrackCard = ({ track, isCurrent, isPlaying, onPlay, onAddToQueue, isFavori
   };
 
   const handleCardClick = () => {
-    onPlay(track);
+    navigate(`/song/${track.id}`, { state: { track } });
   };
 
   const handleToggleFavorite = async (e: React.MouseEvent) => {
