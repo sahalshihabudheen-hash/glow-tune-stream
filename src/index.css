@@ -730,3 +730,14 @@ input[type="range"]::-moz-range-thumb:active {
 :root.light .swipe-hint::after {
   background: linear-gradient(to left, hsl(0 0% 97%), transparent);
 }
+
+/* Now Playing side panel: shift layout instead of overlapping content (desktop only) */
+@media (min-width: 768px) {
+  html.np-open .md\:ml-64 {
+    margin-right: 350px;
+    transition: margin-right 0.5s ease-in-out;
+  }
+  html.np-open .app-navbar {
+    right: 350px;
+  }
+}
