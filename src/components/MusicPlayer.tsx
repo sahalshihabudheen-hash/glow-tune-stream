@@ -245,6 +245,12 @@ const MusicPlayer = ({
     }
   }, [isPlaying, currentTrack?.id, settings.autoMiniPlayer, isMiniMode, updateSettings, hasAutoOpened, nowPlayingOpen, setNowPlayingOpen]);
 
+  // Shift the whole app layout when the Now Playing side panel is open (desktop only)
+  useEffect(() => {
+    document.documentElement.classList.toggle('np-open', nowPlayingOpen);
+    return () => document.documentElement.classList.remove('np-open');
+  }, [nowPlayingOpen]);
+
   return (
     <>
     <footer className={cn(
