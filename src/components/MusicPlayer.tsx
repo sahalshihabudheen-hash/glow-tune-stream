@@ -304,44 +304,37 @@ const MusicPlayer = ({
             </div>
 
             {/* Bottom row: seek progress bar */}
-            <div className="flex items-center gap-1.5 mt-1.5 px-0.5 w-full">
-              <span className="text-[7px] font-bold text-muted-foreground tabular-nums w-6 text-right">{formatTime(progress)}</span>
+            <div className="flex items-center gap-1 mt-1.5 px-0.5 w-full">
+              <span className="text-[7px] font-bold text-muted-foreground tabular-nums w-5 text-right shrink-0">{formatTime(progress)}</span>
               <StyledProgressBar
                 progress={progress}
                 duration={duration}
                 onSeek={handleSeek}
-                className="flex-1 min-w-[120px]"
+                className="flex-1 min-w-[60px]"
               />
-              <span className="text-[7px] font-bold text-muted-foreground tabular-nums w-6">{formatTime(duration)}</span>
+              <span className="text-[7px] font-bold text-muted-foreground tabular-nums w-5 shrink-0">{formatTime(duration)}</span>
             </div>
           </div>
 
           {/* Center Play/Pause Pill */}
-          <div className="shrink-0 flex items-center justify-center px-1">
+          <div className="shrink-0 flex items-center justify-center">
             <button
               onClick={onPlayPause}
-              className="w-11 h-11 rounded-[1.25rem] bg-primary text-primary-foreground flex items-center justify-center shadow-[0_4px_15px_rgba(var(--primary),0.35)] hover:scale-105 active:scale-95 transition-all neon-glow"
+              className="w-10 h-10 rounded-[1.1rem] bg-primary text-primary-foreground flex items-center justify-center shadow-[0_4px_15px_rgba(var(--primary),0.35)] hover:scale-105 active:scale-95 transition-all neon-glow"
             >
               {isPlaying ? <Pause className="w-4 h-4 fill-current" /> : <Play className="w-4 h-4 fill-current ml-0.5" />}
             </button>
           </div>
 
-          {/* Right actions pill/capsule */}
+          {/* Right actions pill/capsule — kept minimal on small phones; full set in fullscreen player */}
           <div className="shrink-0 flex items-center justify-end">
-            <div className="flex items-center gap-1 px-2 py-1.5 rounded-full bg-white/5 border border-white/5">
+            <div className="flex items-center gap-0.5 px-1.5 py-1.5 rounded-full bg-white/5 border border-white/5">
               <button 
                 onClick={() => setLyricsOpen(!lyricsOpen)} 
-                className={cn("p-1.5 rounded-full transition-all", lyricsOpen ? "text-primary" : "text-muted-foreground hover:text-foreground")}
+                className={cn("hidden min-[420px]:flex p-1.5 rounded-full transition-all", lyricsOpen ? "text-primary" : "text-muted-foreground hover:text-foreground")}
                 title="Lyrics"
               >
                 <Music2 className="w-3.5 h-3.5" />
-              </button>
-              <button 
-                onClick={() => currentTrack && setIsFullscreen(true)} 
-                className="p-1.5 rounded-full text-muted-foreground hover:text-foreground transition-all"
-                title="Fullscreen"
-              >
-                <MonitorPlay className="w-3.5 h-3.5" />
               </button>
               <button 
                 onClick={toggleLoopOne} 
@@ -357,7 +350,7 @@ const MusicPlayer = ({
               </button>
               <button 
                 onClick={handleShare} 
-                className="p-1.5 rounded-full text-muted-foreground hover:text-foreground transition-all"
+                className="hidden min-[420px]:flex p-1.5 rounded-full text-muted-foreground hover:text-foreground transition-all"
                 title="Share"
               >
                 <Share2 className="w-3.5 h-3.5" />
@@ -374,6 +367,13 @@ const MusicPlayer = ({
                   {isDownloading(currentTrack.id) ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />}
                 </button>
               )}
+              <button 
+                onClick={() => currentTrack && setIsFullscreen(true)} 
+                className="p-1.5 rounded-full text-muted-foreground hover:text-foreground transition-all"
+                title="Fullscreen"
+              >
+                <MonitorPlay className="w-3.5 h-3.5" />
+              </button>
             </div>
           </div>
         </div>
