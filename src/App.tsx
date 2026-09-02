@@ -28,6 +28,7 @@ import YouTubeArtistPage from "./pages/YouTubeArtistPage";
 import OfflineDownloads from "./pages/OfflineDownloads";
 import GetApp from "./pages/GetApp";
 import Debug from "./pages/Debug";
+import Stats from "./pages/Stats";
 import DiscordPresence from "./hooks/useDiscordPresence";
 
 import NotFound from "./pages/NotFound";
@@ -66,6 +67,8 @@ const App = () => (
                 <Route path="/offline" element={<OfflineDownloads />} />
                 <Route path="/get-app" element={<GetApp />} />
                 <Route path="/debug" element={<Debug />} />
+                <Route path="/stats" element={<Stats />} />
+                <Route path="/statistics" element={<Stats />} />
                 {/* Aliases so common/legacy links never hit the 404 page */}
                 <Route path="/home" element={<Index />} />
                 <Route path="/index" element={<Index />} />
