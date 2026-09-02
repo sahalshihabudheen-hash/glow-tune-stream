@@ -12,6 +12,7 @@ import NowPlayingPanel from './NowPlayingPanel';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useDownloadManager } from '@/contexts/DownloadManagerContext';
 import { useMusicPlayer } from '@/contexts/MusicPlayerContext';
+import { shareTrack } from '@/utils/shareUtils';
 
 const DownloadButton = ({ track, compact }: { track: { id: string; title: string; thumbnail: string }; compact?: boolean }) => {
   const { startDownload, isDownloading } = useDownloadManager();
@@ -212,11 +213,7 @@ const MusicPlayer = ({
 
   const handleShare = () => {
     if (currentTrack) {
-      const shareUrl = `${window.location.origin}/api/og?id=${currentTrack.id}&title=${encodeURIComponent(currentTrack.title)}`;
-      navigator.clipboard.writeText(shareUrl);
-      toast.success('Share link copied!', {
-        icon: <Share2 className="w-4 h-4 text-primary" />,
-      });
+      shareTrack(currentTrack);
     }
   };
 

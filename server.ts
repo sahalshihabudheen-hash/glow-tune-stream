@@ -6,6 +6,7 @@ import fs from 'fs';
 import AdmZip from 'adm-zip';
 import { exec, spawn } from 'child_process';
 import { promisify } from 'util';
+import { generateDiscordOgHtml, generateOgImageSvg, OgContentData } from './src/utils/ogGenerator';
 
 const execAsync = promisify(exec);
 
@@ -685,65 +686,73 @@ async function startServer() {
     }
   });
 
-  // API Route: Social Embed OG metadata redirects
-  app.get('/api/og', (req, res) => {
+  // Helper to extract Open Graph content data from request
+  function parseOgRequest(req: express.Request): OgContentData {
+    const forwardedProto = (req.headers['x-forwarded-proto'] as string) || (req.secure ? 'https' : 'http');
     const host = req.get('host') || 'localhost:3000';
-    const protocol = req.secure ? 'https' : 'http';
-    const baseUrl = `${protocol}://${host}`;
-    const trackId = req.query.id as string;
-    const trackTitle = (req.query.title || 'Great Music') as string;
-    const trackChannel = (req.query.channel || 'NYRA') as string;
-    const trackThumbnail = (req.query.thumbnail || (trackId ? `https://i.ytimg.com/vi/${trackId}/hqdefault.jpg` : `${baseUrl}/headphones.png`)) as string;
-    
-    const appName = "NYRA";
-    
-    const html = `<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <title>🎧 ${trackTitle}</title>
-  
-  <!-- Primary Meta Tags -->
-  <meta name="title" content="💖 ${trackTitle}">
-  <meta name="description" content="✨ ${trackChannel} · NYRA PREMIUM • FEEL THE PULSE">
+    const baseUrl = `${forwardedProto}://${host}`;
 
-  <meta property="og:type" content="video.other">
-  <meta property="og:site_name" content="NYRA • FEEL THE PULSE">
-  <meta property="og:title" content="🎧 ${trackTitle}">
-  <meta property="og:description" content="✨ ${trackChannel} • Click the link for full Soundwaves!">
-  <meta property="og:image" content="${trackThumbnail}">
-  <meta property="og:image:width" content="1200">
-  <meta property="og:image:height" content="630">
-  <meta property="og:image:type" content="image/jpeg">
-  <meta name="twitter:image" content="${trackThumbnail}">
+    const rawType = (req.query.type as string || '').toLowerCase();
+    const type: 'song' | 'playlist' | 'artist' | 'album' = 
+      rawType === 'playlist' ? 'playlist' :
+      rawType === 'artist' ? 'artist' :
+      rawType === 'album' ? 'album' : 'song';
 
-  <!-- YouTube Fakeout to force Play Button -->
-  <meta property="og:video" content="https://www.youtube.com/embed/${trackId}">
-  <meta property="og:video:secure_url" content="https://www.youtube.com/embed/${trackId}">
-  <meta property="og:video:type" content="text/html">
-  <meta property="og:video:width" content="1280">
-  <meta property="og:video:height" content="720">
+    const id = (req.query.id || req.query.videoId || '') as string;
+    const title = (req.query.title || 'Great Music') as string;
+    const artist = (req.query.artist || req.query.channel || 'NYRA') as string;
+    const thumbnail = (req.query.thumbnail || req.query.artwork || req.query.image || (id && type === 'song' ? `https://i.ytimg.com/vi/${id}/hqdefault.jpg` : '')) as string;
+    const trackCount = req.query.tracks ? parseInt(req.query.tracks as string, 10) : undefined;
+    const creator = (req.query.creator || '') as string;
+    const colorHint = (req.query.color || '') as string;
 
-  <meta name="twitter:card" content="player">
-  <meta name="twitter:player" content="https://www.youtube.com/embed/${trackId}">
-  <meta name="twitter:player:width" content="1280">
-  <meta name="twitter:player:height" content="720">
+    return {
+      type,
+      id,
+      title,
+      artist,
+      thumbnail,
+      trackCount,
+      creator,
+      colorHint,
+      baseUrl,
+    };
+  }
 
-  <meta name="theme-color" content="#ffd300">
-  
-  <meta http-equiv="refresh" content="0;url=${baseUrl}/?play=${trackId}&title=${encodeURIComponent(trackTitle)}&channel=${encodeURIComponent(trackChannel)}&thumbnail=${encodeURIComponent(trackThumbnail)}">
-</head>
-<body>
-  <div style="background: #0b0b0b; color: white; height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center; font-family: sans-serif;">
-    <img src="${trackThumbnail}" style="width: 200px; height: 200px; border-radius: 12px; margin-bottom: 20px; box-shadow: 0 20px 50px rgba(0,0,0,0.5);">
-    <h1 style="margin: 0; font-size: 24px;">${trackTitle}</h1>
-    <p style="color: #888; margin-top: 8px;">Opening in ${appName}...</p>
-  </div>
-</body>
-</html>`;
+  // API Route: Premium Discord Open Graph HTML metadata endpoint
+  app.get('/api/og', (req, res) => {
+    try {
+      const data = parseOgRequest(req);
+      const html = generateDiscordOgHtml(data);
+      res.setHeader('Content-Type', 'text/html; charset=UTF-8');
+      res.setHeader('Cache-Control', 'public, max-age=3600, s-maxage=86400');
+      res.send(html);
+    } catch (err: any) {
+      console.error('[Express OG] Error generating Open Graph preview:', err);
+      // Safe fallback - never break the music page
+      res.redirect(302, '/');
+    }
+  });
 
-    res.setHeader('Content-Type', 'text/html; charset=UTF-8');
-    res.send(html);
+  // API Route: Dynamic 1200x630 Discord Open Graph Vector Image (SVG)
+  app.get(['/api/og-image', '/api/og/image', '/api/og-image.svg'], (req, res) => {
+    try {
+      const data = parseOgRequest(req);
+      const svg = generateOgImageSvg(data);
+      res.setHeader('Content-Type', 'image/svg+xml; charset=utf-8');
+      res.setHeader('Cache-Control', 'public, max-age=86400, s-maxage=604800');
+      res.send(svg);
+    } catch (err: any) {
+      console.error('[Express OG Image] Error generating SVG preview:', err);
+      const fallbackSvg = generateOgImageSvg({
+        type: 'song',
+        title: 'NYRA Music',
+        artist: 'FEEL THE PULSE',
+        baseUrl: 'http://localhost:3000',
+      });
+      res.setHeader('Content-Type', 'image/svg+xml; charset=utf-8');
+      res.send(fallbackSvg);
+    }
   });
 
   // API Route: Dynamic Workspace zip package download
@@ -809,6 +818,36 @@ async function startServer() {
       res.setHeader('Content-Type', 'application/json');
       res.status(502).json({ error: err?.message || 'Audio request failed' });
     }
+  });
+
+  // Crawler Bot Interceptor for Discord & Social Previews on direct routes
+  app.use((req, res, next) => {
+    const userAgent = req.headers['user-agent'] || '';
+    const isBot = /(Discordbot|Twitterbot|facebookexternalhit|Slackbot|TelegramBot|WhatsApp)/i.test(userAgent);
+    if (isBot && !req.path.startsWith('/api') && !req.path.includes('.')) {
+      try {
+        const data = parseOgRequest(req);
+        // Auto-detect route patterns if not explicit in query
+        if (req.path.startsWith('/playlist/')) {
+          data.type = 'playlist';
+          data.id = req.path.split('/')[2];
+          if (data.title === 'Great Music') data.title = 'NYRA Playlist';
+        } else if (req.path.startsWith('/artist/') || req.path.startsWith('/yt-artist/')) {
+          data.type = 'artist';
+          data.id = req.path.split('/')[2];
+          if (data.title === 'Great Music') data.title = 'NYRA Artist';
+        } else if (req.path.startsWith('/song/')) {
+          data.type = 'song';
+          data.id = req.path.split('/')[2];
+        }
+        const html = generateDiscordOgHtml(data);
+        res.setHeader('Content-Type', 'text/html; charset=UTF-8');
+        return res.send(html);
+      } catch {
+        // Fall through to standard routing
+      }
+    }
+    next();
   });
 
   // Setup dev / production static asset routing

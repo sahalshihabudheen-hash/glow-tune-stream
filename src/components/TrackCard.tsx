@@ -4,6 +4,7 @@ import AddToPlaylistDialog from './AddToPlaylistDialog';
 import { toast } from 'sonner';
 import { useDownloadManager } from '@/contexts/DownloadManagerContext';
 import { useNavigate } from 'react-router-dom';
+import { shareTrack } from '@/utils/shareUtils';
 
 interface Track {
   id: string;
@@ -57,9 +58,7 @@ const TrackCard = ({ track, isCurrent, isPlaying, onPlay, onAddToQueue, isFavori
 
   const handleShare = (e: React.MouseEvent) => {
     e.stopPropagation();
-    const shareUrl = `${window.location.origin}/api/og?id=${track.id}&title=${encodeURIComponent(track.title)}`;
-    navigator.clipboard.writeText(shareUrl);
-    toast.success('Link copied!');
+    shareTrack(track);
   };
 
   return (

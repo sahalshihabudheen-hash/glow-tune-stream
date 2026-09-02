@@ -11,6 +11,7 @@ import { toast } from 'sonner';
 import { useDownloadManager } from '@/contexts/DownloadManagerContext';
 import { useMusicPlayer } from '@/contexts/MusicPlayerContext';
 import { isTrackDownloadedOffline } from '@/lib/offlineStore';
+import { shareTrack } from '@/utils/shareUtils';
 
 interface Track {
   id: string;
@@ -301,9 +302,7 @@ const FullscreenPlayer = ({
 
   const handleShare = () => {
     if (currentTrack) {
-      const shareUrl = `${window.location.origin}/api/og?id=${currentTrack.id}&title=${encodeURIComponent(currentTrack.title)}`;
-      navigator.clipboard.writeText(shareUrl);
-      toast.success('Share link copied!');
+      shareTrack(currentTrack);
     }
   };
 

@@ -1,68 +1,64 @@
+import { generateDiscordOgHtml, generateOgImageSvg, OgContentData } from '../src/utils/ogGenerator';
+
 export const config = {
   runtime: 'edge',
 };
 
 export default async function handler(req: Request) {
-  const url = new URL(req.url);
-  const baseUrl = url.origin;
-  const trackId = url.searchParams.get('id');
-  const trackTitle = url.searchParams.get('title') || 'Great Music';
-  const trackChannel = url.searchParams.get('channel') || 'NYRA';
-  const trackThumbnail = url.searchParams.get('thumbnail') || (trackId ? `https://i.ytimg.com/vi/${trackId}/hqdefault.jpg` : `${baseUrl}/headphones.png`);
-  
-  const appName = "NYRA";
-  const embedUrl = `${baseUrl}/embed-player?id=${trackId}&title=${encodeURIComponent(trackTitle)}&channel=${encodeURIComponent(trackChannel)}&thumbnail=${encodeURIComponent(trackThumbnail)}`;
-  
-  const html = `<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <title>🎧 ${trackTitle}</title>
-  
-  <!-- Primary Meta Tags -->
-  <meta name="title" content="💖 ${trackTitle}">
-  <meta name="description" content="✨ ${trackChannel} · NYRA PREMIUM • FEEL THE PULSE">
+  try {
+    const url = new URL(req.url);
+    const baseUrl = url.origin;
 
-  <meta property="og:type" content="video.other">
-  <meta property="og:site_name" content="NYRA • FEEL THE PULSE">
-  <meta property="og:title" content="🎧 ${trackTitle}">
-  <meta property="og:description" content="✨ ${trackChannel} • Click the link for full Soundwaves!">
-  <meta property="og:image" content="${trackThumbnail}">
-  <meta property="og:image:width" content="1200">
-  <meta property="og:image:height" content="630">
-  <meta property="og:image:type" content="image/jpeg">
-  <meta name="twitter:image" content="${trackThumbnail}">
+    const rawType = (url.searchParams.get('type') || '').toLowerCase();
+    const type: 'song' | 'playlist' | 'artist' | 'album' = 
+      rawType === 'playlist' ? 'playlist' :
+      rawType === 'artist' ? 'artist' :
+      rawType === 'album' ? 'album' : 'song';
 
-  <!-- YouTube Fakeout to force Play Button -->
-  <meta property="og:video" content="https://www.youtube.com/embed/${trackId}">
-  <meta property="og:video:secure_url" content="https://www.youtube.com/embed/${trackId}">
-  <meta property="og:video:type" content="text/html">
-  <meta property="og:video:width" content="1280">
-  <meta property="og:video:height" content="720">
+    const id = url.searchParams.get('id') || url.searchParams.get('videoId') || '';
+    const title = url.searchParams.get('title') || 'Great Music';
+    const artist = url.searchParams.get('artist') || url.searchParams.get('channel') || 'NYRA';
+    const thumbnail = url.searchParams.get('thumbnail') || url.searchParams.get('artwork') || (id && type === 'song' ? `https://i.ytimg.com/vi/${id}/hqdefault.jpg` : '');
+    const trackCount = url.searchParams.get('tracks') ? parseInt(url.searchParams.get('tracks')!, 10) : undefined;
+    const creator = url.searchParams.get('creator') || '';
+    const colorHint = url.searchParams.get('color') || '';
+    const format = url.searchParams.get('format');
 
-  <meta name="twitter:card" content="player">
-  <meta name="twitter:player" content="https://www.youtube.com/embed/${trackId}">
-  <meta name="twitter:player:width" content="1280">
-  <meta name="twitter:player:height" content="720">
+    const data: OgContentData = {
+      type,
+      id,
+      title,
+      artist,
+      thumbnail,
+      trackCount,
+      creator,
+      colorHint,
+      baseUrl,
+    };
 
-  <meta name="theme-color" content="#ffd300">
-  
-  <meta http-equiv="refresh" content="0;url=${baseUrl}/?play=${trackId}&title=${encodeURIComponent(trackTitle)}&channel=${encodeURIComponent(trackChannel)}&thumbnail=${encodeURIComponent(trackThumbnail)}">
-</head>
-<body>
-  <div style="background: #0b0b0b; color: white; height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center; font-family: sans-serif;">
-    <img src="${trackThumbnail}" style="width: 200px; height: 200px; border-radius: 12px; margin-bottom: 20px; box-shadow: 0 20px 50px rgba(0,0,0,0.5);">
-    <h1 style="margin: 0; font-size: 24px;">${trackTitle}</h1>
-    <p style="color: #888; margin-top: 8px;">Opening in ${appName}...</p>
-  </div>
-</body>
-</html>`;
+    if (format === 'image' || format === 'svg' || url.pathname.endsWith('.svg') || url.pathname.includes('/image')) {
+      const svg = generateOgImageSvg(data);
+      return new Response(svg, {
+        headers: {
+          'Content-Type': 'image/svg+xml; charset=utf-8',
+          'Cache-Control': 'public, max-age=86400, s-maxage=604800',
+        },
+      });
+    }
 
-
-
-  return new Response(html, {
-    headers: {
-      'content-type': 'text/html; charset=UTF-8',
-    },
-  });
+    const html = generateDiscordOgHtml(data);
+    return new Response(html, {
+      headers: {
+        'Content-Type': 'text/html; charset=UTF-8',
+        'Cache-Control': 'public, max-age=3600, s-maxage=86400',
+      },
+    });
+  } catch (err: any) {
+    return new Response('Redirecting to NYRA...', {
+      status: 302,
+      headers: {
+        Location: '/',
+      },
+    });
+  }
 }
