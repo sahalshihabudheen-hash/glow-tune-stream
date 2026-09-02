@@ -45,19 +45,30 @@ export default async function handler(req: Request) {
     const trackThumbnail = rawThumbnail || (trackId && type === 'song' ? `https://i.ytimg.com/vi/${trackId}/hqdefault.jpg` : `${baseUrl}/headphones.png`);
     const trackCount = url.searchParams.get('tracks') || '';
     const creator = url.searchParams.get('creator') || '';
-    const colorHint = url.searchParams.get('color');
+    const colorHint = url.searchParams.get('color') || '';
 
     const appName = "NYRA";
     const themeColor = extractThemeColor(colorHint, trackTitle + trackArtist);
 
     const safeTitle = escapeHtml(trackTitle);
     const safeArtist = escapeHtml(trackArtist);
-    const safeThumbnail = escapeHtml(trackThumbnail);
-    const imageType = trackThumbnail.endsWith('.png') ? 'image/png' : 'image/jpeg';
+
+    // Build the dedicated 1200x630 OG image URL
+    const imageParams = new URLSearchParams();
+    imageParams.set('type', type);
+    if (trackId) imageParams.set('id', trackId);
+    imageParams.set('title', trackTitle);
+    imageParams.set('artist', trackArtist);
+    if (trackThumbnail) imageParams.set('thumbnail', trackThumbnail);
+    if (trackCount) imageParams.set('tracks', trackCount);
+    if (creator) imageParams.set('creator', creator);
+    if (colorHint) imageParams.set('color', colorHint);
+
+    const ogImageUrl = `${baseUrl}/api/og-image?${imageParams.toString()}`;
 
     let description = `✨ ${safeArtist} · ${appName} PREMIUM • FEEL THE PULSE`;
     let redirectUrl = `${baseUrl}/?play=${encodeURIComponent(trackId)}&title=${encodeURIComponent(trackTitle)}&channel=${encodeURIComponent(trackArtist)}&thumbnail=${encodeURIComponent(trackThumbnail)}`;
-    let ogType = 'video.other';
+    let ogType = 'music.song';
 
     if (type === 'playlist') {
       ogType = 'music.playlist';
@@ -73,8 +84,6 @@ export default async function handler(req: Request) {
       redirectUrl = `${baseUrl}/?search=${encodeURIComponent(trackTitle)}`;
     }
 
-    const isSongWithVideo = type === 'song' && trackId;
-
     const html = `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -85,39 +94,23 @@ export default async function handler(req: Request) {
   <meta name="title" content="🎧 ${safeTitle} - ${safeArtist}">
   <meta name="description" content="${description}">
 
-  <!-- Open Graph Meta Tags -->
+  <!-- Open Graph Meta Tags for Discord & Social -->
   <meta property="og:site_name" content="${appName} • FEEL THE PULSE">
   <meta property="og:type" content="${ogType}">
   <meta property="og:title" content="🎧 ${safeTitle}">
   <meta property="og:description" content="${description}">
-  <meta property="og:image" content="${safeThumbnail}">
-  <meta property="og:image:secure_url" content="${safeThumbnail}">
-  <meta property="og:image:width" content="1280">
-  <meta property="og:image:height" content="720">
-  <meta property="og:image:type" content="${imageType}">
+  <meta property="og:image" content="${escapeHtml(ogImageUrl)}">
+  <meta property="og:image:secure_url" content="${escapeHtml(ogImageUrl)}">
+  <meta property="og:image:type" content="image/png">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
   <meta property="og:url" content="${escapeHtml(redirectUrl)}">
 
-  <!-- Discord & Social Embed Player / Banner -->
-  ${isSongWithVideo ? `
-  <meta property="og:video" content="https://www.youtube.com/embed/${encodeURIComponent(trackId)}">
-  <meta property="og:video:secure_url" content="https://www.youtube.com/embed/${encodeURIComponent(trackId)}">
-  <meta property="og:video:type" content="text/html">
-  <meta property="og:video:width" content="1280">
-  <meta property="og:video:height" content="720">
-
-  <meta name="twitter:card" content="player">
-  <meta name="twitter:title" content="🎧 ${safeTitle}">
-  <meta name="twitter:description" content="${description}">
-  <meta name="twitter:image" content="${safeThumbnail}">
-  <meta name="twitter:player" content="https://www.youtube.com/embed/${encodeURIComponent(trackId)}">
-  <meta name="twitter:player:width" content="1280">
-  <meta name="twitter:player:height" content="720">
-  ` : `
+  <!-- Twitter / Discord Summary Large Image Card -->
   <meta name="twitter:card" content="summary_large_image">
   <meta name="twitter:title" content="🎧 ${safeTitle}">
   <meta name="twitter:description" content="${description}">
-  <meta name="twitter:image" content="${safeThumbnail}">
-  `}
+  <meta name="twitter:image" content="${escapeHtml(ogImageUrl)}">
 
   <!-- Dynamic Theme Color based on Artwork -->
   <meta name="theme-color" content="${themeColor}">
@@ -132,7 +125,7 @@ export default async function handler(req: Request) {
 </head>
 <body style="background: #090a10; color: white; height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; margin: 0;">
   <div style="text-align: center; max-width: 480px; padding: 32px; background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.08); border-radius: 24px; box-shadow: 0 30px 60px rgba(0,0,0,0.6);">
-    <img src="${safeThumbnail}" style="width: 180px; height: 180px; border-radius: 20px; object-fit: cover; margin-bottom: 20px; box-shadow: 0 12px 30px rgba(0,0,0,0.5);">
+    <img src="${escapeHtml(trackThumbnail)}" style="width: 180px; height: 180px; border-radius: 20px; object-fit: cover; margin-bottom: 20px; box-shadow: 0 12px 30px rgba(0,0,0,0.5);">
     <div style="font-size: 11px; font-weight: 800; color: ${themeColor}; letter-spacing: 0.2em; text-transform: uppercase; margin-bottom: 8px;">${appName} • FEEL THE PULSE</div>
     <h1 style="margin: 0 0 8px 0; font-size: 22px; font-weight: 800;">${safeTitle}</h1>
     <p style="margin: 0 0 24px 0; color: #94a3b8; font-size: 15px;">${safeArtist}</p>

@@ -734,24 +734,30 @@ async function startServer() {
     }
   });
 
-  // API Route: Dynamic 1200x630 Discord Open Graph Vector Image (SVG)
-  app.get(['/api/og-image', '/api/og/image', '/api/og-image.svg'], (req, res) => {
+  // API Route: Dynamic Discord Open Graph Image Endpoint
+  app.get(['/api/og-image', '/api/og/image', '/api/og-image.svg'], async (req, res) => {
     try {
       const data = parseOgRequest(req);
+      const thumb = data.thumbnail;
+      if (thumb && thumb.startsWith('http') && !req.path.endsWith('.svg')) {
+        try {
+          const imgRes = await fetch(thumb);
+          if (imgRes.ok) {
+            const buffer = Buffer.from(await imgRes.arrayBuffer());
+            const cType = imgRes.headers.get('content-type') || 'image/jpeg';
+            res.setHeader('Content-Type', cType);
+            res.setHeader('Cache-Control', 'public, max-age=86400, s-maxage=604800');
+            return res.send(buffer);
+          }
+        } catch {}
+      }
       const svg = generateOgImageSvg(data);
       res.setHeader('Content-Type', 'image/svg+xml; charset=utf-8');
       res.setHeader('Cache-Control', 'public, max-age=86400, s-maxage=604800');
       res.send(svg);
     } catch (err: any) {
-      console.error('[Express OG Image] Error generating SVG preview:', err);
-      const fallbackSvg = generateOgImageSvg({
-        type: 'song',
-        title: 'NYRA Music',
-        artist: 'FEEL THE PULSE',
-        baseUrl: 'http://localhost:3000',
-      });
-      res.setHeader('Content-Type', 'image/svg+xml; charset=utf-8');
-      res.send(fallbackSvg);
+      console.error('[Express OG Image] Error generating preview:', err);
+      res.redirect('/headphones.png');
     }
   });
 
