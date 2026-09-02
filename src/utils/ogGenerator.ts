@@ -508,18 +508,15 @@ export function generateDiscordOgHtml(data: OgContentData): string {
   const safeAppName = 'NYRA';
   const trackId = data.id || '';
 
-  // Canonical OG image URL pointing to our dynamic 1200x630 vector image renderer
-  const imageParams = new URLSearchParams();
-  imageParams.set('type', data.type || 'song');
-  if (data.id) imageParams.set('id', data.id);
-  imageParams.set('title', data.title);
-  if (data.artist) imageParams.set('artist', data.artist);
-  if (data.thumbnail) imageParams.set('thumbnail', data.thumbnail);
-  if (data.trackCount) imageParams.set('tracks', String(data.trackCount));
-  if (data.creator) imageParams.set('creator', data.creator);
-  if (color.dominant) imageParams.set('color', color.dominant.replace('#', ''));
-
-  const ogImageUrl = `${data.baseUrl}/api/og-image?${imageParams.toString()}`;
+  // High-resolution raster artwork URL for Discord / Twitter / Social Media crawlers
+  let safeImageUrl = data.thumbnail || '';
+  if (!safeImageUrl && trackId && data.type === 'song') {
+    safeImageUrl = `https://i.ytimg.com/vi/${trackId}/hqdefault.jpg`;
+  }
+  if (!safeImageUrl) {
+    safeImageUrl = `${data.baseUrl}/headphones.png`;
+  }
+  const imageType = safeImageUrl.includes('.png') ? 'image/png' : 'image/jpeg';
 
   // Build target client redirect URL based on content type
   let redirectUrl = `${data.baseUrl}/`;
@@ -540,10 +537,12 @@ export function generateDiscordOgHtml(data: OgContentData): string {
     description = `🎵 ${data.title} by ${safeArtist} · Lossless streaming on NYRA`;
   } else {
     // Default song
-    redirectUrl = `${data.baseUrl}/?play=${encodeURIComponent(trackId)}&title=${encodeURIComponent(data.title)}&channel=${encodeURIComponent(data.artist || 'NYRA')}&thumbnail=${encodeURIComponent(data.thumbnail || '')}`;
-    ogType = 'music.song';
+    redirectUrl = `${data.baseUrl}/?play=${encodeURIComponent(trackId)}&title=${encodeURIComponent(data.title)}&channel=${encodeURIComponent(data.artist || 'NYRA')}&thumbnail=${encodeURIComponent(safeImageUrl)}`;
+    ogType = 'video.other';
     description = `✨ ${safeArtist} · NYRA PREMIUM • FEEL THE PULSE`;
   }
+
+  const isSongWithVideo = data.type === 'song' && trackId;
 
   return `<!DOCTYPE html>
 <html lang="en">
@@ -561,17 +560,34 @@ export function generateDiscordOgHtml(data: OgContentData): string {
   <meta property="og:type" content="${ogType}">
   <meta property="og:title" content="🎧 ${safeTitle}">
   <meta property="og:description" content="${description}">
-  <meta property="og:image" content="${ogImageUrl}">
-  <meta property="og:image:width" content="1200">
-  <meta property="og:image:height" content="630">
-  <meta property="og:image:type" content="image/svg+xml">
-  <meta property="og:url" content="${redirectUrl}">
+  <meta property="og:image" content="${escapeXml(safeImageUrl)}">
+  <meta property="og:image:secure_url" content="${escapeXml(safeImageUrl)}">
+  <meta property="og:image:width" content="1280">
+  <meta property="og:image:height" content="720">
+  <meta property="og:image:type" content="${imageType}">
+  <meta property="og:url" content="${escapeXml(redirectUrl)}">
 
-  <!-- Twitter Card Metadata -->
+  <!-- Discord & Social Embed Player / Large Banner -->
+  ${isSongWithVideo ? `
+  <meta property="og:video" content="https://www.youtube.com/embed/${encodeURIComponent(trackId)}">
+  <meta property="og:video:secure_url" content="https://www.youtube.com/embed/${encodeURIComponent(trackId)}">
+  <meta property="og:video:type" content="text/html">
+  <meta property="og:video:width" content="1280">
+  <meta property="og:video:height" content="720">
+
+  <meta name="twitter:card" content="player">
+  <meta name="twitter:title" content="🎧 ${safeTitle}">
+  <meta name="twitter:description" content="${description}">
+  <meta name="twitter:image" content="${escapeXml(safeImageUrl)}">
+  <meta name="twitter:player" content="https://www.youtube.com/embed/${encodeURIComponent(trackId)}">
+  <meta name="twitter:player:width" content="1280">
+  <meta name="twitter:player:height" content="720">
+  ` : `
   <meta name="twitter:card" content="summary_large_image">
   <meta name="twitter:title" content="🎧 ${safeTitle}">
   <meta name="twitter:description" content="${description}">
-  <meta name="twitter:image" content="${ogImageUrl}">
+  <meta name="twitter:image" content="${escapeXml(safeImageUrl)}">
+  `}
 
   <!-- Discord Dynamic Border Theme Color (Extracted from Artwork) -->
   <meta name="theme-color" content="${color.themeColor}">
