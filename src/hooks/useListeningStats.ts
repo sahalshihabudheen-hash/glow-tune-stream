@@ -82,12 +82,12 @@ export function useListeningStats(targetUserId?: string) {
 
   // Live updates: refresh whenever a new play is recorded for this user.
   useEffect(() => {
-    if (!user) return;
+    if (!subjectId) return;
     const channel = supabase
-      .channel(`stats-history-${user.id}`)
+      .channel(`stats-history-${subjectId}`)
       .on(
         'postgres_changes',
-        { event: 'INSERT', schema: 'public', table: 'listening_history', filter: `user_id=eq.${user.id}` },
+        { event: 'INSERT', schema: 'public', table: 'listening_history', filter: `user_id=eq.${subjectId}` },
         (payload) => {
           setHistory((prev) => [payload.new as HistoryRow, ...prev]);
         }
@@ -96,7 +96,7 @@ export function useListeningStats(targetUserId?: string) {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [user]);
+  }, [subjectId]);
 
   const stats = useMemo(() => {
     const now = Date.now();
