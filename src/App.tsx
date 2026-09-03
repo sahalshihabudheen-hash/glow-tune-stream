@@ -49,6 +49,7 @@ const App = () => (
           <MusicPlayerProvider>
             <DownloadManagerProvider>
             <DiscordPresence />
+            <SmartTransitions />
             <MaintenanceGuard>
               <Routes>
                 <Route path="/" element={<Index />} />
