@@ -44,14 +44,15 @@ export function guessGenre(title: string, channel: string): string {
   return 'Other';
 }
 
-export function useListeningStats() {
+export function useListeningStats(targetUserId?: string) {
   const { user } = useAuth();
+  const subjectId = targetUserId || user?.id;
   const [history, setHistory] = useState<HistoryRow[]>([]);
   const [favoritesCount, setFavoritesCount] = useState(0);
   const [loading, setLoading] = useState(true);
 
   const load = useCallback(async () => {
-    if (!user) {
+    if (!subjectId) {
       setHistory([]);
       setFavoritesCount(0);
       setLoading(false);
@@ -62,18 +63,18 @@ export function useListeningStats() {
       supabase
         .from('listening_history')
         .select('*')
-        .eq('user_id', user.id)
+        .eq('user_id', subjectId)
         .order('played_at', { ascending: false })
         .limit(5000),
       supabase
         .from('favorites')
         .select('*', { count: 'exact', head: true })
-        .eq('user_id', user.id),
+        .eq('user_id', subjectId),
     ]);
     setHistory((hist as HistoryRow[]) || []);
     setFavoritesCount(count || 0);
     setLoading(false);
-  }, [user]);
+  }, [subjectId]);
 
   useEffect(() => {
     load();
