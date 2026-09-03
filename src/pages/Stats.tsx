@@ -1,6 +1,6 @@
-import { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
-import { BarChart3, Clock, Music2, Users, Heart, Flame, Play } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { Link, useNavigate, useParams, useLocation } from 'react-router-dom';
+import { BarChart3, Clock, Music2, Users, Heart, Flame, Play, ArrowLeft } from 'lucide-react';
 import {
   ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid,
   AreaChart, Area, PieChart, Pie, Cell, Legend,
