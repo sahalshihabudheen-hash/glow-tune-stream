@@ -269,27 +269,29 @@ const Stats = () => {
                 </Panel>
               </div>
 
-              <Panel title="Favorite songs" subtitle={`${favoriteTracks.length} saved`}>
-                {favoriteTracks.length === 0 ? (
-                  <p className="text-sm text-muted-foreground">No favorites yet.</p>
-                ) : (
-                  <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-2">
-                    {favoriteTracks.slice(0, 12).map((t) => (
-                      <button
-                        key={t.id}
-                        onClick={() => play(t)}
-                        className="flex items-center gap-3 p-2 rounded-xl hover:bg-white/5 transition-colors text-left"
-                      >
-                        <img src={t.thumbnail} alt={t.title} loading="lazy" className="w-10 h-10 rounded-lg object-cover" />
-                        <div className="min-w-0">
-                          <p className="text-sm font-medium truncate">{t.title}</p>
-                          <p className="text-[11px] text-muted-foreground truncate">{t.channel}</p>
-                        </div>
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </Panel>
+              {!isViewingOtherUser && (
+                <Panel title="Favorite songs" subtitle={`${favoriteTracks.length} saved`}>
+                  {favoriteTracks.length === 0 ? (
+                    <p className="text-sm text-muted-foreground">No favorites yet.</p>
+                  ) : (
+                    <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-2">
+                      {favoriteTracks.slice(0, 12).map((t) => (
+                        <button
+                          key={t.id}
+                          onClick={() => play(t)}
+                          className="flex items-center gap-3 p-2 rounded-xl hover:bg-white/5 transition-colors text-left"
+                        >
+                          <img src={t.thumbnail} alt={t.title} loading="lazy" className="w-10 h-10 rounded-lg object-cover" />
+                          <div className="min-w-0">
+                            <p className="text-sm font-medium truncate">{t.title}</p>
+                            <p className="text-[11px] text-muted-foreground truncate">{t.channel}</p>
+                          </div>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </Panel>
+              )}
             </>
           )}
         </main>
