@@ -1,6 +1,6 @@
-import { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
-import { BarChart3, Clock, Music2, Users, Heart, Flame, Play } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { Link, useNavigate, useParams, useLocation } from 'react-router-dom';
+import { BarChart3, Clock, Music2, Users, Heart, Flame, Play, ArrowLeft } from 'lucide-react';
 import {
   ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid,
   AreaChart, Area, PieChart, Pie, Cell, Legend,
@@ -52,11 +52,22 @@ const Panel = ({ title, subtitle, children }: { title: string; subtitle?: string
 const Stats = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
+  const { userId } = useParams<{ userId?: string }>();
+  const location = useLocation();
   const [searchQuery, setSearchQuery] = useState('');
   const [activeTab, setActiveTab] = useState('stats');
   const { handlePlayTrack } = useMusicPlayer();
   const { favoriteTracks } = useFavorites();
-  const s = useListeningStats();
+  const s = useListeningStats(userId);
+
+  const viewingUser = location.state as { email?: string; display_name?: string } | null;
+  const isViewingOtherUser = !!userId && userId !== user?.id;
+  const pageTitle = isViewingOtherUser
+    ? `${viewingUser?.display_name || viewingUser?.email || 'User'}'s Statistics`
+    : 'Your Music Statistics';
+  const pageSubtitle = isViewingOtherUser
+    ? 'Admin view of user listening data'
+    : 'Updated automatically as you listen';
 
   const handleSearch = () => {
     if (searchQuery.trim()) navigate(`/?search=${encodeURIComponent(searchQuery)}`);
@@ -91,10 +102,16 @@ const Stats = () => {
         <main className="pt-28 pb-48 px-4 md:px-8 space-y-6">
           <header className="flex items-center gap-3">
             <div className="p-2 rounded-lg bg-primary/10"><BarChart3 className="h-6 w-6 text-primary" /></div>
-            <div>
-              <h1 className="text-2xl font-bold">Your Music Statistics</h1>
-              <p className="text-sm text-muted-foreground">Updated automatically as you listen</p>
+            <div className="flex-1 min-w-0">
+              <h1 className="text-2xl font-bold truncate">{pageTitle}</h1>
+              <p className="text-sm text-muted-foreground">{pageSubtitle}</p>
             </div>
+            {isViewingOtherUser && (
+              <Button variant="outline" size="sm" onClick={() => navigate(-1)}>
+                <ArrowLeft className="w-4 h-4 mr-2" />
+                Back
+              </Button>
+            )}
           </header>
 
           {s.loading ? (
@@ -252,27 +269,29 @@ const Stats = () => {
                 </Panel>
               </div>
 
-              <Panel title="Favorite songs" subtitle={`${favoriteTracks.length} saved`}>
-                {favoriteTracks.length === 0 ? (
-                  <p className="text-sm text-muted-foreground">No favorites yet.</p>
-                ) : (
-                  <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-2">
-                    {favoriteTracks.slice(0, 12).map((t) => (
-                      <button
-                        key={t.id}
-                        onClick={() => play(t)}
-                        className="flex items-center gap-3 p-2 rounded-xl hover:bg-white/5 transition-colors text-left"
-                      >
-                        <img src={t.thumbnail} alt={t.title} loading="lazy" className="w-10 h-10 rounded-lg object-cover" />
-                        <div className="min-w-0">
-                          <p className="text-sm font-medium truncate">{t.title}</p>
-                          <p className="text-[11px] text-muted-foreground truncate">{t.channel}</p>
-                        </div>
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </Panel>
+              {!isViewingOtherUser && (
+                <Panel title="Favorite songs" subtitle={`${favoriteTracks.length} saved`}>
+                  {favoriteTracks.length === 0 ? (
+                    <p className="text-sm text-muted-foreground">No favorites yet.</p>
+                  ) : (
+                    <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-2">
+                      {favoriteTracks.slice(0, 12).map((t) => (
+                        <button
+                          key={t.id}
+                          onClick={() => play(t)}
+                          className="flex items-center gap-3 p-2 rounded-xl hover:bg-white/5 transition-colors text-left"
+                        >
+                          <img src={t.thumbnail} alt={t.title} loading="lazy" className="w-10 h-10 rounded-lg object-cover" />
+                          <div className="min-w-0">
+                            <p className="text-sm font-medium truncate">{t.title}</p>
+                            <p className="text-[11px] text-muted-foreground truncate">{t.channel}</p>
+                          </div>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </Panel>
+              )}
             </>
           )}
         </main>

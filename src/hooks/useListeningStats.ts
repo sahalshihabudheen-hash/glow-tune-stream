@@ -44,14 +44,15 @@ export function guessGenre(title: string, channel: string): string {
   return 'Other';
 }
 
-export function useListeningStats() {
+export function useListeningStats(targetUserId?: string) {
   const { user } = useAuth();
+  const subjectId = targetUserId || user?.id;
   const [history, setHistory] = useState<HistoryRow[]>([]);
   const [favoritesCount, setFavoritesCount] = useState(0);
   const [loading, setLoading] = useState(true);
 
   const load = useCallback(async () => {
-    if (!user) {
+    if (!subjectId) {
       setHistory([]);
       setFavoritesCount(0);
       setLoading(false);
@@ -62,18 +63,18 @@ export function useListeningStats() {
       supabase
         .from('listening_history')
         .select('*')
-        .eq('user_id', user.id)
+        .eq('user_id', subjectId)
         .order('played_at', { ascending: false })
         .limit(5000),
       supabase
         .from('favorites')
         .select('*', { count: 'exact', head: true })
-        .eq('user_id', user.id),
+        .eq('user_id', subjectId),
     ]);
     setHistory((hist as HistoryRow[]) || []);
     setFavoritesCount(count || 0);
     setLoading(false);
-  }, [user]);
+  }, [subjectId]);
 
   useEffect(() => {
     load();
@@ -81,12 +82,12 @@ export function useListeningStats() {
 
   // Live updates: refresh whenever a new play is recorded for this user.
   useEffect(() => {
-    if (!user) return;
+    if (!subjectId) return;
     const channel = supabase
-      .channel(`stats-history-${user.id}`)
+      .channel(`stats-history-${subjectId}`)
       .on(
         'postgres_changes',
-        { event: 'INSERT', schema: 'public', table: 'listening_history', filter: `user_id=eq.${user.id}` },
+        { event: 'INSERT', schema: 'public', table: 'listening_history', filter: `user_id=eq.${subjectId}` },
         (payload) => {
           setHistory((prev) => [payload.new as HistoryRow, ...prev]);
         }
@@ -95,7 +96,7 @@ export function useListeningStats() {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [user]);
+  }, [subjectId]);
 
   const stats = useMemo(() => {
     const now = Date.now();
