@@ -76,6 +76,8 @@ interface AppSettings {
   downloadPreference?: 'ask' | 'device' | 'app';
   backgroundVideoBrightness: number;
   lightMode: boolean;
+  smartTransitions: boolean;
+  transitionDuration: number; // seconds, 0-12
 }
 
 interface ThemeContextType {
