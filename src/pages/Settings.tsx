@@ -912,6 +912,36 @@ const Settings = () => {
               <div className="border-t border-border pt-4">
                 <div className="flex items-center justify-between gap-4">
                   <div className="flex-1">
+                    <p className="font-medium text-foreground text-sm md:text-base">Smart Music Transitions</p>
+                    <p className="text-xs md:text-sm text-muted-foreground">Smoothly crossfade between songs instead of abrupt cuts</p>
+                  </div>
+                  <Switch
+                    checked={settings.smartTransitions}
+                    onCheckedChange={(checked) => updateSettings({ smartTransitions: checked })}
+                    className="data-[state=checked]:bg-primary"
+                  />
+                </div>
+
+                {settings.smartTransitions && (
+                  <div className="mt-4">
+                    <div className="flex items-center justify-between mb-2">
+                      <p className="text-xs md:text-sm text-muted-foreground">Transition Duration</p>
+                      <span className="text-xs md:text-sm font-medium text-primary">{settings.transitionDuration}s</span>
+                    </div>
+                    <Slider
+                      value={[settings.transitionDuration]}
+                      min={0}
+                      max={12}
+                      step={1}
+                      onValueChange={(v) => updateSettings({ transitionDuration: v[0] })}
+                    />
+                  </div>
+                )}
+              </div>
+
+              <div className="border-t border-border pt-4">
+                <div className="flex items-center justify-between gap-4">
+                  <div className="flex-1">
                     <p className="font-medium text-foreground text-sm md:text-base">Mini Player Mode</p>
                     <p className="text-xs md:text-sm text-muted-foreground">Show compact player bar</p>
                   </div>

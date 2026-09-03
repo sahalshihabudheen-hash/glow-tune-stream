@@ -17,6 +17,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { useMusicPlayer } from '@/contexts/MusicPlayerContext';
 import { supabase } from '@/integrations/supabase/client';
 import { getFunctionAuthHeaders } from '@/lib/functionAuth';
+import { shareTrack } from '@/utils/shareUtils';
 
 interface Track {
   id: string;
@@ -214,8 +215,9 @@ const SongDetails = () => {
   };
 
   const handleShare = () => {
-    navigator.clipboard.writeText(`${window.location.origin}/song/${track?.id}`);
-    toast.success('Song link copied!');
+    if (track) {
+      shareTrack(track);
+    }
   };
 
   const handleNavbarSearch = () => {

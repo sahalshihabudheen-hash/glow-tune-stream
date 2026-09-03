@@ -5,6 +5,7 @@ import { ScrollArea } from './ui/scroll-area';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 import { useNavigate } from 'react-router-dom';
+import { shareTrack } from '@/utils/shareUtils';
 
 interface Track {
   id: string;
@@ -163,11 +164,7 @@ const NowPlayingPanel = ({ isOpen, onClose, currentTrack, nextTrack, playlistNam
 
   const handleShare = () => {
     if (!currentTrack) return;
-    // Share the song link
-    const shareUrl = `${window.location.origin}/?play=${currentTrack.id}`;
-    navigator.clipboard.writeText(shareUrl).then(() => {
-      toast.success('Song link copied! Share it anywhere 🔗');
-    });
+    shareTrack(currentTrack);
   };
 
   const handleViewArtist = () => {

@@ -76,6 +76,8 @@ interface AppSettings {
   downloadPreference?: 'ask' | 'device' | 'app';
   backgroundVideoBrightness: number;
   lightMode: boolean;
+  smartTransitions: boolean;
+  transitionDuration: number; // seconds, 0-12
 }
 
 interface ThemeContextType {
@@ -170,6 +172,8 @@ export const ThemeProvider = ({ children }: { children: ReactNode }) => {
       downloadPreference: 'ask' as 'ask' | 'device' | 'app',
       backgroundVideoBrightness: 30,
       lightMode: false,
+      smartTransitions: false,
+      transitionDuration: 4,
     };
     const saved = localStorage.getItem('nyra-settings');
     if (!saved) return defaults;

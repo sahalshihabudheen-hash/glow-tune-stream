@@ -11,6 +11,7 @@ import FloatingMiniPlayer from "@/components/FloatingMiniPlayer";
 import DownloadQueue from "@/components/DownloadQueue";
 import MaintenanceGuard from "@/components/MaintenanceGuard";
 import TutorialWrapper from "@/components/TutorialWrapper";
+import SmartTransitions from "@/components/SmartTransitions";
 import Index from "./pages/Index";
 import SongDetails from "./pages/SongDetails";
 import PlaylistView from "./pages/PlaylistView";
@@ -48,6 +49,7 @@ const App = () => (
           <MusicPlayerProvider>
             <DownloadManagerProvider>
             <DiscordPresence />
+            <SmartTransitions />
             <MaintenanceGuard>
               <Routes>
                 <Route path="/" element={<Index />} />

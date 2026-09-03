@@ -9,6 +9,7 @@ import LyricsDrawer from '@/components/LyricsDrawer';
 import { useDownloadManager } from '@/contexts/DownloadManagerContext';
 import { toast } from 'sonner';
 import StyledProgressBar from '@/components/StyledProgressBar';
+import { shareTrack } from '@/utils/shareUtils';
 
 const PLAYER_WIDTH = 320;
 const PLAYER_HEIGHT = 136;
@@ -417,9 +418,7 @@ const FloatingMiniPlayer = () => {
               onClick={(e) => {
                 e.stopPropagation();
                 if (currentTrack) {
-                  const shareUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/og-embed?id=${currentTrack.id}&title=${encodeURIComponent(currentTrack.title)}&channel=${encodeURIComponent(currentTrack.channel)}&thumbnail=${encodeURIComponent(currentTrack.thumbnail)}`;
-                  navigator.clipboard.writeText(shareUrl);
-                  toast.success('Share link copied!');
+                  shareTrack(currentTrack);
                 }
               }}
               className="p-1 rounded-md text-muted-foreground hover:text-foreground hover:bg-white/5 transition-all active:scale-[0.85]"
