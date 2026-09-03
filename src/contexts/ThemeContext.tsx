@@ -172,6 +172,8 @@ export const ThemeProvider = ({ children }: { children: ReactNode }) => {
       downloadPreference: 'ask' as 'ask' | 'device' | 'app',
       backgroundVideoBrightness: 30,
       lightMode: false,
+      smartTransitions: false,
+      transitionDuration: 4,
     };
     const saved = localStorage.getItem('nyra-settings');
     if (!saved) return defaults;
