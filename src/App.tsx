@@ -69,7 +69,9 @@ const App = () => (
                 <Route path="/offline" element={<OfflineDownloads />} />
                 <Route path="/get-app" element={<GetApp />} />
                 <Route path="/debug" element={<Debug />} />
+                <Route path="/stats/:userId" element={<Stats />} />
                 <Route path="/stats" element={<Stats />} />
+                <Route path="/statistics/:userId" element={<Stats />} />
                 <Route path="/statistics" element={<Stats />} />
                 {/* Aliases so common/legacy links never hit the 404 page */}
                 <Route path="/home" element={<Index />} />
