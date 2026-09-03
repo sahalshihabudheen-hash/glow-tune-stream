@@ -52,11 +52,22 @@ const Panel = ({ title, subtitle, children }: { title: string; subtitle?: string
 const Stats = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
+  const { userId } = useParams<{ userId?: string }>();
+  const location = useLocation();
   const [searchQuery, setSearchQuery] = useState('');
   const [activeTab, setActiveTab] = useState('stats');
   const { handlePlayTrack } = useMusicPlayer();
   const { favoriteTracks } = useFavorites();
-  const s = useListeningStats();
+  const s = useListeningStats(userId);
+
+  const viewingUser = location.state as { email?: string; display_name?: string } | null;
+  const isViewingOtherUser = !!userId && userId !== user?.id;
+  const pageTitle = isViewingOtherUser
+    ? `${viewingUser?.display_name || viewingUser?.email || 'User'}'s Statistics`
+    : 'Your Music Statistics';
+  const pageSubtitle = isViewingOtherUser
+    ? 'Admin view of user listening data'
+    : 'Updated automatically as you listen';
 
   const handleSearch = () => {
     if (searchQuery.trim()) navigate(`/?search=${encodeURIComponent(searchQuery)}`);
@@ -91,10 +102,16 @@ const Stats = () => {
         <main className="pt-28 pb-48 px-4 md:px-8 space-y-6">
           <header className="flex items-center gap-3">
             <div className="p-2 rounded-lg bg-primary/10"><BarChart3 className="h-6 w-6 text-primary" /></div>
-            <div>
-              <h1 className="text-2xl font-bold">Your Music Statistics</h1>
-              <p className="text-sm text-muted-foreground">Updated automatically as you listen</p>
+            <div className="flex-1 min-w-0">
+              <h1 className="text-2xl font-bold truncate">{pageTitle}</h1>
+              <p className="text-sm text-muted-foreground">{pageSubtitle}</p>
             </div>
+            {isViewingOtherUser && (
+              <Button variant="outline" size="sm" onClick={() => navigate(-1)}>
+                <ArrowLeft className="w-4 h-4 mr-2" />
+                Back
+              </Button>
+            )}
           </header>
 
           {s.loading ? (
