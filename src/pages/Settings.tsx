@@ -1,5 +1,5 @@
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, ArrowRight, Palette, Volume2, ListMusic, Trash2, Waves, Blend, User, Camera, KeyRound, Loader2, RotateCcw, Sliders, Shield, Sparkles, Smartphone, Home, Search, Users, Heart, Gamepad2, Settings as SettingsIcon, Menu, Download, Minus, Plus, Sun } from 'lucide-react';
+import { ArrowLeft, ArrowRight, Palette, Volume2, ListMusic, Trash2, Waves, Blend, User, Camera, KeyRound, Loader2, RotateCcw, Sliders, Shield, Sparkles, Smartphone, Home, Search, Users, Heart, Gamepad2, Settings as SettingsIcon, Menu, Download, Minus, Plus, Sun, Orbit } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import { useTheme, themes, ThemeName, ProgressBarStyle } from '@/contexts/ThemeContext';
 import { Switch } from '@/components/ui/switch';
