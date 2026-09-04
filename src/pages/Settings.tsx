@@ -1054,7 +1054,7 @@ const Settings = () => {
                 <div className="flex-1">
                   <p className="font-medium text-foreground text-sm md:text-base">Dynamic Music UI</p>
                   <p className="text-xs md:text-sm text-muted-foreground">
-                    Subtle background atmosphere based on the current song's artwork
+                    Artwork-driven ambient lighting behind the app
                   </p>
                 </div>
                 <Switch
@@ -1063,6 +1063,47 @@ const Settings = () => {
                   className="data-[state=checked]:bg-primary"
                 />
               </div>
+
+              {settings.dynamicMusicUI && (
+                <div className="border-t border-border/50 pt-4 space-y-4 animate-fade-in pl-1">
+                  {/* Intensity Slider */}
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between text-xs md:text-sm">
+                      <span className="font-medium text-foreground">Atmosphere Intensity</span>
+                      <span className="text-primary font-bold">{settings.dynamicIntensity ?? 70}%</span>
+                    </div>
+                    <Slider
+                      value={[settings.dynamicIntensity ?? 70]}
+                      onValueChange={([val]) => updateSettings({ dynamicIntensity: val })}
+                      min={10}
+                      max={100}
+                      step={5}
+                      className="cursor-pointer"
+                    />
+                    <p className="text-[11px] text-muted-foreground">
+                      Controls how vibrant and deep the album artwork glow appears in the background.
+                    </p>
+                  </div>
+
+                  {/* Beat & Tone Reactivity Toggle */}
+                  <div className="flex items-center justify-between gap-4 pt-2">
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2">
+                        <Sparkles className="w-4 h-4 text-primary" />
+                        <p className="font-medium text-foreground text-sm">Beat & Rhythm Reactive Mode</p>
+                      </div>
+                      <p className="text-xs text-muted-foreground mt-0.5">
+                        Pulse background and subtle neon accents with the music's tempo, bass, and tones
+                      </p>
+                    </div>
+                    <Switch
+                      checked={settings.beatReactive ?? true}
+                      onCheckedChange={(checked) => updateSettings({ beatReactive: checked })}
+                      className="data-[state=checked]:bg-primary"
+                    />
+                  </div>
+                </div>
+              )}
             </div>
           </section>
 

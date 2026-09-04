@@ -686,9 +686,9 @@ const PlaylistView = () => {
                   onTouchMove={canReorder ? handleTouchMove : undefined}
                   onTouchEnd={canReorder ? handleTouchEnd : undefined}
                   className={cn(
-                    'w-full flex items-center gap-4 p-3 rounded-2xl transition-all duration-500 group relative overflow-hidden',
+                    'w-full flex items-center gap-4 p-3 rounded-2xl transition-all duration-300 group relative overflow-hidden',
                     currentTrack?.id === track.id
-                      ? 'bg-primary/10 border border-primary/20 shadow-[0_0_30px_rgba(var(--primary),0.1)]'
+                      ? 'bg-primary/5 border border-primary/30 shadow-[0_0_20px_rgba(var(--primary),0.08)]'
                       : 'glass-premium border border-white/5 hover:bg-white/10 hover:border-white/10',
                     draggedIndex === index && 'opacity-50 scale-[0.98]'
                   )}

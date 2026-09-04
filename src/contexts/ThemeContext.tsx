@@ -80,6 +80,8 @@ interface AppSettings {
   transitionDuration: number; // seconds, 0-12
   musicUniverse: boolean;
   dynamicMusicUI: boolean;
+  dynamicIntensity: number; // 0-100 percentage
+  beatReactive: boolean; // whole app reacts to music beats & tone
 }
 
 interface ThemeContextType {
@@ -178,6 +180,8 @@ export const ThemeProvider = ({ children }: { children: ReactNode }) => {
       transitionDuration: 4,
       musicUniverse: false,
       dynamicMusicUI: false,
+      dynamicIntensity: 70,
+      beatReactive: true,
     };
     const saved = localStorage.getItem('nyra-settings');
     if (!saved) return defaults;
