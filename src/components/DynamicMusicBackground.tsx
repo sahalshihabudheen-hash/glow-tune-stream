@@ -40,8 +40,8 @@ const DynamicMusicBackground = () => {
         className={layerClass}
         style={{
           backgroundImage: layers.a ? `url(${layers.a})` : undefined,
-          opacity: layers.showB ? 0 : 0.28,
-          filter: 'blur(80px) saturate(150%)',
+          opacity: layers.showB ? 0 : 0.65,
+          filter: 'blur(70px) saturate(200%) brightness(0.9)',
           transform: 'scale(1.25)',
         }}
       />
@@ -49,13 +49,13 @@ const DynamicMusicBackground = () => {
         className={layerClass}
         style={{
           backgroundImage: layers.b ? `url(${layers.b})` : undefined,
-          opacity: layers.showB ? 0.28 : 0,
-          filter: 'blur(80px) saturate(150%)',
+          opacity: layers.showB ? 0.65 : 0,
+          filter: 'blur(70px) saturate(200%) brightness(0.9)',
           transform: 'scale(1.25)',
         }}
       />
-      {/* Readability guard: keeps text contrast intact over any artwork */}
-      <div className="absolute inset-0 bg-background/70 backdrop-blur-2xl" />
+      {/* Readability guard: keeps text contrast intact over artwork while letting colors shine through */}
+      <div className="absolute inset-0 bg-background/50 backdrop-blur-xl" />
     </div>
   );
 };
