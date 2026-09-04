@@ -78,6 +78,8 @@ interface AppSettings {
   lightMode: boolean;
   smartTransitions: boolean;
   transitionDuration: number; // seconds, 0-12
+  musicUniverse: boolean;
+  dynamicMusicUI: boolean;
 }
 
 interface ThemeContextType {
@@ -174,6 +176,8 @@ export const ThemeProvider = ({ children }: { children: ReactNode }) => {
       lightMode: false,
       smartTransitions: false,
       transitionDuration: 4,
+      musicUniverse: false,
+      dynamicMusicUI: false,
     };
     const saved = localStorage.getItem('nyra-settings');
     if (!saved) return defaults;
