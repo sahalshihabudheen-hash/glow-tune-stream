@@ -741,3 +741,100 @@ input[type="range"]::-moz-range-thumb:active {
     right: 350px;
   }
 }
+
+/* ============================================================
+   GLOBAL BEAT-REACTIVE SYSTEM
+   CSS vars set by DynamicMusicBackground.tsx rAF loop:
+     --beat-scale           1.0 → ~1.08  (pulsing scale)
+     --beat-glow-px         0px → ~30px  (glow radius)
+     --beat-glow-px-strong  0px → ~50px  (strong glow)
+     --beat-energy          0 → 1        (overall energy)
+     --beat-bass            0 → 1        (bass energy)
+     --beat-saturate        1 → ~1.5     (color saturation)
+   ============================================================ */
+
+:root {
+  --beat-scale: 1;
+  --beat-glow-px: 0px;
+  --beat-glow-px-strong: 0px;
+  --beat-energy: 0;
+  --beat-bass: 0;
+  --beat-saturate: 1;
+}
+
+/* Main Play/Pause button */
+.beat-play-btn {
+  transition: transform 0.1s cubic-bezier(0.2,0.8,0.2,1), box-shadow 0.1s ease-out !important;
+  transform: scale(var(--beat-scale)) !important;
+  box-shadow:
+    0 0 var(--beat-glow-px-strong) hsl(var(--primary) / 0.7),
+    0 0 var(--beat-glow-px) hsl(var(--primary) / 0.5),
+    0 0 15px hsl(var(--primary) / 0.4) !important;
+}
+
+/* Album art glow halo */
+.beat-art-glow {
+  transition: box-shadow 0.1s ease-out, transform 0.12s ease-out;
+  box-shadow: 0 0 var(--beat-glow-px) hsl(var(--primary) / 0.65) !important;
+  transform: scale(var(--beat-scale));
+}
+
+/* Neon glow strengthened by beat */
+.neon-glow {
+  box-shadow:
+    var(--neon-glow),
+    0 0 var(--beat-glow-px) hsl(var(--primary) / 0.5);
+}
+
+.neon-glow-strong {
+  box-shadow:
+    var(--neon-glow-strong),
+    0 0 var(--beat-glow-px-strong) hsl(var(--primary) / 0.6);
+}
+
+/* Active song row card */
+.beat-active-card {
+  transition: box-shadow 0.1s ease-out, border-color 0.1s ease-out;
+  box-shadow: 0 0 var(--beat-glow-px) hsl(var(--primary) / 0.4) !important;
+}
+
+/* Skip / prev / next buttons */
+.beat-skip-btn {
+  transition: transform 0.1s ease-out;
+  transform: scale(calc(1 + var(--beat-bass) * 0.04));
+}
+
+/* Soundwave visualizer */
+.beat-soundwave {
+  filter: saturate(var(--beat-saturate)) brightness(calc(1 + var(--beat-energy) * 0.35));
+  transition: filter 0.1s ease-out;
+}
+
+/* Player bar outer glow */
+.beat-player-bar {
+  box-shadow:
+    0 20px 50px rgba(0,0,0,0.6),
+    0 0 var(--beat-glow-px) hsl(var(--primary) / 0.3) !important;
+  transition: box-shadow 0.1s ease-out;
+}
+
+/* Song thumbnails in lists */
+.beat-thumb {
+  transition: box-shadow 0.1s ease-out;
+  box-shadow:
+    0 4px 12px rgba(0,0,0,0.4),
+    0 0 var(--beat-glow-px) hsl(var(--primary) / 0.35) !important;
+}
+
+/* Player top strip opacity pulses */
+.beat-player-strip {
+  opacity: calc(0.5 + var(--beat-energy) * 0.5) !important;
+  transition: opacity 0.08s ease-out;
+}
+
+/* General primary bg elements that should pulse (buttons, badges) */
+.beat-primary {
+  filter: brightness(calc(1 + var(--beat-energy) * 0.2)) saturate(var(--beat-saturate));
+  transition: filter 0.1s ease-out;
+}
+

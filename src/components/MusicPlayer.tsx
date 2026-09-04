@@ -251,11 +251,11 @@ const MusicPlayer = ({
   return (
     <>
     <footer className={cn(
-        'fixed bottom-20 left-3 right-3 md:bottom-6 md:left-[272px] transition-all duration-700 rounded-[2rem] md:rounded-[2.5rem] shadow-[0_20px_50px_rgba(0,0,0,0.6)] overflow-hidden group/player glass-premium border border-white/10 z-50',
+        'fixed bottom-20 left-3 right-3 md:bottom-6 md:left-[272px] transition-all duration-700 rounded-[2rem] md:rounded-[2.5rem] overflow-hidden group/player glass-premium border border-white/10 z-50 beat-player-bar',
         nowPlayingOpen ? 'md:right-[380px]' : 'md:right-6',
         'h-[88px] md:h-[136px] py-2 px-3 md:px-8'
       )}>
-        <div className="absolute top-0 left-0 right-0 h-[1.5px] bg-gradient-to-r from-transparent via-primary/60 to-transparent opacity-50 group-hover/player:opacity-100 transition-opacity" />
+        <div className="absolute top-0 left-0 right-0 h-[1.5px] bg-gradient-to-r from-transparent via-primary/60 to-transparent beat-player-strip group-hover/player:opacity-100 transition-opacity" />
         
         {/* Mobile View Player (h-[88px] on mobile, hidden on desktop) */}
         <div className="flex md:hidden h-full w-full items-center justify-between relative z-10 gap-2">
@@ -270,8 +270,8 @@ const MusicPlayer = ({
                 <>
                   <div className="relative shrink-0">
                     <div className={cn(
-                      "absolute -inset-1 rounded-lg bg-primary/30 blur-md transition-all duration-1000",
-                      isPlaying ? "opacity-100 scale-110 glow-pulse" : "opacity-0 scale-100"
+                      "absolute -inset-1 rounded-lg bg-primary/30 blur-md transition-all duration-1000 beat-art-glow",
+                      isPlaying ? "opacity-100 scale-110" : "opacity-0 scale-100"
                     )} />
                     <img
                       src={currentTrack.thumbnail}
@@ -317,7 +317,7 @@ const MusicPlayer = ({
           <div className="shrink-0 flex items-center justify-center">
             <button
               onClick={onPlayPause}
-              className="w-10 h-10 rounded-[1.1rem] bg-primary text-primary-foreground flex items-center justify-center shadow-[0_4px_15px_rgba(var(--primary),0.35)] hover:scale-105 active:scale-95 transition-all neon-glow"
+              className="w-10 h-10 rounded-[1.1rem] bg-primary text-primary-foreground flex items-center justify-center hover:scale-105 active:scale-95 transition-all neon-glow beat-play-btn"
             >
               {isPlaying ? <Pause className="w-4 h-4 fill-current" /> : <Play className="w-4 h-4 fill-current ml-0.5" />}
             </button>
@@ -389,8 +389,8 @@ const MusicPlayer = ({
               <>
                 <div className="relative shrink-0">
                   <div className={cn(
-                    "absolute -inset-1 rounded-xl bg-primary/30 blur-md transition-all duration-1000",
-                    isPlaying ? "opacity-100 scale-110 glow-pulse" : "opacity-0 scale-100"
+                    "absolute -inset-1 rounded-xl bg-primary/30 blur-md transition-all duration-1000 beat-art-glow",
+                    isPlaying ? "opacity-100 scale-110" : "opacity-0 scale-100"
                   )} />
                   <img
                     src={currentTrack.thumbnail}
@@ -424,19 +424,19 @@ const MusicPlayer = ({
             <div className="flex items-center gap-6 lg:gap-8">
               <button 
                 onClick={onPrevious}
-                className="text-muted-foreground hover:text-foreground transition-all active:scale-90"
+                className="text-muted-foreground hover:text-foreground transition-all active:scale-90 beat-skip-btn"
               >
                 <SkipBack className="w-4.5 h-4.5 fill-current" />
               </button>
               <button
                 onClick={onPlayPause}
-                className="w-11 h-11 rounded-xl bg-primary text-primary-foreground flex items-center justify-center shadow-[0_0_15px_hsl(var(--primary)/0.4)] hover:scale-110 active:scale-95 transition-all neon-glow"
+                className="w-11 h-11 rounded-xl bg-primary text-primary-foreground flex items-center justify-center hover:scale-110 active:scale-95 transition-all neon-glow beat-play-btn"
               >
                 {isPlaying ? <Pause className="w-4.5 h-4.5 fill-current" /> : <Play className="w-4.5 h-4.5 fill-current ml-0.5" />}
               </button>
               <button 
                 onClick={onNext}
-                className="text-muted-foreground hover:text-foreground transition-all active:scale-90"
+                className="text-muted-foreground hover:text-foreground transition-all active:scale-90 beat-skip-btn"
               >
                 <SkipForward className="w-4.5 h-4.5 fill-current" />
               </button>
@@ -444,7 +444,7 @@ const MusicPlayer = ({
 
             {/* Soundwave (Middle) */}
             <div className={cn(
-              "w-36 h-8 opacity-90 overflow-hidden pointer-events-none transition-all duration-300",
+              "w-36 h-8 opacity-90 overflow-hidden pointer-events-none transition-all duration-300 beat-soundwave",
               nowPlayingOpen ? "hidden" : "flex items-center justify-center"
             )}>
               <SoundwaveVisualizer isPlaying={isPlaying} className="w-full h-full" />

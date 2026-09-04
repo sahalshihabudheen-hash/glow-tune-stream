@@ -688,7 +688,7 @@ const PlaylistView = () => {
                   className={cn(
                     'w-full flex items-center gap-4 p-3 rounded-2xl transition-all duration-300 group relative overflow-hidden',
                     currentTrack?.id === track.id
-                      ? 'bg-primary/5 border border-primary/30 shadow-[0_0_20px_rgba(var(--primary),0.08)]'
+                      ? 'bg-primary/5 border border-primary/30 shadow-[0_0_20px_rgba(var(--primary),0.08)] beat-active-card'
                       : 'glass-premium border border-white/5 hover:bg-white/10 hover:border-white/10',
                     draggedIndex === index && 'opacity-50 scale-[0.98]'
                   )}
@@ -718,7 +718,10 @@ const PlaylistView = () => {
                     <img
                       src={track.thumbnail}
                       alt={track.title}
-                      className="w-12 h-12 md:w-14 md:h-14 rounded-xl object-cover shadow-lg transition-transform duration-500 group-hover/art:scale-110"
+                      className={cn(
+                        "w-12 h-12 md:w-14 md:h-14 rounded-xl object-cover shadow-lg transition-transform duration-500 group-hover/art:scale-110",
+                        currentTrack?.id === track.id && "beat-thumb"
+                      )}
                       loading="lazy"
                     />
                     <button
