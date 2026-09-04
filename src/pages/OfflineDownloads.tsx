@@ -60,10 +60,12 @@ export default function OfflineDownloads() {
 
     window.addEventListener('online', handleOnline);
     window.addEventListener('offline', handleOffline);
+    window.addEventListener('nyra:offline-cache-updated', loadTracks);
 
     return () => {
       window.removeEventListener('online', handleOnline);
       window.removeEventListener('offline', handleOffline);
+      window.removeEventListener('nyra:offline-cache-updated', loadTracks);
     };
   }, []);
 
@@ -89,6 +91,7 @@ export default function OfflineDownloads() {
       title: track.title,
       thumbnail: track.thumbnail,
       artist: track.artist || 'Unknown Artist',
+      channel: track.artist || 'Unknown Artist',
       duration: track.duration || 0,
     };
     
@@ -98,6 +101,7 @@ export default function OfflineDownloads() {
       title: t.title,
       thumbnail: t.thumbnail,
       artist: t.artist || 'Unknown Artist',
+      channel: t.artist || 'Unknown Artist',
       duration: t.duration || 0,
     }));
 
@@ -113,6 +117,7 @@ export default function OfflineDownloads() {
       title: shuffled[0].title,
       thumbnail: shuffled[0].thumbnail,
       artist: shuffled[0].artist || 'Unknown Artist',
+      channel: shuffled[0].artist || 'Unknown Artist',
       duration: shuffled[0].duration || 0,
     };
     
@@ -121,6 +126,7 @@ export default function OfflineDownloads() {
       title: t.title,
       thumbnail: t.thumbnail,
       artist: t.artist || 'Unknown Artist',
+      channel: t.artist || 'Unknown Artist',
       duration: t.duration || 0,
     }));
     

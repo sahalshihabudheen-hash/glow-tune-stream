@@ -21,8 +21,7 @@ export async function getRequestUser(req: Request) {
 }
 
 /** Checks whether the given user has the admin role. */
-export async function isAdmin(userId: string, email?: string | null): Promise<boolean> {
-  if (email === "admin@gmail.com" || email === "sahalshihabudheen@gmail.com") return true;
+export async function isAdmin(userId: string, _email?: string | null): Promise<boolean> {
   const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
   const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
   const supabase = createClient(supabaseUrl, serviceKey);

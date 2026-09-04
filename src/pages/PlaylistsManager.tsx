@@ -10,6 +10,7 @@ import CreatePlaylistDialog from '@/components/CreatePlaylistDialog';
 import ImportYouTubePlaylistDialog from '@/components/ImportYouTubePlaylistDialog';
 import PlaylistGridPhoto from '@/components/PlaylistGridPhoto';
 import { cn } from '@/lib/utils';
+import { readCache, writeCache, prefetchThumbs } from '@/lib/offlineCache';
 
 interface Playlist {
   id: string;
@@ -23,8 +24,10 @@ interface Playlist {
 const PlaylistsManager = () => {
   const navigate = useNavigate();
   const { user, loading: authLoading } = useAuth();
-  const [playlists, setPlaylists] = useState<Playlist[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [playlists, setPlaylists] = useState<Playlist[]>(
+    () => readCache<Playlist[]>('playlists') || []
+  );
+  const [loading, setLoading] = useState(() => !readCache<Playlist[]>('playlists'));
   const [searchQuery, setSearchQuery] = useState('');
   const [activeTab, setActiveTab] = useState('playlists');
 
@@ -57,8 +60,11 @@ const PlaylistsManager = () => {
       })) || [];
 
       setPlaylists(playlistsWithDetails);
+      writeCache('playlists', playlistsWithDetails);
+      prefetchThumbs(playlistsWithDetails.flatMap(p => p.thumbnails || []));
     } catch (error: any) {
-      toast.error('Failed to load playlists');
+      // Keep whatever was cached so the page still works offline.
+      if (playlists.length === 0) toast.error('Failed to load playlists');
     } finally {
       setLoading(false);
     }

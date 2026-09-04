@@ -50,6 +50,52 @@
     --sidebar-border: 0 0% 15%;
     --sidebar-ring: 50 100% 50%;
   }
+
+  /* ===== LIGHT THEME ===== */
+  /* Activated by adding .light class to <html> or <body> via ThemeContext / Settings toggle */
+  :root.light {
+    --background: 0 0% 97%;
+    --foreground: 0 0% 8%;
+
+    --card: 0 0% 100%;
+    --card-foreground: 0 0% 8%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 0 0% 8%;
+
+    --primary: 45 95% 40%;
+    --primary-foreground: 0 0% 100%;
+
+    --secondary: 0 0% 90%;
+    --secondary-foreground: 0 0% 15%;
+
+    --muted: 0 0% 93%;
+    --muted-foreground: 0 0% 45%;
+
+    --accent: 45 95% 40%;
+    --accent-foreground: 0 0% 100%;
+
+    --destructive: 0 84.2% 50%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 0 0% 82%;
+    --input: 0 0% 88%;
+    --ring: 45 95% 40%;
+
+    /* NYRA Custom - Light */
+    --neon: 45 95% 40%;
+    --neon-glow: 0 2px 12px hsl(45 95% 40% / 0.25), 0 4px 24px hsl(45 95% 40% / 0.15);
+    --neon-glow-strong: 0 4px 20px hsl(45 95% 40% / 0.35), 0 8px 40px hsl(45 95% 40% / 0.2);
+
+    --sidebar-background: 0 0% 94%;
+    --sidebar-foreground: 0 0% 10%;
+    --sidebar-primary: 45 95% 40%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 0 0% 88%;
+    --sidebar-accent-foreground: 0 0% 10%;
+    --sidebar-border: 0 0% 80%;
+    --sidebar-ring: 45 95% 40%;
+  }
 }
 
 @layer base {
@@ -96,6 +142,22 @@
     background: linear-gradient(135deg, hsl(0 0% 10% / 0.8), hsl(0 0% 5% / 0.9));
     backdrop-filter: blur(30px);
     border: 1px solid hsl(0 0% 20% / 0.3);
+  }
+
+  /* Light theme glass overrides */
+  :root.light .glass {
+    background: hsl(0 0% 98% / 0.85);
+    border: 1px solid hsl(0 0% 80% / 0.5);
+  }
+
+  :root.light .glass-dark {
+    background: hsl(0 0% 92% / 0.9);
+    border: 1px solid hsl(0 0% 78% / 0.4);
+  }
+
+  :root.light .glass-premium {
+    background: linear-gradient(135deg, hsl(0 0% 100% / 0.9), hsl(0 0% 94% / 0.95));
+    border: 1px solid hsl(0 0% 75% / 0.35);
   }
 
   /* Gradient theme support - applies gradient to elements with bg-primary when gradient is enabled */
@@ -554,4 +616,128 @@ input[type="range"]::-moz-range-thumb:active {
 .nameplate-badge {
   transition: all 0.3s ease;
   letter-spacing: 0.03em;
+}
+
+/* ===== Safe-area (notch / camera cutout / gesture bar) support ===== */
+@layer utilities {
+  .pt-safe { padding-top: env(safe-area-inset-top, 0px); }
+  .pb-safe { padding-bottom: env(safe-area-inset-bottom, 0px); }
+  .px-safe {
+    padding-left: max(env(safe-area-inset-left, 0px), 0px);
+    padding-right: max(env(safe-area-inset-right, 0px), 0px);
+  }
+  .mb-safe { margin-bottom: env(safe-area-inset-bottom, 0px); }
+  .h-safe-screen { height: 100dvh; }
+}
+
+/* ============= PERFORMANCE: REDUCED MOTION ============= */
+/* Respects user OS setting - disables ALL animations for accessibility & battery saving */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+
+  .float,
+  .shimmer,
+  .glow-pulse,
+  .animate-pulse-slow,
+  .animate-pulse-glow,
+  .rotate-glow,
+  .breathe,
+  .gradient-animated,
+  .soundwave-bar,
+  .equalizer-bar,
+  .animate-nameplate-shimmer,
+  .animate-nameplate-fire,
+  .animate-nameplate-neon,
+  .animate-nameplate-pulse-glow,
+  .animate-nameplate-rainbow {
+    animation: none !important;
+  }
+}
+
+/* ============= PERFORMANCE: SMALL / LOW-END SCREENS ============= */
+/* Android Wear, budget phones, watches — strip GPU-heavy effects */
+@media (max-width: 480px) {
+  /* Kill backdrop-filter blur (very expensive on Mali/Adreno GPUs) */
+  .glass,
+  .glass-dark,
+  .glass-premium {
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+  }
+
+  /* Disable 3D tilt transform */
+  .tilt-card:hover {
+    transform: none !important;
+  }
+
+  /* Simplify card hover — only opacity change, no translateY */
+  .card-glow:hover {
+    transform: none !important;
+    box-shadow: 0 0 12px hsl(var(--primary) / 0.2) !important;
+  }
+
+  /* Disable animated gradient background — use static instead */
+  .gradient-animated {
+    animation: none !important;
+    background: hsl(var(--background)) !important;
+    background-size: unset !important;
+  }
+
+  /* Kill heavy floating animation */
+  .float {
+    animation: none !important;
+  }
+
+  /* Reduce equalizer animation complexity */
+  .equalizer-bar {
+    animation-duration: 2s !important;
+  }
+
+  /* Make scrollbar invisible on small screens to save paint */
+  ::-webkit-scrollbar {
+    width: 0px !important;
+    display: none !important;
+  }
+}
+
+/* ============= LIGHT THEME: BACKGROUND & SCROLLBAR OVERRIDES ============= */
+:root.light body {
+  background-color: hsl(0 0% 97%);
+  color: hsl(0 0% 8%);
+}
+
+:root.light ::-webkit-scrollbar-track {
+  background: hsl(0 0% 90%);
+}
+
+:root.light ::-webkit-scrollbar-thumb {
+  background: hsl(0 0% 65%);
+}
+
+:root.light ::-webkit-scrollbar-thumb:hover {
+  background: hsl(var(--primary));
+}
+
+:root.light .gradient-bg {
+  background: radial-gradient(ellipse at top, hsl(0 0% 90%) 0%, hsl(0 0% 97%) 50%);
+}
+
+:root.light .swipe-hint::after {
+  background: linear-gradient(to left, hsl(0 0% 97%), transparent);
+}
+
+/* Now Playing side panel: shift layout instead of overlapping content (desktop only) */
+@media (min-width: 768px) {
+  html.np-open .md\:ml-64 {
+    margin-right: 350px;
+    transition: margin-right 0.5s ease-in-out;
+  }
+  html.np-open .app-navbar {
+    right: 350px;
+  }
 }

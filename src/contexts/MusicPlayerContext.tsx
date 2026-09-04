@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useRef, useCallback, useEffect } from 'react';
-import { notifyNativeTrack, notifyNativePlayback, listenCarCommands } from '@/lib/nyraMediaBridge';
+import { notifyNativeTrack, notifyNativePlayback, listenCarCommands, isNative } from '@/lib/nyraMediaBridge';
 import { toast } from 'sonner';
 import { usePlaylist } from '@/hooks/usePlaylist';
 import { useQueue } from '@/hooks/useQueue';
@@ -7,21 +7,53 @@ import { useFavorites } from '@/hooks/useFavorites';
 import { useListeningHistory } from '@/hooks/useListeningHistory';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useTabTitle } from '@/hooks/useTabTitle';
-import { useDjAudio } from '@/hooks/useDjAudio';
 import { getTrackOffline, isTrackDownloadedOffline } from '@/lib/offlineStore';
 import { COBALT_INSTANCES, PIPED_INSTANCES } from '@/lib/instances';
 
-const getAudioUrlEndpoint = (videoId: string, options?: { stream?: boolean; download?: boolean; title?: string }) => {
-  const baseUrl = '/api/get-audio-url';
-  const params = new URLSearchParams({ videoId });
+const getAudioFunctionBase = () => {
+  if (typeof window !== 'undefined' && window.location.hostname.includes('vercel.app')) {
+    return '/api/get-audio-url';
+  }
+  const backendUrl = (import.meta.env.VITE_SUPABASE_URL || '').replace(/\/$/, '');
+  return backendUrl ? `${backendUrl}/functions/v1/get-audio-url` : '/api/get-audio-url';
+};
+
+const getAudioUrlEndpoint = (videoId: string, options?: { stream?: boolean; download?: boolean; title?: string; proxyUrl?: string }) => {
+  const baseUrl = getAudioFunctionBase();
+  const params = new URLSearchParams();
+  if (options?.proxyUrl) params.set('proxyUrl', options.proxyUrl);
+  else params.set('videoId', videoId);
   if (options?.stream) params.append('stream', '1');
   if (options?.download) params.append('download', '1');
   if (options?.title) params.append('title', options.title);
   return `${baseUrl}?${params.toString()}`;
 };
 
-const DJ_STREAM_TOAST_ID = 'dj-stream-resolve';
 const PLAYBACK_START_TIMEOUT_MS = 6500;
+
+const getTimeoutSignal = (ms: number): AbortSignal => AbortSignal.timeout(ms);
+
+const isMobileLikeDevice = () => {
+  if (typeof navigator === 'undefined') return false;
+  return /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent) || navigator.maxTouchPoints > 1;
+};
+
+const safelyParseJson = async <T,>(res: Response): Promise<T | null> => {
+  try {
+    return (await res.json()) as T;
+  } catch {
+    return null;
+  }
+};
+
+const shuffle = <T,>(arr: T[]): T[] => {
+  const copy = [...arr];
+  for (let i = copy.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [copy[i], copy[j]] = [copy[j], copy[i]];
+  }
+  return copy;
+};
 
 async function raceFirstSuccess<T>(promises: Promise<T>[]): Promise<T> {
   return new Promise((resolve, reject) => {
@@ -215,7 +247,9 @@ interface MusicPlayerContextType {
   shuffleMode: boolean;
   toggleShuffle: () => void;
   loopMode: 'off' | 'all' | 'one';
+  loopOneCount: number;
   cycleLoopMode: () => void;
+  toggleLoopOne: () => void;
 
   // Favorites
   isFavorite: (trackId: string) => boolean;
@@ -260,32 +294,29 @@ export function MusicPlayerProvider({ children }: { children: React.ReactNode })
   const [tracks, setTracks] = useState<Track[]>([]);
   const [playingFromPlaylist, setPlayingFromPlaylist] = useState(false);
   const [useBackgroundAudioMode, setUseBackgroundAudioModeState] = useState(() => {
-    if (typeof window !== 'undefined') {
-      const saved = localStorage.getItem('nyra-bg-audio-mode');
-      // Default to true now as requested by the user, providing full advanced features (EQ, split channels, crossfading) via Web Audio API.
-      return saved !== 'false';
-    }
-    return true;
+    return false;
   });
 
   const setUseBackgroundAudioMode = useCallback((val: boolean) => {
     setUseBackgroundAudioModeState(val);
     localStorage.setItem('nyra-bg-audio-mode', String(val));
-    if (val) {
-      toast.info('Advanced Music Engine activated (direct cloud stream rendering with full Web Audio EQ & crossfade).');
-    } else {
-      toast.info('Standard Music Engine activated (hybrid background fallback player).');
-    }
   }, []);
 
-  const [useBackgroundAudioOnly, setUseBackgroundAudioOnlyState] = useState(false);
-  const useBackgroundAudioOnlyRef = useRef(false);
+  const [useBackgroundAudioOnly, setUseBackgroundAudioOnlyState] = useState(() => {
+    // Native shells can sustain direct audio in the background. Mobile browsers
+    // start with the faster iframe path and use cached audio whenever available.
+    const native = isNative();
+    if (!native) localStorage.removeItem('nyra-background-audio-only');
+    return native;
+  });
+  const useBackgroundAudioOnlyRef = useRef(useBackgroundAudioOnly);
   const isResolvingStreamRef = useRef(false);
 
   const setUseBackgroundAudioOnly = useCallback((val: boolean | ((prev: boolean) => boolean)) => {
     setUseBackgroundAudioOnlyState(prev => {
       const next = typeof val === 'function' ? val(prev) : val;
       useBackgroundAudioOnlyRef.current = next;
+      localStorage.setItem('nyra-background-audio-only', String(next));
       return next;
     });
   }, []);
@@ -293,8 +324,15 @@ export function MusicPlayerProvider({ children }: { children: React.ReactNode })
   const [ytApiReady, setYtApiReady] = useState(false);
   const [showMiniPlayer, setShowMiniPlayer] = useState(false);
   const [loopMode, setLoopMode] = useState<'off' | 'all' | 'one'>(() => {
+    const savedCount = Number(localStorage.getItem('nyra-loop-one-count') || '0');
+    if (savedCount > 0) return 'one';
     return (localStorage.getItem('nyra-loop-mode') as 'off' | 'all' | 'one') || 'off';
   });
+  const [loopOneCount, setLoopOneCount] = useState(() => {
+    const saved = Number(localStorage.getItem('nyra-loop-one-count') || '0');
+    return Number.isFinite(saved) ? Math.max(0, Math.min(9, saved)) : 0;
+  });
+  const loopOneCountRef = useRef(loopOneCount);
   const [volume, setVolume] = useState(() => {
     const saved = localStorage.getItem('nyra-volume');
     return saved ? parseInt(saved, 10) : 80;
@@ -332,9 +370,9 @@ export function MusicPlayerProvider({ children }: { children: React.ReactNode })
   const primaryAudioRef = useRef<HTMLAudioElement | null>(null);
   const secondaryAudioRef = useRef<HTMLAudioElement | null>(null);
   const handleNextRef = useRef<() => void>();
+  const handlePreviousRef = useRef<() => void>();
+  const forceBackgroundPlaybackRef = useRef<((track?: Track, options?: { trackList?: Track[]; fromPlaylist?: boolean }) => Promise<boolean>) | null>(null);
   const audioPlayAttemptRef = useRef(0);
-
-  const djAudio = useDjAudio(audioRef, isPlaying);
 
   const setPlaybackSource = useCallback((source: 'youtube' | 'background' | null) => {
     activeSourceRef.current = source;
@@ -361,7 +399,7 @@ export function MusicPlayerProvider({ children }: { children: React.ReactNode })
     targetAudio.src = src;
     targetAudio.currentTime = currentTime;
     targetAudio.volume = isMuted ? 0 : volume / 100;
-    targetAudio.loop = loopMode === 'one';
+      targetAudio.loop = false;
 
     // Point the context-wide active audioRef to the target
     audioRef.current = targetAudio;
@@ -369,31 +407,17 @@ export function MusicPlayerProvider({ children }: { children: React.ReactNode })
     if (wasPlaying) {
       targetAudio.play().then(() => {
         setIsPlaying(true);
-        if (target === 'primary') {
-          try {
-            djAudio.init();
-          } catch (err) {
-            console.warn('djAudio.init() on primary audio switch-back failed:', err);
-          }
-        }
       }).catch(err => {
         console.warn('[Audio Element Switch] Resume failed on target:', err);
       });
     }
-  }, [isPlaying, volume, isMuted, loopMode, djAudio]);
+  }, [isPlaying, volume, isMuted, loopMode]);
 
   const safePlay = useCallback(async (audio: HTMLAudioElement, shouldApply: () => boolean = () => true) => {
     try {
       await audio.play();
       if (!shouldApply()) return false;
       setIsPlaying(true);
-      if (audio === primaryAudioRef.current) {
-        try {
-          djAudio.init();
-        } catch (err) {
-          console.warn('djAudio.init() in safePlay failed:', err);
-        }
-      }
       return true;
     } catch (e: any) {
       if (e?.name === 'NotAllowedError') {
@@ -462,7 +486,7 @@ export function MusicPlayerProvider({ children }: { children: React.ReactNode })
 
   const {
     queue, addToQueue, removeFromQueue, clearQueue,
-    getNextFromQueue, shuffleMode, toggleShuffle, setLastPlayed,
+    getNextFromQueue, peekNextFromQueue, shuffleMode, toggleShuffle, setLastPlayed,
   } = useQueue();
 
   const [nowPlayingOpen, setNowPlayingOpen] = useState(false);
@@ -476,19 +500,24 @@ export function MusicPlayerProvider({ children }: { children: React.ReactNode })
         const audio = new Audio();
         audio.id = 'primary-audio';
         audio.preload = 'auto';
-        audio.crossOrigin = 'anonymous'; // Critical for Web Audio API
+        audio.controls = false;
+        audio.disableRemotePlayback = false;
         (audio as any).playsInline = true;
         audio.setAttribute('playsinline', 'true');
         audio.setAttribute('webkit-playsinline', 'true');
+        audio.setAttribute('x-webkit-airplay', 'allow');
         primaryAudioRef.current = audio;
       }
       if (!secondaryAudioRef.current) {
         const audio = new Audio();
         audio.id = 'secondary-audio';
         audio.preload = 'auto';
+        audio.controls = false;
+        audio.disableRemotePlayback = false;
         (audio as any).playsInline = true;
         audio.setAttribute('playsinline', 'true');
         audio.setAttribute('webkit-playsinline', 'true');
+        audio.setAttribute('x-webkit-airplay', 'allow');
         secondaryAudioRef.current = audio;
       }
 
@@ -510,13 +539,14 @@ export function MusicPlayerProvider({ children }: { children: React.ReactNode })
 
     // Sync loop mode with audio elements
     useEffect(() => {
+      loopOneCountRef.current = loopOneCount;
       if (primaryAudioRef.current) {
-        primaryAudioRef.current.loop = loopMode === 'one';
+        primaryAudioRef.current.loop = false;
       }
       if (secondaryAudioRef.current) {
-        secondaryAudioRef.current.loop = loopMode === 'one';
+        secondaryAudioRef.current.loop = false;
       }
-    }, [loopMode]);
+    }, [loopOneCount]);
 
   // Audio event listeners bound to both elements to track state seamlessly
   useEffect(() => {
@@ -524,8 +554,21 @@ export function MusicPlayerProvider({ children }: { children: React.ReactNode })
     const secondary = secondaryAudioRef.current;
 
     const handleEnded = () => {
-      if (loopMode === 'one') {
-        // Native loop handles it, but just in case
+      if (loopOneCountRef.current > 0) {
+        loopOneCountRef.current -= 1;
+        const nextCount = loopOneCountRef.current;
+        setLoopOneCount(nextCount);
+        localStorage.setItem('nyra-loop-one-count', String(nextCount));
+        if (nextCount === 0) {
+          setLoopMode('off');
+          localStorage.setItem('nyra-loop-mode', 'off');
+        }
+        const audio = audioRef.current;
+        if (audio) {
+          audio.currentTime = 0;
+          audio.play().catch(() => {});
+          setIsPlaying(true);
+        }
         return;
       }
       if (settings.autoPlayNext && handleNextRef.current) {
@@ -587,7 +630,7 @@ export function MusicPlayerProvider({ children }: { children: React.ReactNode })
         secondary.removeEventListener('pause', handlePause);
       }
     };
-  }, [settings.autoPlayNext]);
+    }, [settings.autoPlayNext]);
 
   // Sync isPlaying with actual audio or youtube playing state periodically to avoid state desyncs
   // Also updates lockscreen Media Session position progress
@@ -652,6 +695,72 @@ export function MusicPlayerProvider({ children }: { children: React.ReactNode })
     return () => clearInterval(syncInterval);
   }, [isPlaying]);
 
+  // Background auto-advance watchdog: if the tab/app is hidden and the current
+  // audio element has finished (or stalled at the very end) without the "ended"
+  // event landing, force the next track so playlists keep rolling.
+  useEffect(() => {
+    if (!settings.autoPlayNext) return;
+    const id = setInterval(() => {
+      if (document.visibilityState !== 'hidden') return;
+      if (activeSourceRef.current !== 'background') return;
+      const audio = audioRef.current;
+      if (!audio || !audio.src) return;
+      const dur = audio.duration;
+      const atEnd = audio.ended || (!!dur && dur > 0 && dur - audio.currentTime < 0.4);
+      if (atEnd && audio.paused && loopOneCountRef.current === 0) {
+        handleNextRef.current?.();
+      }
+    }, 2000);
+    return () => clearInterval(id);
+  }, [settings.autoPlayNext]);
+
+  // Native builds and mobile browsers both suspend the YouTube iframe once the
+  // app/tab is backgrounded. Hand playback over to the HTMLAudioElement so music
+  // keeps running with lock-screen controls (no "desktop mode" workaround needed).
+  useEffect(() => {
+    if (!isNative() && !isMobileLikeDevice()) return;
+
+    const keepAudioAlive = () => {
+      // Session-only switch: never persisted for browsers, otherwise the app
+      // gets stuck on the audio-only path forever and nothing plays again.
+      useBackgroundAudioOnlyRef.current = true;
+
+      if (!currentTrack || !isPlaying) return;
+
+      if (activeSourceRef.current !== 'background' || !audioRef.current?.src) {
+        void forceBackgroundPlaybackRef.current?.(currentTrack, {
+          trackList: tracks.length ? tracks : [currentTrack],
+          fromPlaylist: playingFromPlaylist,
+        });
+        return;
+      }
+
+      audioRef.current.play().catch(() => {
+        // Background policies vary by OS; the next foreground tap can resume.
+      });
+    };
+
+    const handleVisibility = () => {
+      if (document.visibilityState === 'hidden') {
+        keepAudioAlive();
+        return;
+      }
+      // Back in the foreground: mobile browsers can use the fast iframe path
+      // again, so release the audio-only lock (native shells keep it on).
+      if (!isNative()) {
+        useBackgroundAudioOnlyRef.current = false;
+        localStorage.removeItem('nyra-background-audio-only');
+      }
+    };
+
+    window.addEventListener('pagehide', keepAudioAlive);
+    document.addEventListener('visibilitychange', handleVisibility);
+    return () => {
+      window.removeEventListener('pagehide', keepAudioAlive);
+      document.removeEventListener('visibilitychange', handleVisibility);
+    };
+  }, [currentTrack, isPlaying, tracks, playingFromPlaylist]);
+
   // Load YouTube IFrame API
   useEffect(() => {
     const yt = (window as any).YT;
@@ -701,6 +810,19 @@ export function MusicPlayerProvider({ children }: { children: React.ReactNode })
           } else if (e.data === yt.PlayerState.PAUSED) {
             setIsPlaying(false);
           } else if (e.data === yt.PlayerState.ENDED) {
+            if (loopOneCountRef.current > 0) {
+              loopOneCountRef.current -= 1;
+              const nextCount = loopOneCountRef.current;
+              setLoopOneCount(nextCount);
+              localStorage.setItem('nyra-loop-one-count', String(nextCount));
+              if (nextCount === 0) {
+                setLoopMode('off');
+                localStorage.setItem('nyra-loop-mode', 'off');
+              }
+              try { e.target.seekTo(0, true); e.target.playVideo(); } catch {}
+              setIsPlaying(true);
+              return;
+            }
             if (settings.autoPlayNext && handleNextRef.current) handleNextRef.current();
             else setIsPlaying(false);
           }
@@ -713,7 +835,7 @@ export function MusicPlayerProvider({ children }: { children: React.ReactNode })
         },
       },
     });
-  }, [settings.autoPlayNext]);
+  }, [settings.autoPlayNext, loopMode]);
 
   const nextTrackResolvedUrlRef = useRef<{ id: string, url: string, crossOriginSetting: 'anonymous' | null } | null>(null);
 
@@ -723,7 +845,8 @@ export function MusicPlayerProvider({ children }: { children: React.ReactNode })
     let nextTrack: Track | null = null;
 
     // Check queue first
-    const nextFromQueue = getNextFromQueue(playlist);
+    // Peek only: preloading must never consume or reorder the actual queue.
+    const nextFromQueue = peekNextFromQueue(playlist);
     if (nextFromQueue) {
       nextTrack = nextFromQueue;
     } else if (playingFromPlaylist) {
@@ -760,13 +883,13 @@ export function MusicPlayerProvider({ children }: { children: React.ReactNode })
       }
 
       // Resolve via proxy endpoint
-      const proxyStreamUrl = getAudioUrlEndpoint(nextId, { stream: true });
+      const proxyStreamUrl = getAudioUrlEndpoint(nextId, { stream: true, title: nextTrack.title });
       nextTrackResolvedUrlRef.current = { id: nextId, url: proxyStreamUrl, crossOriginSetting: 'anonymous' };
       console.log('[Background Preload] Next track stream proxy url pre-resolved.');
     } catch (e) {
       console.error('[Background Preload] Failed to pre-resolve next track:', e);
     }
-  }, [currentTrack, playlist, playingFromPlaylist, getNextTrack, getNextFromQueue, tracks, currentTrackIndex, loopMode]);
+  }, [currentTrack, playlist, playingFromPlaylist, getNextTrack, peekNextFromQueue, tracks, currentTrackIndex, loopMode]);
 
   // Preload next song as soon as current song starts
   useEffect(() => {
@@ -821,7 +944,8 @@ export function MusicPlayerProvider({ children }: { children: React.ReactNode })
 
         // 1. Try local/Supabase stream proxy
         console.log('Resolving stream via edge proxy...');
-        const proxyStreamUrl = getAudioUrlEndpoint(videoId, { stream: true });
+        const trackTitle = currentTrack?.id === videoId ? currentTrack.title : undefined;
+        const proxyStreamUrl = getAudioUrlEndpoint(videoId, { stream: true, title: trackTitle });
         let success = await playAudioUrl(proxyStreamUrl, 'anonymous');
         if (success) {
           isResolvingStreamRef.current = false;
@@ -831,7 +955,7 @@ export function MusicPlayerProvider({ children }: { children: React.ReactNode })
         // 2. Try direct audio URL from edge function
         try {
           console.log('Edge proxy failed. Querying direct url JSON...');
-          const response = await fetch(getAudioUrlEndpoint(videoId));
+          const response = await fetch(getAudioUrlEndpoint(videoId, { title: trackTitle }));
           const data = response.ok ? await response.json() : null;
           const directAudioUrl = data?.audioUrl || data?.audioUrl1;
           if (directAudioUrl) {
@@ -843,7 +967,7 @@ export function MusicPlayerProvider({ children }: { children: React.ReactNode })
             }
 
             // If CORS fails, raw playback is only useful outside DJ-only mode.
-            if (!useBackgroundAudioOnlyRef.current) {
+            if (!useBackgroundAudioOnlyRef.current || isNative()) {
               success = await playAudioUrl(directAudioUrl, null);
               if (success) {
                 toast.warning('Audio filters disabled for this track (raw stream fallback).');
@@ -858,26 +982,26 @@ export function MusicPlayerProvider({ children }: { children: React.ReactNode })
 
         // 3. Fallback to high-performance client-side resolver (Cobalt / Piped / Invidious)
         try {
-          toast.info('Finding an optimal audio stream...', { id: DJ_STREAM_TOAST_ID });
+          toast.info('Finding an optimal audio stream...');
           const clientUrl = await resolveAudioUrlOnClient(videoId);
           if (clientUrl) {
             success = await playAudioUrl(clientUrl, 'anonymous');
             if (success) {
-              toast.success('High-quality stream connected!', { id: DJ_STREAM_TOAST_ID });
+              toast.success('High-quality stream connected!');
               isResolvingStreamRef.current = false;
               return true;
             }
 
-            // Proxy the direct URL through our Express server to guarantee CORS compatibility!
-            const proxiedUrl = `/api/get-audio-url?proxyUrl=${encodeURIComponent(clientUrl)}`;
+            // Proxy the direct URL through our edge function to guarantee CORS compatibility!
+            const proxiedUrl = getAudioUrlEndpoint(videoId, { proxyUrl: clientUrl, title: trackTitle });
             success = await playAudioUrl(proxiedUrl, 'anonymous');
             if (success) {
-              toast.success('High-quality stream connected!', { id: DJ_STREAM_TOAST_ID });
+              toast.success('High-quality stream connected!');
               isResolvingStreamRef.current = false;
               return true;
             }
 
-            if (!useBackgroundAudioOnlyRef.current) {
+            if (!useBackgroundAudioOnlyRef.current || isNative()) {
               success = await playAudioUrl(clientUrl, null);
               if (success) {
                 toast.warning('Audio filters disabled for this track (CORS cloud fallback).');
@@ -905,6 +1029,17 @@ export function MusicPlayerProvider({ children }: { children: React.ReactNode })
       }
       const resolved = await tryRobustResolution();
       if (!resolved) {
+        // Never leave the user staring at a dead pause button: if no direct
+        // audio stream could be resolved, fall back to the YouTube player.
+        if (!isDownloaded && navigator.onLine) {
+          console.warn('Direct audio failed, falling back to YouTube player.');
+          setPlaybackSource('youtube');
+          const yt = (window as any).YT;
+          if (ytApiReady && yt?.Player) {
+            createPlayer(videoId);
+            return;
+          }
+        }
         toast.error('Local audio failed to load. Tap play to retry.');
       }
       return;
@@ -958,28 +1093,7 @@ export function MusicPlayerProvider({ children }: { children: React.ReactNode })
     } else {
       toast.error('Player not ready. Please try again.');
     }
-  }, [ytApiReady, createPlayer, setPlaybackSource, playAudioUrl]);
-
-  // Handle visibility change (swipe home / lock phone / open game) to keep playback alive by forcing standard audio stream
-  useEffect(() => {
-    const handleVisibilityChange = () => {
-      if (document.visibilityState === 'hidden') {
-        console.log('[Visibility Change] Page hidden. Seamlessly switching to background audio element to guarantee uninterrupted play.');
-        switchToAudioElement('secondary');
-        // If we are playing on YouTube player, seamlessly switch to Background Audio Mode!
-        if (isPlaying && activeSourceRef.current === 'youtube' && currentTrack) {
-          playWithBackgroundAudio(currentTrack.id);
-        }
-      } else if (document.visibilityState === 'visible') {
-        console.log('[Visibility Change] Page visible. Seamlessly switching back to primary audio element for full Web Audio visualizers and DJ capabilities.');
-        switchToAudioElement('primary');
-      }
-    };
-    document.addEventListener('visibilitychange', handleVisibilityChange);
-    return () => {
-      document.removeEventListener('visibilitychange', handleVisibilityChange);
-    };
-  }, [isPlaying, currentTrack, playWithBackgroundAudio, switchToAudioElement]);
+  }, [ytApiReady, createPlayer, setPlaybackSource, playAudioUrl, currentTrack]);
 
   const forceBackgroundPlayback = useCallback(async (track = currentTrack, options?: { trackList?: Track[]; fromPlaylist?: boolean }): Promise<boolean> => {
     if (!track || !audioRef.current) {
@@ -1024,7 +1138,7 @@ export function MusicPlayerProvider({ children }: { children: React.ReactNode })
 
           // 1. Try local/Supabase stream proxy
           console.log('Resolving force stream via edge proxy...');
-          const streamUrl = getAudioUrlEndpoint(track.id, { stream: true });
+          const streamUrl = getAudioUrlEndpoint(track.id, { stream: true, title: track.title });
           let success = await playAudioUrl(streamUrl, 'anonymous');
           if (success) {
             isResolvingStreamRef.current = false;
@@ -1034,7 +1148,7 @@ export function MusicPlayerProvider({ children }: { children: React.ReactNode })
           // 2. Try direct audio URL from edge function
           try {
             console.log('Edge proxy failed. Resolving direct url fallback...');
-            const response = await fetch(getAudioUrlEndpoint(track.id));
+            const response = await fetch(getAudioUrlEndpoint(track.id, { title: track.title }));
             const data = response.ok ? await response.json() : null;
             const directAudioUrl = data?.audioUrl || data?.audioUrl1;
             if (directAudioUrl) {
@@ -1059,21 +1173,21 @@ export function MusicPlayerProvider({ children }: { children: React.ReactNode })
 
           // 3. Fallback to client-side resolver
           try {
-            toast.info('Finding an optimal audio stream...', { id: DJ_STREAM_TOAST_ID });
+            toast.info('Finding an optimal audio stream...');
             const clientUrl = await resolveAudioUrlOnClient(track.id);
             if (clientUrl) {
               success = await playAudioUrl(clientUrl, 'anonymous');
               if (success) {
-                toast.success('High-quality stream connected!', { id: DJ_STREAM_TOAST_ID });
+                toast.success('High-quality stream connected!');
                 isResolvingStreamRef.current = false;
                 return true;
               }
 
-              // Proxy the direct URL through our Express server to guarantee CORS compatibility!
-              const proxiedUrl = `/api/get-audio-url?proxyUrl=${encodeURIComponent(clientUrl)}`;
+              // Proxy the direct URL through our edge function to guarantee CORS compatibility!
+              const proxiedUrl = getAudioUrlEndpoint(track.id, { proxyUrl: clientUrl, title: track.title });
               success = await playAudioUrl(proxiedUrl, 'anonymous');
               if (success) {
-                toast.success('High-quality stream connected!', { id: DJ_STREAM_TOAST_ID });
+                toast.success('High-quality stream connected!');
                 isResolvingStreamRef.current = false;
                 return true;
               }
@@ -1125,6 +1239,34 @@ export function MusicPlayerProvider({ children }: { children: React.ReactNode })
     }
   }, [currentTrack, setLastPlayed, recordPlay, setPlaybackSource, ytApiReady, createPlayer, playAudioUrl]);
 
+  useEffect(() => {
+    forceBackgroundPlaybackRef.current = forceBackgroundPlayback;
+  }, [forceBackgroundPlayback]);
+
+  const playStandardOrOffline = useCallback(async (trackId: string) => {
+    const isDownloaded = await isTrackDownloadedOffline(trackId);
+    // The YouTube iframe cannot start a new video while the tab/app is hidden,
+    // which used to stall auto-advance after the first song in the background.
+    const isHidden = typeof document !== 'undefined' && document.visibilityState === 'hidden';
+
+    if (isDownloaded || useBackgroundAudioOnlyRef.current || isHidden || !navigator.onLine) {
+      playWithBackgroundAudio(trackId);
+      return;
+    }
+
+
+    if (audioRef.current) {
+      try {
+        audioRef.current.pause();
+        audioRef.current.removeAttribute('src');
+        audioRef.current.load();
+      } catch {}
+    }
+    setPlaybackSource('youtube');
+    if (ytApiReady) createPlayer(trackId);
+    else toast.error('Player not ready. Please try again.');
+  }, [playWithBackgroundAudio, ytApiReady, createPlayer, setPlaybackSource]);
+
   const handlePlayTrack = useCallback(async (track: Track, trackList?: Track[]) => {
     if (trackList) {
       setTracks(trackList);
@@ -1147,14 +1289,8 @@ export function MusicPlayerProvider({ children }: { children: React.ReactNode })
       return;
     }
 
-    if (isDownloaded || useBackgroundAudioOnlyRef.current || useBackgroundAudioMode) {
-      setUseBackgroundAudioMode(true);
-      playWithBackgroundAudio(track.id);
-    } else {
-      setPlaybackSource('youtube');
-      if (ytApiReady) createPlayer(track.id);
-    }
-  }, [tracks, playWithBackgroundAudio, useBackgroundAudioMode, ytApiReady, createPlayer, setLastPlayed, recordPlay, setPlaybackSource]);
+    playStandardOrOffline(track.id);
+  }, [tracks, setLastPlayed, recordPlay, playStandardOrOffline]);
 
   const handlePlayFromPlaylist = useCallback(async (track: Track) => {
     setCurrentTrack(track);
@@ -1170,14 +1306,8 @@ export function MusicPlayerProvider({ children }: { children: React.ReactNode })
       return;
     }
 
-    if (isDownloaded || useBackgroundAudioOnlyRef.current || useBackgroundAudioMode) {
-      setUseBackgroundAudioMode(true);
-      playWithBackgroundAudio(track.id);
-    } else {
-      setPlaybackSource('youtube');
-      if (ytApiReady) createPlayer(track.id);
-    }
-  }, [playWithBackgroundAudio, useBackgroundAudioMode, ytApiReady, createPlayer, setLastPlayed, recordPlay, setPlaybackSource]);
+    playStandardOrOffline(track.id);
+  }, [setLastPlayed, recordPlay, playStandardOrOffline]);
 
   const handlePlayPause = useCallback(async () => {
     // If we have a track but no active source is playing it yet, start it up!
@@ -1189,7 +1319,7 @@ export function MusicPlayerProvider({ children }: { children: React.ReactNode })
       (forceBackground && activeSourceRef.current !== 'background') ||
       (activeSourceRef.current === 'background' && audioRef.current && !audioRef.current.src)
     )) {
-      if (forceBackground || useBackgroundAudioMode) {
+      if (forceBackground) {
         playWithBackgroundAudio(currentTrack.id);
       } else {
         setPlaybackSource('youtube');
@@ -1205,11 +1335,9 @@ export function MusicPlayerProvider({ children }: { children: React.ReactNode })
       } else {
         safePlay(audioRef.current).then(success => {
           if (!success) {
+            // Re-resolve the stream instead of leaving playback stuck on pause.
             toast.error("Playback failed. Reconnecting...");
-            // Switch to YouTube as last resort if we are online and not forcing background
-            if (!forceBackground) {
-              setPlaybackSource('youtube');
-            }
+            if (currentTrack) playWithBackgroundAudio(currentTrack.id);
           }
         });
       }
@@ -1220,34 +1348,38 @@ export function MusicPlayerProvider({ children }: { children: React.ReactNode })
       if (isPlaying) { ytPlayerRef.current.pauseVideo(); setIsPlaying(false); }
       else { ytPlayerRef.current.playVideo(); setIsPlaying(true); }
     } catch {}
-  }, [isPlaying, currentTrack, useBackgroundAudioMode, playWithBackgroundAudio, ytApiReady, createPlayer, safePlay]);
+  }, [isPlaying, currentTrack, playWithBackgroundAudio, ytApiReady, createPlayer, safePlay]);
 
   const cycleLoopMode = useCallback(() => {
     setLoopMode(prev => {
-      const next = prev === 'off' ? 'all' : prev === 'all' ? 'one' : 'off';
+      const next = prev === 'off' ? 'all' : 'off';
+      loopOneCountRef.current = 0;
+      setLoopOneCount(0);
+      localStorage.setItem('nyra-loop-one-count', '0');
       localStorage.setItem('nyra-loop-mode', next);
       return next;
     });
   }, []);
 
-  const handleNext = useCallback(() => {
-    if (loopMode === 'one' && currentTrack) {
-      if (audioRef.current && audioRef.current.src) {
-        audioRef.current.currentTime = 0;
-        audioRef.current.play().catch(() => {});
-      } else if (ytPlayerRef.current) {
-        try { ytPlayerRef.current.seekTo(0); ytPlayerRef.current.playVideo(); } catch {}
-      }
-      setIsPlaying(true);
-      return;
-    }
+  const toggleLoopOne = useCallback(() => {
+    setLoopOneCount(prev => {
+      const next = prev >= 9 ? 0 : prev + 1;
+      loopOneCountRef.current = next;
+      localStorage.setItem('nyra-loop-one-count', String(next));
+      setLoopMode(next > 0 ? 'one' : 'off');
+      localStorage.setItem('nyra-loop-mode', next > 0 ? 'one' : 'off');
+      toast.success(next > 0 ? `Song will replay ${next} more time${next === 1 ? '' : 's'}` : 'Song repeat off');
+      return next;
+    });
+  }, []);
 
+  const handleNext = useCallback(async () => {
     const nextFromQueue = getNextFromQueue(playlist);
     if (nextFromQueue) {
       setCurrentTrack(nextFromQueue);
       setPlayingFromPlaylist(false);
       setLastPlayed(nextFromQueue.id);
-      playWithBackgroundAudio(nextFromQueue.id);
+      playStandardOrOffline(nextFromQueue.id);
       return;
     }
     if (playingFromPlaylist && currentTrack) {
@@ -1255,13 +1387,13 @@ export function MusicPlayerProvider({ children }: { children: React.ReactNode })
       if (nextTrack) {
         setCurrentTrack(nextTrack);
         setLastPlayed(nextTrack.id);
-        playWithBackgroundAudio(nextTrack.id);
+        playStandardOrOffline(nextTrack.id);
         return;
       } else if (loopMode === 'all' && playlist.length > 0) {
         const firstTrack = playlist[0];
         setCurrentTrack(firstTrack);
         setLastPlayed(firstTrack.id);
-        playWithBackgroundAudio(firstTrack.id);
+        playStandardOrOffline(firstTrack.id);
         return;
       } else { setIsPlaying(false); toast.info('Playlist ended'); return; }
     }
@@ -1273,7 +1405,7 @@ export function MusicPlayerProvider({ children }: { children: React.ReactNode })
         setCurrentTrack(firstTrack);
         setCurrentTrackIndex(0);
         setLastPlayed(firstTrack.id);
-        playWithBackgroundAudio(firstTrack.id);
+        playStandardOrOffline(firstTrack.id);
         return;
       }
       setIsPlaying(false); toast.info('End of tracks'); return;
@@ -1283,8 +1415,8 @@ export function MusicPlayerProvider({ children }: { children: React.ReactNode })
     setCurrentTrackIndex(nextIndex);
     setPlayingFromPlaylist(false);
     setLastPlayed(nextTrack.id);
-    playWithBackgroundAudio(nextTrack.id);
-  }, [currentTrackIndex, tracks, playWithBackgroundAudio, playingFromPlaylist, currentTrack, getNextTrack, getNextFromQueue, playlist, setLastPlayed, loopMode, audioRef, ytPlayerRef]);
+    playStandardOrOffline(nextTrack.id);
+  }, [currentTrackIndex, tracks, playStandardOrOffline, playingFromPlaylist, currentTrack, getNextTrack, getNextFromQueue, playlist, setLastPlayed, loopMode, audioRef, ytPlayerRef]);
 
   useEffect(() => { handleNextRef.current = handleNext; }, [handleNext]);
 
@@ -1294,7 +1426,7 @@ export function MusicPlayerProvider({ children }: { children: React.ReactNode })
       if (prevTrack) {
         setCurrentTrack(prevTrack);
         setLastPlayed(prevTrack.id);
-        playWithBackgroundAudio(prevTrack.id);
+        playStandardOrOffline(prevTrack.id);
         return;
       }
     }
@@ -1305,12 +1437,13 @@ export function MusicPlayerProvider({ children }: { children: React.ReactNode })
     setCurrentTrackIndex(prevIndex);
     setPlayingFromPlaylist(false);
     setLastPlayed(prevTrack.id);
-    playWithBackgroundAudio(prevTrack.id);
-  }, [currentTrackIndex, tracks, playWithBackgroundAudio, playingFromPlaylist, currentTrack, getPreviousTrack, setLastPlayed, handleNext]);
+    playStandardOrOffline(prevTrack.id);
+  }, [currentTrackIndex, tracks, playStandardOrOffline, playingFromPlaylist, currentTrack, getPreviousTrack, setLastPlayed, handleNext]);
 
   useEffect(() => {
     handleNextRef.current = handleNext;
-  }, [handleNext]);
+    handlePreviousRef.current = handlePrevious;
+  }, [handleNext, handlePrevious]);
 
   const handleAddToPlaylist = useCallback((track: Track) => {
     if (isInPlaylist(track.id)) { toast.info('Track already in playlist'); return; }
@@ -1320,6 +1453,7 @@ export function MusicPlayerProvider({ children }: { children: React.ReactNode })
 
   const handleAddToQueue = useCallback((track: Track) => {
     addToQueue(track);
+    window.dispatchEvent(new CustomEvent('nyra:cache-queued-track', { detail: track }));
     toast.success(`⌛ "${track.title.slice(0, 30)}..." added to queue`);
   }, [addToQueue]);
 
@@ -1339,8 +1473,8 @@ export function MusicPlayerProvider({ children }: { children: React.ReactNode })
     setCurrentTrack(track);
     setPlayingFromPlaylist(false);
     setLastPlayed(track.id);
-    playWithBackgroundAudio(track.id);
-  }, [removeFromQueue, setLastPlayed, playWithBackgroundAudio]);
+    playStandardOrOffline(track.id);
+  }, [removeFromQueue, setLastPlayed, playStandardOrOffline]);
 
   // Media Session API
   useEffect(() => {
@@ -1368,7 +1502,22 @@ export function MusicPlayerProvider({ children }: { children: React.ReactNode })
 
   useEffect(() => {
     notifyNativePlayback(isPlaying, (audioRef.current?.currentTime || 0) * 1000);
-  }, [isPlaying]);
+    if (!isNative() || !isPlaying) return;
+    // Keep the Android notification / lock-screen progress + duration in sync
+    const id = setInterval(() => {
+      const el = audioRef.current;
+      const posMs = (el?.currentTime ?? ytPlayerRef.current?.getCurrentTime?.() ?? 0) * 1000;
+      const durMs = (el?.duration && isFinite(el.duration)
+        ? el.duration
+        : ytPlayerRef.current?.getDuration?.() ?? 0) * 1000;
+      if (currentTrack && durMs > 0) {
+        notifyNativeTrack(currentTrack.title, currentTrack.channel, currentTrack.thumbnail, durMs);
+      }
+      notifyNativePlayback(true, posMs);
+    }, 1000);
+    return () => clearInterval(id);
+  }, [isPlaying, currentTrack]);
+
 
   useEffect(() => {
     const unsub = listenCarCommands(
@@ -1377,7 +1526,9 @@ export function MusicPlayerProvider({ children }: { children: React.ReactNode })
       (ms) => {
         if (audioRef.current) audioRef.current.currentTime = ms / 1000;
         ytPlayerRef.current?.seekTo?.(ms / 1000, true);
-      }
+      },
+      () => handleNextRef.current?.(),
+      () => handlePreviousRef.current?.()
     );
     return unsub;
   }, []);
@@ -1429,7 +1580,7 @@ export function MusicPlayerProvider({ children }: { children: React.ReactNode })
       handleRemoveFromPlaylist, handleClearPlaylist,
       playlist, queue, isInPlaylist, removeFromQueue, reorderPlaylist,
       shuffleMode, toggleShuffle,
-      loopMode, cycleLoopMode,
+      loopMode, loopOneCount, cycleLoopMode, toggleLoopOne,
       nowPlayingOpen, setNowPlayingOpen,
       isFavorite, toggleFavorite,
       tracks, setTracks,

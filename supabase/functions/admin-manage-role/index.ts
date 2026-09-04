@@ -44,7 +44,7 @@ serve(async (req) => {
       .eq("role", "admin")
       .maybeSingle();
 
-    const isAdmin = user.email === "admin@gmail.com" || user.email === "sahalshihabudheen@gmail.com" || !!callerRole;
+    const isAdmin = !!callerRole;
     if (!isAdmin) {
       return new Response(JSON.stringify({ error: "Access denied" }), {
         status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" },

@@ -36,7 +36,6 @@ serve(async (req) => {
       );
     }
 
-    const isAdminByEmail = user.email === "admin@gmail.com" || user.email === "sahalshihabudheen@gmail.com";
     const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey);
     const { data: roleData } = await supabaseAdmin
       .from("user_roles")
@@ -45,7 +44,7 @@ serve(async (req) => {
       .eq("role", "admin")
       .maybeSingle();
 
-    const isAdmin = isAdminByEmail || !!roleData;
+    const isAdmin = !!roleData;
 
     if (!isAdmin) {
       return new Response(
@@ -54,20 +53,24 @@ serve(async (req) => {
       );
     }
 
-    if (isAdminByEmail && !roleData) {
-      await supabaseAdmin
-        .from("user_roles")
-        .upsert({ user_id: user.id, role: "admin" }, { onConflict: "user_id,role" });
-    }
+    // Fetch ALL users across pages (the default page only returns 50).
+    const allUsers: any[] = [];
+    let page = 1;
+    const perPage = 100;
+    let fetchedCount = 0;
 
-    const { data: { users }, error: listError } = await supabaseAdmin.auth.admin.listUsers();
-
-    if (listError) {
-      return new Response(
-        JSON.stringify({ error: listError.message }),
-        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
+    do {
+      const { data: { users: pageUsers }, error: listError } = await supabaseAdmin.auth.admin.listUsers({ page, perPage });
+      if (listError) {
+        throw listError;
+      }
+      if (!pageUsers || pageUsers.length === 0) {
+        break;
+      }
+      allUsers.push(...pageUsers);
+      fetchedCount = pageUsers.length;
+      page++;
+    } while (fetchedCount === perPage);
 
     // Fetch all user locations with device info
     const { data: locations } = await supabaseAdmin
@@ -107,7 +110,7 @@ serve(async (req) => {
       });
     }
 
-    const safeUsers = users.map((u) => {
+    const safeUsers = allUsers.map((u) => {
       const loc = locationMap.get(u.id);
       const profile = profileMap.get(u.id);
       return {

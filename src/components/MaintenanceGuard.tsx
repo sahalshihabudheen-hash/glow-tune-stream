@@ -25,18 +25,13 @@ const MaintenanceGuard = ({ children }: MaintenanceGuardProps) => {
           setIsAdmin(false);
           return;
         }
-        // Quick check by email
-        if (user.email === 'admin@gmail.com' || user.email === 'sahalshihabudheen@gmail.com') {
-          setIsAdmin(true);
-          return;
-        }
         // Check via database role
         const { data, error } = await supabase.rpc('has_role', { _user_id: user.id, _role: 'admin' });
         if (error) throw error;
         setIsAdmin(!!data);
       } catch (err) {
-        console.warn('Admin check failed or timed out, using email fallback:', err);
-        setIsAdmin(user?.email === 'admin@gmail.com' || user?.email === 'sahalshihabudheen@gmail.com');
+        console.warn('Admin check failed or timed out:', err);
+        setIsAdmin(false);
       } finally {
         setAdminCheckDone(true); // Always mark done, even if user is null
       }

@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { createPortal } from 'react-dom';
-import { Play, Pause, SkipForward, SkipBack, X, Maximize2, Music2, Download, Loader2, Share2 } from 'lucide-react';
+import { Play, Pause, SkipForward, SkipBack, X, Maximize2, Music2, Download, Loader2, Share2, Repeat1 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useMusicPlayer } from '@/contexts/MusicPlayerContext';
 import { useLocation, useNavigate } from 'react-router-dom';
@@ -9,6 +9,7 @@ import LyricsDrawer from '@/components/LyricsDrawer';
 import { useDownloadManager } from '@/contexts/DownloadManagerContext';
 import { toast } from 'sonner';
 import StyledProgressBar from '@/components/StyledProgressBar';
+import { shareTrack } from '@/utils/shareUtils';
 
 const PLAYER_WIDTH = 320;
 const PLAYER_HEIGHT = 136;
@@ -40,6 +41,9 @@ const FloatingMiniPlayer = () => {
     playlist,
     handlePlayFromQueue,
     handlePlayFromPlaylist,
+    loopMode,
+    loopOneCount,
+    toggleLoopOne,
   } = useMusicPlayer();
 
   // Compute the next-up track (queue first, otherwise next playlist track)
@@ -66,7 +70,8 @@ const FloatingMiniPlayer = () => {
     location.pathname === '/offline' ||
     location.pathname === '/ai-dj' ||
     location.pathname === '/games' ||
-    location.pathname.startsWith('/yt-artist/');
+    location.pathname.startsWith('/yt-artist/') ||
+    location.pathname.startsWith('/song/');
 
   const [isMobileSize, setIsMobileSize] = useState(() => typeof window !== 'undefined' ? window.innerWidth < 640 : false);
   const [position, setPosition] = useState(() => ({
@@ -246,7 +251,7 @@ const FloatingMiniPlayer = () => {
         top: `${position.y}px`,
       }}
     >
-      <div className="relative overflow-hidden rounded-[2rem] border border-primary/25 hover:border-primary/45 bg-zinc-950/95 backdrop-blur-3xl shadow-[0_20px_50px_rgba(0,0,0,0.7),0_0_20px_hsl(var(--primary)/0.1)] transition-all duration-300 hover:shadow-[0_25px_60px_rgba(0,0,0,0.8),0_0_30px_hsl(var(--primary)/0.2)]">
+      <div className="relative overflow-hidden rounded-[2rem] border border-primary/25 hover:border-primary/45 bg-zinc-950/95 backdrop-blur-md md:backdrop-blur-3xl shadow-[0_20px_50px_rgba(0,0,0,0.7),0_0_20px_hsl(var(--primary)/0.1)] transition-all duration-300 hover:shadow-[0_25px_60px_rgba(0,0,0,0.8),0_0_30px_hsl(var(--primary)/0.2)]">
         {/* Row 1: Drag Area, Artwork & Track Info, Close Button */}
         <div className="flex items-center gap-3 px-4 pt-3.5 pb-2">
           <button
@@ -277,7 +282,7 @@ const FloatingMiniPlayer = () => {
                 alt={currentTrack.title}
                 className={cn(
                   "relative h-12 w-12 rounded-full object-cover shadow-lg border-2 border-primary/25 transition-all duration-500",
-                  isPlaying ? "animate-spin" : ""
+                  isPlaying ? "md:animate-spin" : ""
                 )}
                 style={{ animationDuration: '8s' }}
                 loading="lazy"
@@ -373,6 +378,28 @@ const FloatingMiniPlayer = () => {
             <button
               onClick={(e) => {
                 e.stopPropagation();
+                toggleLoopOne();
+              }}
+              className={cn(
+                "relative p-1 rounded-md transition-all active:scale-[0.85]",
+                loopOneCount > 0
+                  ? "text-primary bg-primary/15"
+                  : "text-muted-foreground hover:text-foreground hover:bg-white/5"
+              )}
+              aria-label={loopOneCount > 0 ? `Replay ${loopOneCount} more times` : 'Add one replay'}
+              title={loopOneCount > 0 ? `Replay ${loopOneCount} more time${loopOneCount === 1 ? '' : 's'}` : 'Add one replay'}
+            >
+              <Repeat1 className="h-3.5 w-3.5" />
+              {loopOneCount > 0 && (
+                <span className="absolute -right-1 -top-1 flex h-3.5 min-w-3.5 items-center justify-center rounded-full bg-primary px-0.5 text-[8px] font-black leading-none text-primary-foreground">
+                  {loopOneCount}
+                </span>
+              )}
+            </button>
+
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
                 setLyricsOpen(!lyricsOpen);
               }}
               className={cn(
@@ -391,9 +418,7 @@ const FloatingMiniPlayer = () => {
               onClick={(e) => {
                 e.stopPropagation();
                 if (currentTrack) {
-                  const shareUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/og-embed?id=${currentTrack.id}&title=${encodeURIComponent(currentTrack.title)}&channel=${encodeURIComponent(currentTrack.channel)}&thumbnail=${encodeURIComponent(currentTrack.thumbnail)}`;
-                  navigator.clipboard.writeText(shareUrl);
-                  toast.success('Share link copied!');
+                  shareTrack(currentTrack);
                 }
               }}
               className="p-1 rounded-md text-muted-foreground hover:text-foreground hover:bg-white/5 transition-all active:scale-[0.85]"

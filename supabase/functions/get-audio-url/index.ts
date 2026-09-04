@@ -27,6 +27,147 @@ const CURATED_INVIDIOUS = [
 let cachedInstances: string[] | null = null;
 let cachedAt = 0;
 
+const ITAG_MIME: Record<string, string> = {
+  '251': 'audio/webm',
+  '250': 'audio/webm',
+  '249': 'audio/webm',
+  '140': 'audio/mp4',
+};
+
+const COBALT_INSTANCES = [
+  'https://api.cobalt.tools',
+  'https://cobalt.api.ryboflops.lol',
+  'https://co.wuk.sh',
+];
+
+async function fetchViaInnertube(videoId: string): Promise<{ url: string; mimeType: string } | null> {
+  try {
+    const res = await fetch('https://www.youtube.com/youtubei/v1/player?key=AIzaSyAO_FJ2SlqU8Q4STEHLGCilw_Y9_11qcW8', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Youtube-Client-Name': '21',
+        'X-Youtube-Client-Version': '6.29.58',
+        'User-Agent': 'com.google.android.apps.youtube.music/6.29.58 (Linux; U; Android 11) gzip',
+      },
+      body: JSON.stringify({
+        context: {
+          client: {
+            clientName: 'ANDROID_MUSIC',
+            clientVersion: '6.29.58',
+            androidSdkVersion: 30,
+            hl: 'en',
+            gl: 'US',
+          },
+        },
+        videoId,
+        contentCheckOk: true,
+        racyCheckOk: true,
+      }),
+      signal: AbortSignal.timeout(8000),
+    });
+
+    if (!res.ok) return null;
+    const data = await res.json();
+    const formats: any[] = [
+      ...(data?.streamingData?.adaptiveFormats || []),
+      ...(data?.streamingData?.formats || []),
+    ];
+    const best = formats
+      .filter((f: any) => (f.mimeType || '').startsWith('audio/') && f.url)
+      .sort((a: any, b: any) => Number(b.bitrate || 0) - Number(a.bitrate || 0))[0];
+
+    if (!best?.url) return null;
+    return { url: best.url, mimeType: (best.mimeType || 'audio/webm').split(';')[0] };
+  } catch {
+    return null;
+  }
+}
+
+function companionizeInvidiousUrl(rawUrl: string) {
+  const secureUrl = rawUrl.replace(/^http:\/\//, 'https://');
+  if (secureUrl.includes('/companion/videoplayback')) return secureUrl;
+  return secureUrl
+    .replace('/videoplayback?', '/companion/videoplayback?')
+    .replace('/videoplayback/', '/companion/videoplayback/');
+}
+
+function extensionForMime(mimeType: string) {
+  if (mimeType.includes('mp4') || mimeType.includes('m4a') || mimeType.includes('aac')) return 'm4a';
+  if (mimeType.includes('mpeg') || mimeType.includes('mp3')) return 'mp3';
+  return 'webm';
+}
+
+function safeTitle(title: string) {
+  return (title || 'audio').replace(/[^\w\s-]/g, '').trim() || 'audio';
+}
+
+async function searchVideoIdByTitle(title: string): Promise<string | null> {
+  const query = safeTitle(title);
+  if (!query || query.toLowerCase() === 'audio') return null;
+
+  try {
+    const res = await fetch(`https://api.piped.private.coffee/search?q=${encodeURIComponent(query)}&filter=videos`, {
+      signal: AbortSignal.timeout(8000),
+      headers: { 'Accept': 'application/json', 'User-Agent': 'Mozilla/5.0' },
+    });
+    if (res.ok) {
+      const data = await res.json();
+      const item = data?.items?.find((entry: any) => entry?.type === 'stream' && /watch\?v=/.test(entry?.url || ''));
+      const id = item?.url?.match(/[?&]v=([a-zA-Z0-9_-]{11})/)?.[1];
+      if (id) return id;
+    }
+  } catch { /* try YouTube search */ }
+
+  try {
+    const html = await fetch(`https://www.youtube.com/results?search_query=${encodeURIComponent(query)}`, {
+      signal: AbortSignal.timeout(8000),
+      headers: { 'User-Agent': 'Mozilla/5.0' },
+    }).then((r) => r.text());
+    return html.match(/"videoId":"([a-zA-Z0-9_-]{11})"/)?.[1] || null;
+  } catch {
+    return null;
+  }
+}
+
+function looksLikeAudio(contentType: string | null, url = '') {
+  const type = (contentType || '').toLowerCase();
+  return type.startsWith('audio/') || type.includes('octet-stream') || url.includes('/videoplayback');
+}
+
+function assertAudioBytes(bytes: Uint8Array, contentType: string | null, url = '') {
+  const type = (contentType || '').toLowerCase();
+  const head = new TextDecoder().decode(bytes.slice(0, Math.min(bytes.length, 160))).trim().toLowerCase();
+  if (!bytes.length) throw new Error('No audio bytes received');
+  if (
+    head.startsWith('<!doctype') ||
+    head.startsWith('<html') ||
+    head.startsWith('{"error"') ||
+    head.startsWith('{"message"') ||
+    head.includes('<body') ||
+    type.includes('text/html') ||
+    type.includes('application/json') ||
+    !looksLikeAudio(type, url)
+  ) {
+    throw new Error('Provider returned non-audio content');
+  }
+}
+
+async function canProxyAudio(url: string) {
+  try {
+    const res = await fetch(url, {
+      signal: AbortSignal.timeout(7000),
+      headers: { 'User-Agent': 'Mozilla/5.0', 'Range': 'bytes=0-1', 'Accept': '*/*' },
+      redirect: 'follow',
+    });
+    const ok = (res.ok || res.status === 206) && looksLikeAudio(res.headers.get('content-type'), res.url || url);
+    try { await res.body?.cancel(); } catch { /* ignore */ }
+    return ok;
+  } catch {
+    return false;
+  }
+}
+
 async function getInvidiousInstances(): Promise<string[]> {
   const now = Date.now();
   if (cachedInstances && now - cachedAt < 10 * 60 * 1000) return cachedInstances;
@@ -55,6 +196,33 @@ async function getInvidiousInstances(): Promise<string[]> {
 async function fetchViaInvidiousLocal(videoId: string): Promise<{ url: string; mimeType: string } | null> {
   const instances = await getInvidiousInstances();
   for (const inst of instances) {
+    for (const itag of ['251', '140', '250', '249']) {
+      try {
+        const latestUrl = `${inst}/latest_version?id=${videoId}&local=true&itag=${itag}`;
+        const res = await fetch(latestUrl, {
+          signal: AbortSignal.timeout(8000),
+          headers: {
+            'User-Agent': 'Mozilla/5.0',
+            'Range': 'bytes=0-1',
+          },
+          redirect: 'follow',
+        });
+        const contentType = res.headers.get('content-type');
+        if ((res.ok || res.status === 206) && looksLikeAudio(contentType, res.url || latestUrl)) {
+          try { await res.body?.cancel(); } catch { /* ignore */ }
+          const candidate = companionizeInvidiousUrl(res.url || latestUrl);
+          if (!(await canProxyAudio(candidate))) continue;
+          return {
+            url: candidate,
+            mimeType: (contentType || ITAG_MIME[itag] || 'audio/webm').split(';')[0],
+          };
+        }
+        try { await res.body?.cancel(); } catch { /* ignore */ }
+      } catch {
+        continue;
+      }
+    }
+
     try {
       const res = await fetch(`${inst}/api/v1/videos/${videoId}?local=true`, {
         signal: AbortSignal.timeout(8000),
@@ -63,15 +231,38 @@ async function fetchViaInvidiousLocal(videoId: string): Promise<{ url: string; m
       if (!res.ok) continue;
       const data = await res.json();
       const audio = (data.adaptiveFormats || [])
-        .filter((f: any) => (f.type || '').startsWith('audio/'))
+        .filter((f: any) => (f.type || '').startsWith('audio/') && f.url)
         .sort((a: any, b: any) => Number(b.bitrate || 0) - Number(a.bitrate || 0));
       let best = audio[0];
       if (!best?.url) continue;
       // Invidious returns local-proxy URLs sometimes as http:// — force https
-      const url = best.url.replace(/^http:\/\//, 'https://');
+      const url = companionizeInvidiousUrl(best.url);
+      if (!(await canProxyAudio(url))) continue;
       return { url, mimeType: (best.type || 'audio/webm').split(';')[0] };
     } catch {
       continue;
+    }
+  }
+  return null;
+}
+
+async function fetchViaCobalt(videoId: string): Promise<{ url: string; mimeType: string } | null> {
+  for (const inst of COBALT_INSTANCES) {
+    for (const [endpoint, body] of [
+      [`${inst}/`, JSON.stringify({ url: `https://www.youtube.com/watch?v=${videoId}`, downloadMode: 'audio', audioFormat: 'mp3', audioBitrate: '128' })],
+      [`${inst}/api/json`, JSON.stringify({ url: `https://www.youtube.com/watch?v=${videoId}`, isAudioOnly: true, downloadMode: 'audio', audioFormat: 'mp3', audioQuality: '128' })],
+    ] as [string, string][]) {
+      try {
+        const res = await fetch(endpoint, {
+          method: 'POST',
+          headers: { 'Accept': 'application/json', 'Content-Type': 'application/json' },
+          body,
+          signal: AbortSignal.timeout(8000),
+        });
+        if (!res.ok) continue;
+        const data = await res.json();
+        if (data?.url) return { url: data.url, mimeType: 'audio/mpeg' };
+      } catch { /* try next */ }
     }
   }
   return null;
@@ -106,11 +297,15 @@ async function fetchViaPiped(videoId: string): Promise<{ url: string; mimeType: 
 }
 
 async function getStreamInfo(videoId: string): Promise<{ url: string; mimeType: string } | null> {
+  const innertube = await fetchViaInnertube(videoId);
+  if (innertube) return innertube;
   // Invidious local-proxy is the most reliable free path — try it first.
   const inv = await fetchViaInvidiousLocal(videoId);
   if (inv) return inv;
   const piped = await fetchViaPiped(videoId);
   if (piped) return piped;
+  const cobalt = await fetchViaCobalt(videoId);
+  if (cobalt) return cobalt;
   return null;
 }
 
@@ -127,23 +322,47 @@ async function streamProxy(req: Request, sourceUrl: string, mimeType: string, do
     };
     if (range) upstreamHeaders['Range'] = range;
 
-    // No timeout - let the stream run for the full song duration
-    const upstream = await fetch(sourceUrl, { headers: upstreamHeaders, redirect: 'follow' });
+    // Invidious API URLs without /companion can 403 when re-proxied. Retry the
+    // companion proxy path before surfacing a 502 to the browser.
+    const sourceCandidates = [sourceUrl];
+    const companionUrl = companionizeInvidiousUrl(sourceUrl);
+    if (companionUrl !== sourceUrl) sourceCandidates.push(companionUrl);
 
-    if (!upstream.ok && upstream.status !== 206) {
+    let upstream: Response | null = null;
+    let lastStatus = 0;
+    for (const candidate of sourceCandidates) {
+      // No timeout - let the stream run for the full song duration
+      upstream = await fetch(candidate, { headers: upstreamHeaders, redirect: 'follow' });
+      lastStatus = upstream.status;
+      if (upstream.ok || upstream.status === 206) break;
+      try { await upstream.body?.cancel(); } catch { /* ignore */ }
+    }
+
+    if (!upstream || (!upstream.ok && upstream.status !== 206)) {
       return new Response(
-        JSON.stringify({ error: `Upstream returned ${upstream.status}` }),
+        JSON.stringify({ error: `Upstream returned ${lastStatus || 'unknown'}` }),
         { status: 502, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
+    const reader = upstream.body?.getReader();
+    const first = reader ? await reader.read() : null;
+    const firstBytes = first?.value || new Uint8Array();
+    const resolvedMimeType = (mimeType || upstream.headers.get('content-type') || 'audio/webm').split(';')[0];
+    try {
+      assertAudioBytes(firstBytes, resolvedMimeType, upstream.url || sourceUrl);
+    } catch (error) {
+      try { await reader?.cancel(); } catch { /* ignore */ }
+      throw error;
+    }
+
     const responseHeaders = new Headers(corsHeaders);
-    responseHeaders.set('Content-Type', mimeType || upstream.headers.get('content-type') || 'audio/webm');
+    responseHeaders.set('Content-Type', resolvedMimeType);
     responseHeaders.set('Accept-Ranges', 'bytes');
     responseHeaders.set('Cache-Control', 'no-cache');
 
     if (download) {
-      responseHeaders.set('Content-Disposition', `attachment; filename="${title.replace(/[^\w\s-]/g, '')}.mp3"`);
+      responseHeaders.set('Content-Disposition', `attachment; filename="${safeTitle(title)}.${extensionForMime(resolvedMimeType)}"`);
     }
 
     const contentLength = upstream.headers.get('content-length');
@@ -151,7 +370,27 @@ async function streamProxy(req: Request, sourceUrl: string, mimeType: string, do
     if (contentLength) responseHeaders.set('Content-Length', contentLength);
     if (contentRange) responseHeaders.set('Content-Range', contentRange);
 
-    return new Response(upstream.body, {
+    const stream = reader
+      ? new ReadableStream({
+          start(controller) {
+            if (firstBytes.length) controller.enqueue(firstBytes);
+            const pump = (): Promise<void> => reader.read().then(({ done, value }) => {
+              if (done) {
+                controller.close();
+                return;
+              }
+              if (value) controller.enqueue(value);
+              return pump();
+            }).catch((error) => controller.error(error));
+            return pump();
+          },
+          cancel() {
+            try { reader.cancel(); } catch { /* ignore */ }
+          },
+        })
+      : upstream.body;
+
+    return new Response(stream, {
       status: upstream.status,
       headers: responseHeaders,
     });
@@ -163,9 +402,9 @@ async function streamProxy(req: Request, sourceUrl: string, mimeType: string, do
   }
 }
 
-function returnJson(url: string) {
+function returnJson(url: string, mimeType: string) {
   return new Response(
-    JSON.stringify({ audioUrl: url, audioUrl1: url, success: true }),
+    JSON.stringify({ audioUrl: url, audioUrl1: url, mimeType, success: true }),
     { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
   );
 }
@@ -183,7 +422,7 @@ serve(async (req) => {
     // Allow direct proxying of an already-resolved client URL (used by client fallback).
     const proxyUrl = url.searchParams.get('proxyUrl');
     if (proxyUrl) {
-      return await streamProxy(req, proxyUrl, 'audio/webm', shouldDownload, title);
+      return await streamProxy(req, proxyUrl, '', shouldDownload, title);
     }
 
     if (!videoId) {
@@ -200,7 +439,18 @@ serve(async (req) => {
     }
     videoId = videoId.trim().substring(0, 11);
 
-    const streamInfo = await getStreamInfo(videoId);
+    let streamInfo = await getStreamInfo(videoId);
+
+    if (!streamInfo) {
+      const replacementId = await searchVideoIdByTitle(title);
+      if (replacementId && replacementId !== videoId) {
+        const replacementInfo = await getStreamInfo(replacementId);
+        if (replacementInfo) {
+          videoId = replacementId;
+          streamInfo = replacementInfo;
+        }
+      }
+    }
 
     if (!streamInfo) {
       return new Response(
@@ -214,7 +464,7 @@ serve(async (req) => {
       // Redirecting to it won't work from the browser's IP.
       return await streamProxy(req, streamInfo.url, streamInfo.mimeType, shouldDownload, title);
     } else {
-      return returnJson(streamInfo.url);
+      return returnJson(streamInfo.url, streamInfo.mimeType);
     }
   } catch (error: any) {
     return new Response(

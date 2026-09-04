@@ -1,345 +1,214 @@
-export const config = {
-  runtime: 'edge',
+import fs from 'fs';
+import path from 'path';
+import { spawn } from 'child_process';
+
+export const config = { maxDuration: 60 };
+
+const cors = (res: any) => {
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Headers', 'authorization, content-type, range');
+  res.setHeader('Access-Control-Expose-Headers', 'content-length, content-range, accept-ranges, content-type, content-disposition');
 };
 
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, range, x-client-id',
-  'Access-Control-Expose-Headers': 'content-length, content-range, accept-ranges, content-type',
-  'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-  'Access-Control-Max-Age': '86400',
+const cleanId = (raw = '') => {
+  const match = raw.match(/(?:v=|\/|embed\/|shorts\/|^)([a-zA-Z0-9_-]{11})/);
+  return (match?.[1] || raw).replace(/[^a-zA-Z0-9_-]/g, '').substring(0, 11);
 };
 
-const PIPED_INSTANCES = [
-  'https://pipedapi.kavin.rocks',
-  'https://api.piped.private.coffee',
-  'https://piped-api.lre.yt',
-  'https://pipedapi.adminforge.de',
-  'https://api-piped.mha.fi',
-  'https://pipedapi.spirit.com.de',
-  'https://api.piped.projectsegfau.lt',
-  'https://pipedapi.moomoo.me',
-];
+const safeTitle = (title = 'audio') => title.replace(/[^\w\s-]/g, '').trim() || 'audio';
 
-const INVIDIOUS_INSTANCES = [
-  'https://inv.nadeko.net',
-  'https://invidious.flokinet.to',
-  'https://yewtu.be',
-  'https://invidious.projectsegfau.lt',
-  'https://invidious.lre.yt',
-  'https://inv.tux.im',
-];
+const looksLikeAudio = (contentType: string | null) => {
+  const type = (contentType || '').toLowerCase();
+  return type.startsWith('audio/') || type.includes('video/') || type.includes('octet-stream');
+};
 
-const COBALT_INSTANCES = [
-  'https://api.cobalt.tools',
-  'https://cobalt.api.ryboflops.lol',
-  'https://cobalt.k6.ovh',
-  'https://co.wuk.sh',
-  'https://cobalt.shite.xyz',
-];
-
-function shuffle<T>(array: T[]): T[] {
-  const arr = [...array];
-  for (let i = arr.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [arr[i], arr[j]] = [arr[j], arr[i]];
-  }
-  return arr;
-}
-
-const withTimeout = (ms: number): AbortSignal => {
-  try {
-    return AbortSignal.timeout(ms);
-  } catch {
-    const c = new AbortController();
-    setTimeout(() => c.abort(), ms);
-    return c.signal;
+const assertAudioBytes = (bytes: Buffer, contentType: string | null) => {
+  const type = (contentType || '').toLowerCase();
+  const head = bytes.subarray(0, 160).toString('utf8').trim().toLowerCase();
+  if (!bytes.length) throw new Error('No audio bytes received');
+  if (
+    head.startsWith('<!doctype') ||
+    head.startsWith('<html') ||
+    head.startsWith('{"error"') ||
+    head.startsWith('{"message"') ||
+    head.includes('<body') ||
+    type.includes('text/html') ||
+    type.includes('application/json') ||
+    !looksLikeAudio(type)
+  ) {
+    throw new Error('Resolved provider response was not audio');
   }
 };
 
-// ── Resolver functions ──────────────────────────────────────────────
+async function searchVideoIdByTitle(title: string): Promise<string | null> {
+  const query = safeTitle(title);
+  if (!query || query.toLowerCase() === 'audio') return null;
 
-async function tryPiped(inst: string, videoId: string): Promise<{ url: string; mimeType: string } | null> {
   try {
-    const res = await fetch(`${inst}/streams/${videoId}`, {
-      signal: withTimeout(4000),
-      headers: { 'Accept': 'application/json', 'User-Agent': 'Mozilla/5.0' },
+    const piped = await fetch(`https://api.piped.private.coffee/search?q=${encodeURIComponent(query)}&filter=videos`, {
+      headers: { Accept: 'application/json', 'User-Agent': 'Mozilla/5.0' },
+      signal: AbortSignal.timeout(8000),
     });
-    if (!res.ok) return null;
-    const data = await res.json();
-    const streams: any[] = data.audioStreams || [];
-    const best =
-      streams.find((s: any) => s.mimeType?.includes('audio/mp4')) ||
-      streams.sort((a: any, b: any) => (b.bitrate || 0) - (a.bitrate || 0))[0];
-    return best?.url ? { url: best.url, mimeType: best.mimeType || 'audio/webm' } : null;
-  } catch {
-    return null;
-  }
-}
+    if (piped.ok) {
+      const data = await piped.json();
+      const item = data?.items?.find((entry: any) => entry?.type === 'stream' && /watch\?v=/.test(entry?.url || ''));
+      const id = item?.url?.match(/[?&]v=([a-zA-Z0-9_-]{11})/)?.[1];
+      if (id) return id;
+    }
+  } catch { /* try html search */ }
 
-async function tryInvidious(inst: string, videoId: string): Promise<{ url: string; mimeType: string } | null> {
   try {
-    const res = await fetch(`${inst}/api/v1/videos/${videoId}`, {
-      signal: withTimeout(4000),
+    const html = await fetch(`https://www.youtube.com/results?search_query=${encodeURIComponent(query)}`, {
       headers: { 'User-Agent': 'Mozilla/5.0' },
-    });
-    if (!res.ok) return null;
-    const data = await res.json();
-    const formats: any[] = data.adaptiveFormats || [];
-    const audio = formats.find((f: any) => f.type?.startsWith('audio/mp4')) ||
-                  formats.find((f: any) => f.type?.startsWith('audio/'));
-    return audio?.url ? { url: audio.url, mimeType: audio.type || 'audio/webm' } : null;
+      signal: AbortSignal.timeout(8000),
+    }).then((r) => r.text());
+    return html.match(/"videoId":"([a-zA-Z0-9_-]{11})"/)?.[1] || null;
   } catch {
     return null;
   }
 }
 
-async function tryCobalt(inst: string, videoId: string): Promise<{ url: string; mimeType: string } | null> {
-  // Try new Cobalt v10+ API (POST /)
-  const payloadNew = JSON.stringify({
-    url: `https://www.youtube.com/watch?v=${videoId}`,
-    downloadMode: 'audio',
-    audioFormat: 'mp3',
-    audioBitrate: '128',
-  });
-  const payloadLegacy = JSON.stringify({
-    url: `https://www.youtube.com/watch?v=${videoId}`,
-    isAudioOnly: true,
-    downloadMode: 'audio',
-    audioFormat: 'mp3',
-    audioQuality: '128',
-  });
-
-  for (const [endpoint, body] of [
-    [`${inst}/`, payloadNew],
-    [`${inst}/api/json`, payloadLegacy],
-  ] as [string, string][]) {
-    try {
-      const res = await fetch(endpoint, {
-        method: 'POST',
-        headers: { 'Accept': 'application/json', 'Content-Type': 'application/json' },
-        body,
-        signal: withTimeout(5000),
-      });
-      if (res.ok) {
-        const data = await res.json();
-        if (data?.url) return { url: data.url, mimeType: 'audio/mpeg' };
-      }
-    } catch {}
-  }
-  return null;
+async function ensureYtDlp() {
+  const bin = path.join('/tmp', 'yt-dlp');
+  if (fs.existsSync(bin)) return bin;
+  const r = await fetch('https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp_linux');
+  if (!r.ok) throw new Error(`yt-dlp unavailable (${r.status})`);
+  fs.writeFileSync(bin, Buffer.from(await r.arrayBuffer()));
+  fs.chmodSync(bin, 0o755);
+  return bin;
 }
 
-// YouTube innertube (unofficial) — works without any third party
-async function tryInnertube(videoId: string): Promise<{ url: string; mimeType: string } | null> {
+async function resolveYtDlp(videoId: string): Promise<{ url: string; mimeType: string } | null> {
   try {
-    const body = {
-      context: {
-        client: {
-          clientName: 'ANDROID_MUSIC',
-          clientVersion: '6.29.58',
-          androidSdkVersion: 30,
-          hl: 'en',
-          gl: 'US',
-        },
-      },
-      videoId,
-      contentCheckOk: true,
-      racyCheckOk: true,
-    };
-
-    const res = await fetch('https://www.youtube.com/youtubei/v1/player?key=AIzaSyAO_FJ2SlqU8Q4STEHLGCilw_Y9_11qcW8', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'X-Youtube-Client-Name': '21',
-        'X-Youtube-Client-Version': '6.29.58',
-        'User-Agent': 'com.google.android.apps.youtube.music/6.29.58 (Linux; U; Android 11) gzip',
-      },
-      body: JSON.stringify(body),
-      signal: withTimeout(6000),
+    const bin = await ensureYtDlp();
+    return await new Promise((resolve) => {
+      const child = spawn(bin, [
+        '--no-playlist',
+        '--extractor-args', 'youtube:player_client=web,ios,android',
+        '--user-agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120 Safari/537.36',
+        '-f', 'bestaudio[ext=m4a]/bestaudio/best',
+        '-g',
+        `https://www.youtube.com/watch?v=${videoId}`,
+      ]);
+      let out = '';
+      const timer = setTimeout(() => { child.kill('SIGKILL'); resolve(null); }, 25_000);
+      child.stdout.on('data', (d) => { out += d.toString(); });
+      child.on('error', () => { clearTimeout(timer); resolve(null); });
+      child.on('close', () => {
+        clearTimeout(timer);
+        const url = out.split('\n').find((line) => line.startsWith('http'));
+        resolve(url ? { url, mimeType: url.includes('mime=audio%2Fmp4') ? 'audio/mp4' : 'audio/webm' } : null);
+      });
     });
-
-    if (!res.ok) return null;
-    const data = await res.json();
-
-    const formats: any[] = [
-      ...(data?.streamingData?.adaptiveFormats || []),
-      ...(data?.streamingData?.formats || []),
-    ];
-
-    const audioFormats = formats
-      .filter((f: any) => f.mimeType?.startsWith('audio/') && f.url)
-      .sort((a: any, b: any) => (b.bitrate || 0) - (a.bitrate || 0));
-
-    const best = audioFormats[0];
-    return best ? { url: best.url, mimeType: best.mimeType?.split(';')[0] || 'audio/webm' } : null;
   } catch {
     return null;
   }
 }
 
-// ── Main resolver: all layers run IN PARALLEL ─────────────────────
+async function resolvePlayableYtDlp(videoId: string): Promise<{ url: string; mimeType: string } | null> {
+  const info = await resolveYtDlp(videoId);
+  if (!info) return null;
+  try {
+    await probeAudioUrl(info.url, info.mimeType);
+    return info;
+  } catch {
+    return null;
+  }
+}
 
-async function getStreamInfo(videoId: string): Promise<{ url: string; mimeType: string } | null> {
-  const shuffledPiped = shuffle(PIPED_INSTANCES).slice(0, 5);
-  const shuffledInvidious = shuffle(INVIDIOUS_INSTANCES).slice(0, 4);
-  const shuffledCobalt = shuffle(COBALT_INSTANCES).slice(0, 3);
+async function probeAudioUrl(sourceUrl: string, mimeType = 'audio/webm') {
+  const res = await fetch(sourceUrl, {
+    headers: {
+      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120 Safari/537.36',
+      Accept: '*/*',
+      Range: 'bytes=0-2047',
+    },
+    redirect: 'follow',
+    signal: AbortSignal.timeout(20_000),
+  });
+  if (!res.ok && res.status !== 206) throw new Error(`Upstream ${res.status}`);
+  const bytes = Buffer.from(await res.arrayBuffer());
+  const type = res.headers.get('content-type') || mimeType;
+  assertAudioBytes(bytes, type);
+}
 
-  // Race all sources at the same time — first non-null wins
-  const allPromises: Promise<{ url: string; mimeType: string } | null>[] = [
-    tryInnertube(videoId),
-    ...shuffledCobalt.map((inst) => tryCobalt(inst, videoId)),
-    ...shuffledPiped.map((inst) => tryPiped(inst, videoId)),
-    ...shuffledInvidious.map((inst) => tryInvidious(inst, videoId)),
-  ];
+async function streamProxy(req: any, res: any, sourceUrl: string, mimeType = 'audio/webm', download = false, title = 'audio') {
+  const headers: Record<string, string> = {
+    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120 Safari/537.36',
+    Accept: '*/*',
+  };
+  if (req.headers.range) headers.Range = req.headers.range;
+  const upstream = await fetch(sourceUrl, { headers, redirect: 'follow' });
+  if (!upstream.ok && upstream.status !== 206) throw new Error(`Upstream ${upstream.status}`);
 
-  return new Promise((resolve) => {
-    let settled = 0;
-    const total = allPromises.length;
-    let resolved = false;
+  const reader = upstream.body?.getReader();
+  const first = reader ? await reader.read() : null;
+  const firstBytes = first?.value ? Buffer.from(first.value) : Buffer.alloc(0);
+  const upstreamType = upstream.headers.get('content-type');
+  try {
+    assertAudioBytes(firstBytes, upstreamType || mimeType);
+  } catch (error) {
+    try { await reader?.cancel(); } catch { /* ignore */ }
+    throw error;
+  }
 
-    for (const p of allPromises) {
-      p.then((result) => {
-        settled++;
-        if (result && !resolved) {
-          resolved = true;
-          resolve(result);
-        } else if (settled === total && !resolved) {
-          resolve(null);
+  cors(res);
+  const type = (upstreamType || mimeType).split(';')[0];
+  res.setHeader('Content-Type', type);
+  res.setHeader('Accept-Ranges', 'bytes');
+  if (download) res.setHeader('Content-Disposition', `attachment; filename="${safeTitle(title)}.${type.includes('mp4') ? 'm4a' : 'webm'}"`);
+  const len = upstream.headers.get('content-length');
+  const range = upstream.headers.get('content-range');
+  if (len) res.setHeader('Content-Length', len);
+  if (range) res.setHeader('Content-Range', range);
+  res.status(upstream.status);
+  if (firstBytes.length) res.write(firstBytes);
+  if (!reader) return res.end();
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    res.write(Buffer.from(value));
+  }
+  res.end();
+}
+
+export default async function handler(req: any, res: any) {
+  cors(res);
+  if (req.method === 'OPTIONS') return res.status(204).end();
+  try {
+    const proxyUrl = Array.isArray(req.query.proxyUrl) ? req.query.proxyUrl[0] : req.query.proxyUrl;
+    const title = String(Array.isArray(req.query.title) ? req.query.title[0] : req.query.title || 'audio');
+    const download = req.query.download === '1';
+    if (proxyUrl) return streamProxy(req, res, String(proxyUrl), '', download, title);
+
+    let videoId = cleanId(String(req.query.videoId || req.query.id || ''));
+    if (videoId.length !== 11) return res.status(400).json({ error: 'Video ID required' });
+    let info = await resolvePlayableYtDlp(videoId);
+    if (!info) {
+      const replacementId = await searchVideoIdByTitle(title);
+      if (replacementId && replacementId !== videoId) {
+        const replacementInfo = await resolvePlayableYtDlp(replacementId);
+        if (replacementInfo) {
+          videoId = replacementId;
+          info = replacementInfo;
         }
-      }).catch(() => {
-        settled++;
-        if (settled === total && !resolved) resolve(null);
-      });
+      }
     }
-  });
-}
-
-// ── Proxy / stream helper ─────────────────────────────────────────
-
-async function streamProxy(
-  req: Request,
-  sourceUrl: string,
-  mimeType: string,
-  download: boolean,
-  title: string
-): Promise<Response> {
-  try {
-    const range = req.headers.get('range');
-    const upstreamHeaders: Record<string, string> = {
-      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-      'Accept': '*/*',
-    };
-    if (range) upstreamHeaders['Range'] = range;
-
-    const upstream = await fetch(sourceUrl, { headers: upstreamHeaders });
-
-    if (!upstream.ok && upstream.status !== 206) {
-      return Response.redirect(sourceUrl, 302);
-    }
-
-    const responseHeaders = new Headers(corsHeaders);
-    responseHeaders.set('Content-Type', mimeType || upstream.headers.get('content-type') || 'audio/webm');
-    responseHeaders.set('Accept-Ranges', 'bytes');
-    responseHeaders.set('Cache-Control', 'no-cache');
-    if (download) {
-      responseHeaders.set('Content-Disposition', `attachment; filename="${title.replace(/[^\w\s-]/g, '')}.mp3"`);
-    }
-    const contentLength = upstream.headers.get('content-length');
-    const contentRange = upstream.headers.get('content-range');
-    if (contentLength) responseHeaders.set('Content-Length', contentLength);
-    if (contentRange) responseHeaders.set('Content-Range', contentRange);
-
-    return new Response(upstream.body, { status: upstream.status, headers: responseHeaders });
-  } catch {
-    return Response.redirect(sourceUrl, 302);
-  }
-}
-
-// ── Edge handler ──────────────────────────────────────────────────
-
-export default async function handler(req: Request) {
-  if (req.method === 'OPTIONS') return new Response(null, { headers: corsHeaders });
-
-  try {
-    const url = new URL(req.url);
-
-    // Generic CORS proxy
-    const proxyUrl = url.searchParams.get('proxyUrl');
-    if (proxyUrl) {
+    if (!info) return res.status(500).json({ error: 'Audio stream unavailable', videoId });
+    if (req.query.stream === '1' || download) {
       try {
-        const decodedUrl = decodeURIComponent(proxyUrl);
-        const range = req.headers.get('range');
-        const upstreamHeaders: Record<string, string> = {
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-          'Accept': '*/*',
-        };
-        if (range) upstreamHeaders['Range'] = range;
-
-        const upstream = await fetch(decodedUrl, { headers: upstreamHeaders });
-        const responseHeaders = new Headers(corsHeaders);
-        responseHeaders.set('Content-Type', upstream.headers.get('content-type') || 'audio/mpeg');
-        responseHeaders.set('Accept-Ranges', 'bytes');
-        responseHeaders.set('Cache-Control', 'no-cache');
-        
-        const shouldDownload = url.searchParams.get('download') === '1';
-        const title = url.searchParams.get('title') || 'audio';
-        if (shouldDownload) {
-          responseHeaders.set('Content-Disposition', `attachment; filename="${title.replace(/[^\w\s-]/g, '')}.mp3"`);
+        return await streamProxy(req, res, info.url, info.mimeType, download, title);
+      } catch (streamError) {
+        const replacementId = await searchVideoIdByTitle(title);
+        if (replacementId && replacementId !== videoId) {
+          const replacementInfo = await resolvePlayableYtDlp(replacementId);
+          if (replacementInfo) return streamProxy(req, res, replacementInfo.url, replacementInfo.mimeType, download, title);
         }
-
-        const contentLength = upstream.headers.get('content-length');
-        const contentRange = upstream.headers.get('content-range');
-        if (contentLength) responseHeaders.set('Content-Length', contentLength);
-        if (contentRange) responseHeaders.set('Content-Range', contentRange);
-
-        return new Response(upstream.body, { status: upstream.status, headers: responseHeaders });
-      } catch (proxyErr: any) {
-        return new Response(JSON.stringify({ error: proxyErr.message }), {
-          status: 500,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        });
+        throw streamError;
       }
     }
-
-    let videoId = url.searchParams.get('videoId') || url.searchParams.get('id') || '';
-    const shouldStream = url.searchParams.get('stream') === '1';
-    const shouldDownload = url.searchParams.get('download') === '1';
-    const title = url.searchParams.get('title') || 'audio';
-
-    if (!videoId) {
-      return new Response(JSON.stringify({ error: 'Video ID required' }), {
-        status: 400,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
-    }
-
-    const match = videoId.match(/(?:v=|\/|embed\/|shorts\/|^)([a-zA-Z0-9_-]{11})/);
-    if (match) videoId = match[1];
-    videoId = videoId.trim().substring(0, 11);
-
-    const streamInfo = await getStreamInfo(videoId);
-
-    if (!streamInfo) {
-      return new Response(JSON.stringify({ error: 'Audio stream unavailable', videoId }), {
-        status: 500,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
-    }
-
-    if (shouldStream || shouldDownload) {
-      return await streamProxy(req, streamInfo.url, streamInfo.mimeType, shouldDownload, title);
-    }
-
-    return new Response(
-      JSON.stringify({ audioUrl: streamInfo.url, audioUrl1: streamInfo.url, success: true }),
-      { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-    );
-  } catch (error: any) {
-    return new Response(JSON.stringify({ error: error.message }), {
-      status: 500,
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-    });
+    return res.status(200).json({ audioUrl: info.url, audioUrl1: info.url, mimeType: info.mimeType, success: true });
+  } catch (e: any) {
+    return res.status(500).json({ error: e?.message || 'Audio resolver failed' });
   }
 }

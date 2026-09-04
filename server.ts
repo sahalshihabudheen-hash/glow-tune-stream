@@ -6,6 +6,7 @@ import fs from 'fs';
 import AdmZip from 'adm-zip';
 import { exec, spawn } from 'child_process';
 import { promisify } from 'util';
+import { generateDiscordOgHtml, generateOgImageSvg, OgContentData } from './src/utils/ogGenerator';
 
 const execAsync = promisify(exec);
 
@@ -84,6 +85,61 @@ async function safelyParseJson<T = any>(res: Response): Promise<T | null> {
     const text = await res.text();
     if (!text || text.trim() === '') return null;
     return JSON.parse(text) as T;
+  } catch {
+    return null;
+  }
+}
+
+function looksLikeAudio(contentType: string | null) {
+  const type = (contentType || '').toLowerCase();
+  return type.startsWith('audio/') || type.startsWith('video/') || type.includes('octet-stream');
+}
+
+function assertAudioBytes(bytes: Buffer, contentType: string | null) {
+  const type = (contentType || '').toLowerCase();
+  const head = bytes.subarray(0, 160).toString('utf8').trim().toLowerCase();
+  if (!bytes.length) throw new Error('No audio bytes received');
+  if (
+    head.startsWith('<!doctype') ||
+    head.startsWith('<html') ||
+    head.startsWith('{"error"') ||
+    head.startsWith('{"message"') ||
+    head.includes('<body') ||
+    type.includes('text/html') ||
+    type.includes('application/json') ||
+    !looksLikeAudio(type)
+  ) {
+    throw new Error('Provider returned non-audio content');
+  }
+}
+
+function safeAudioTitle(title: string) {
+  return (title || 'audio').replace(/[^\w\s-]/g, '').trim() || 'audio';
+}
+
+async function searchVideoIdByTitle(title: string): Promise<string | null> {
+  const query = safeAudioTitle(title);
+  if (!query || query.toLowerCase() === 'audio') return null;
+
+  try {
+    const piped = await fetch(`https://api.piped.private.coffee/search?q=${encodeURIComponent(query)}&filter=videos`, {
+      headers: { Accept: 'application/json', 'User-Agent': 'Mozilla/5.0' },
+      signal: getTimeoutSignal(8000),
+    });
+    if (piped.ok) {
+      const data = await safelyParseJson<any>(piped);
+      const item = data?.items?.find((entry: any) => entry?.type === 'stream' && /watch\?v=/.test(entry?.url || ''));
+      const id = item?.url?.match(/[?&]v=([a-zA-Z0-9_-]{11})/)?.[1];
+      if (id) return id;
+    }
+  } catch { /* try YouTube HTML search */ }
+
+  try {
+    const html = await fetch(`https://www.youtube.com/results?search_query=${encodeURIComponent(query)}`, {
+      headers: { 'User-Agent': 'Mozilla/5.0' },
+      signal: getTimeoutSignal(8000),
+    }).then((r) => r.text());
+    return html.match(/"videoId":"([a-zA-Z0-9_-]{11})"/)?.[1] || null;
   } catch {
     return null;
   }
@@ -359,7 +415,7 @@ async function streamYtDlpDirectly(videoId: string, res: any, shouldDownload: bo
   res.setHeader('Content-Type', 'audio/mpeg');
   res.setHeader('Cache-Control', 'no-cache');
   if (shouldDownload) {
-    const cleanTitle = title.replace(/[^\w\s-]/g, '') || 'audio';
+    const cleanTitle = safeAudioTitle(title);
     res.setHeader('Content-Disposition', `attachment; filename="${cleanTitle}.mp3"`);
   }
 
@@ -385,6 +441,57 @@ async function streamYtDlpDirectly(videoId: string, res: any, shouldDownload: bo
       res.status(500).json({ error: 'Direct yt-dlp audio extraction failed' });
     }
   });
+}
+
+async function streamResolvedUrl(streamInfo: { url: string; mimeType: string }, req: any, res: any, shouldDownload: boolean, title: string) {
+  const range = req.headers.range;
+  const upstreamHeaders: Record<string, string> = {
+    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+    'Accept': '*/*',
+  };
+  if (range) upstreamHeaders['Range'] = range;
+
+  const upstream = await fetch(streamInfo.url, { headers: upstreamHeaders, redirect: 'follow' });
+  if (!upstream.ok && upstream.status !== 206) {
+    throw new Error(`Upstream ${upstream.status}`);
+  }
+
+  const reader = upstream.body?.getReader();
+  const first = reader ? await reader.read() : null;
+  const firstBytes = first?.value ? Buffer.from(first.value) : Buffer.alloc(0);
+  const upstreamType = upstream.headers.get('content-type') || streamInfo.mimeType;
+  try {
+    assertAudioBytes(firstBytes, upstreamType);
+  } catch (error) {
+    try { await reader?.cancel(); } catch { /* ignore */ }
+    throw error;
+  }
+
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Headers', '*');
+  res.setHeader('Content-Type', upstreamType.split(';')[0]);
+  res.setHeader('Accept-Ranges', 'bytes');
+  res.setHeader('Cache-Control', 'no-cache');
+
+  if (shouldDownload) {
+    const ext = upstreamType.includes('mp4') || upstreamType.includes('m4a') ? 'm4a' : upstreamType.includes('mpeg') ? 'mp3' : 'webm';
+    res.setHeader('Content-Disposition', `attachment; filename="${safeAudioTitle(title)}.${ext}"`);
+  }
+
+  const contentLength = upstream.headers.get('content-length');
+  const contentRange = upstream.headers.get('content-range');
+  if (contentLength) res.setHeader('Content-Length', contentLength);
+  if (contentRange) res.setHeader('Content-Range', contentRange);
+
+  res.status(upstream.status);
+  if (firstBytes.length) res.write(firstBytes);
+  if (!reader) return res.end();
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    res.write(Buffer.from(value));
+  }
+  res.end();
 }
 
 async function getStreamInfo(videoId: string): Promise<{ url: string; mimeType: string } | null> {
@@ -462,11 +569,23 @@ async function startServer() {
         };
         if (range) upstreamHeaders['Range'] = range;
 
-        const upstream = await fetch(decodedUrl, { headers: upstreamHeaders });
+        const upstream = await fetch(decodedUrl, { headers: upstreamHeaders, redirect: 'follow' });
+        if (!upstream.ok && upstream.status !== 206) throw new Error(`Upstream ${upstream.status}`);
+
+        const reader = upstream.body?.getReader();
+        const first = reader ? await reader.read() : null;
+        const firstBytes = first?.value ? Buffer.from(first.value) : Buffer.alloc(0);
+        const upstreamType = upstream.headers.get('content-type');
+        try {
+          assertAudioBytes(firstBytes, upstreamType);
+        } catch (error) {
+          try { await reader?.cancel(); } catch { /* ignore */ }
+          throw error;
+        }
         
         res.setHeader('Access-Control-Allow-Origin', '*');
         res.setHeader('Access-Control-Allow-Headers', '*');
-        res.setHeader('Content-Type', upstream.headers.get('content-type') || 'audio/mpeg');
+        res.setHeader('Content-Type', upstreamType || 'audio/mpeg');
         res.setHeader('Accept-Ranges', 'bytes');
         res.setHeader('Cache-Control', 'no-cache');
 
@@ -477,12 +596,12 @@ async function startServer() {
 
         res.status(upstream.status);
 
-        if (upstream.body) {
-          const reader = upstream.body.getReader();
+        if (firstBytes.length) res.write(firstBytes);
+        if (reader) {
           while (true) {
             const { done, value } = await reader.read();
             if (done) break;
-            res.write(value);
+            res.write(Buffer.from(value));
           }
           res.end();
         } else {
@@ -492,7 +611,7 @@ async function startServer() {
       } catch (proxyErr: any) {
         console.log('[Express Proxy] Direct proxy URL streaming handled.');
         if (!res.headersSent) {
-          return res.status(200).json({ status: "ok" });
+          return res.status(502).json({ error: proxyErr?.message || 'Audio proxy failed' });
         }
         return;
       }
@@ -523,6 +642,14 @@ async function startServer() {
 
     // Fallback directly to spawning yt-dlp live transcode stream if URL resolution completely failed
     if (!streamInfo) {
+      const replacementId = await searchVideoIdByTitle(title);
+      if (replacementId && replacementId !== videoId) {
+        streamInfo = await getStreamInfo(replacementId);
+        if (streamInfo) videoId = replacementId;
+      }
+    }
+
+    if (!streamInfo) {
       console.log(`[Express Server /get-audio-url] Stream resolution failed. Falling back to live transcoding/streaming with yt-dlp...`);
       return streamYtDlpDirectly(videoId, res, shouldDownload, title);
     }
@@ -534,59 +661,24 @@ async function startServer() {
 
     if (shouldStream || shouldDownload) {
       try {
-        const range = req.headers.range;
-        const upstreamHeaders: Record<string, string> = {
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-          'Accept': '*/*',
-        };
-        if (range) upstreamHeaders['Range'] = range;
-
-        let upstream = await fetch(streamInfo.url, { headers: upstreamHeaders });
-
-        // Fallback strategy: If upstream fails (e.g. 403 Forbidden geolock or IP block), try alternative engines
-        if (upstream.status === 403 || upstream.status === 401 || upstream.status === 404 || upstream.status >= 500) {
-          console.log(`[Express Server] Optimizing stream parameters for videoId: ${videoId}`);
-          
-          let fallbackSucceeded = false;
-
-          // Fallback 1: Try yt-dlp directly
-          console.log(`[Express Server] Engine switch path - yt-dlp direct stream...`);
-          return streamYtDlpDirectly(videoId, res, shouldDownload, title);
-        }
-
-        res.setHeader('Access-Control-Allow-Origin', '*');
-        res.setHeader('Access-Control-Allow-Headers', '*');
-        res.setHeader('Content-Type', streamInfo.mimeType || upstream.headers.get('content-type') || 'audio/webm');
-        res.setHeader('Accept-Ranges', 'bytes');
-        res.setHeader('Cache-Control', 'no-cache');
-
-        if (shouldDownload) {
-          res.setHeader('Content-Disposition', `attachment; filename="${title.replace(/[^\w\s-]/g, '')}.mp3"`);
-        }
-
-        const contentLength = upstream.headers.get('content-length');
-        const contentRange = upstream.headers.get('content-range');
-        if (contentLength) res.setHeader('Content-Length', contentLength);
-        if (contentRange) res.setHeader('Content-Range', contentRange);
-
-        res.status(upstream.status);
-
-        if (upstream.body) {
-          const reader = upstream.body.getReader();
-          while (true) {
-            const { done, value } = await reader.read();
-            if (done) break;
-            res.write(value);
-          }
-          res.end();
-        } else {
-          res.end();
-        }
+        await streamResolvedUrl(streamInfo, req, res, shouldDownload, title);
       } catch (e: any) {
         console.log('[Express Proxy] Upstream stream error. Spawning live yt-dlp transcode stream as reliable fallback.', e.message || e);
         if (!res.headersSent) {
+          const replacementId = await searchVideoIdByTitle(title);
+          if (replacementId && replacementId !== videoId) {
+            const replacementInfo = await getStreamInfo(replacementId);
+            if (replacementInfo) {
+              try {
+                return await streamResolvedUrl(replacementInfo, req, res, shouldDownload, title);
+              } catch (replacementErr: any) {
+                console.warn('[Express Proxy] Replacement stream failed, using live yt-dlp fallback.', replacementErr?.message || replacementErr);
+              }
+            }
+          }
           return streamYtDlpDirectly(videoId, res, shouldDownload, title);
         }
+        return;
       }
     } else {
       res.setHeader('Access-Control-Allow-Origin', '*');
@@ -594,65 +686,79 @@ async function startServer() {
     }
   });
 
-  // API Route: Social Embed OG metadata redirects
-  app.get('/api/og', (req, res) => {
+  // Helper to extract Open Graph content data from request
+  function parseOgRequest(req: express.Request): OgContentData {
+    const forwardedProto = (req.headers['x-forwarded-proto'] as string) || (req.secure ? 'https' : 'http');
     const host = req.get('host') || 'localhost:3000';
-    const protocol = req.secure ? 'https' : 'http';
-    const baseUrl = `${protocol}://${host}`;
-    const trackId = req.query.id as string;
-    const trackTitle = (req.query.title || 'Great Music') as string;
-    const trackChannel = (req.query.channel || 'NYRA') as string;
-    const trackThumbnail = (req.query.thumbnail || (trackId ? `https://i.ytimg.com/vi/${trackId}/hqdefault.jpg` : `${baseUrl}/headphones.png`)) as string;
-    
-    const appName = "NYRA";
-    
-    const html = `<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <title>🎧 ${trackTitle}</title>
-  
-  <!-- Primary Meta Tags -->
-  <meta name="title" content="💖 ${trackTitle}">
-  <meta name="description" content="✨ ${trackChannel} · NYRA PREMIUM • FEEL THE PULSE">
+    const baseUrl = `${forwardedProto}://${host}`;
 
-  <meta property="og:type" content="video.other">
-  <meta property="og:site_name" content="NYRA • FEEL THE PULSE">
-  <meta property="og:title" content="🎧 ${trackTitle}">
-  <meta property="og:description" content="✨ ${trackChannel} • Click the link for full Soundwaves!">
-  <meta property="og:image" content="${trackThumbnail}">
-  <meta property="og:image:width" content="1200">
-  <meta property="og:image:height" content="630">
-  <meta property="og:image:type" content="image/jpeg">
-  <meta name="twitter:image" content="${trackThumbnail}">
+    const rawType = (req.query.type as string || '').toLowerCase();
+    const type: 'song' | 'playlist' | 'artist' | 'album' = 
+      rawType === 'playlist' ? 'playlist' :
+      rawType === 'artist' ? 'artist' :
+      rawType === 'album' ? 'album' : 'song';
 
-  <!-- YouTube Fakeout to force Play Button -->
-  <meta property="og:video" content="https://www.youtube.com/embed/${trackId}">
-  <meta property="og:video:secure_url" content="https://www.youtube.com/embed/${trackId}">
-  <meta property="og:video:type" content="text/html">
-  <meta property="og:video:width" content="1280">
-  <meta property="og:video:height" content="720">
+    const id = (req.query.id || req.query.videoId || '') as string;
+    const title = (req.query.title || 'Great Music') as string;
+    const artist = (req.query.artist || req.query.channel || 'NYRA') as string;
+    const thumbnail = (req.query.thumbnail || req.query.artwork || req.query.image || (id && type === 'song' ? `https://i.ytimg.com/vi/${id}/hqdefault.jpg` : '')) as string;
+    const trackCount = req.query.tracks ? parseInt(req.query.tracks as string, 10) : undefined;
+    const creator = (req.query.creator || '') as string;
+    const colorHint = (req.query.color || '') as string;
 
-  <meta name="twitter:card" content="player">
-  <meta name="twitter:player" content="https://www.youtube.com/embed/${trackId}">
-  <meta name="twitter:player:width" content="1280">
-  <meta name="twitter:player:height" content="720">
+    return {
+      type,
+      id,
+      title,
+      artist,
+      thumbnail,
+      trackCount,
+      creator,
+      colorHint,
+      baseUrl,
+    };
+  }
 
-  <meta name="theme-color" content="#ffd300">
-  
-  <meta http-equiv="refresh" content="0;url=${baseUrl}/?play=${trackId}&title=${encodeURIComponent(trackTitle)}&channel=${encodeURIComponent(trackChannel)}&thumbnail=${encodeURIComponent(trackThumbnail)}">
-</head>
-<body>
-  <div style="background: #0b0b0b; color: white; height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center; font-family: sans-serif;">
-    <img src="${trackThumbnail}" style="width: 200px; height: 200px; border-radius: 12px; margin-bottom: 20px; box-shadow: 0 20px 50px rgba(0,0,0,0.5);">
-    <h1 style="margin: 0; font-size: 24px;">${trackTitle}</h1>
-    <p style="color: #888; margin-top: 8px;">Opening in ${appName}...</p>
-  </div>
-</body>
-</html>`;
+  // API Route: Premium Discord Open Graph HTML metadata endpoint
+  app.get('/api/og', (req, res) => {
+    try {
+      const data = parseOgRequest(req);
+      const html = generateDiscordOgHtml(data);
+      res.setHeader('Content-Type', 'text/html; charset=UTF-8');
+      res.setHeader('Cache-Control', 'public, max-age=3600, s-maxage=86400');
+      res.send(html);
+    } catch (err: any) {
+      console.error('[Express OG] Error generating Open Graph preview:', err);
+      // Safe fallback - never break the music page
+      res.redirect(302, '/');
+    }
+  });
 
-    res.setHeader('Content-Type', 'text/html; charset=UTF-8');
-    res.send(html);
+  // API Route: Dynamic Discord Open Graph Image Endpoint
+  app.get(['/api/og-image', '/api/og/image', '/api/og-image.svg'], async (req, res) => {
+    try {
+      const data = parseOgRequest(req);
+      const thumb = data.thumbnail;
+      if (thumb && thumb.startsWith('http') && !req.path.endsWith('.svg')) {
+        try {
+          const imgRes = await fetch(thumb);
+          if (imgRes.ok) {
+            const buffer = Buffer.from(await imgRes.arrayBuffer());
+            const cType = imgRes.headers.get('content-type') || 'image/jpeg';
+            res.setHeader('Content-Type', cType);
+            res.setHeader('Cache-Control', 'public, max-age=86400, s-maxage=604800');
+            return res.send(buffer);
+          }
+        } catch {}
+      }
+      const svg = generateOgImageSvg(data);
+      res.setHeader('Content-Type', 'image/svg+xml; charset=utf-8');
+      res.setHeader('Cache-Control', 'public, max-age=86400, s-maxage=604800');
+      res.send(svg);
+    } catch (err: any) {
+      console.error('[Express OG Image] Error generating preview:', err);
+      res.redirect('/headphones.png');
+    }
   });
 
   // API Route: Dynamic Workspace zip package download
@@ -709,6 +815,45 @@ async function startServer() {
       console.error('[Express Server] Failed to compile source zip:', err);
       res.status(500).json({ error: 'Zip compilation failed', details: err?.message });
     }
+  });
+
+  app.use('/api', (err: any, req: any, res: any, _next: any) => {
+    console.error('[Express API] Unhandled API error:', err?.message || err);
+    if (!res.headersSent) {
+      res.setHeader('Access-Control-Allow-Origin', '*');
+      res.setHeader('Content-Type', 'application/json');
+      res.status(502).json({ error: err?.message || 'Audio request failed' });
+    }
+  });
+
+  // Crawler Bot Interceptor for Discord & Social Previews on direct routes
+  app.use((req, res, next) => {
+    const userAgent = req.headers['user-agent'] || '';
+    const isBot = /(Discordbot|Twitterbot|facebookexternalhit|Slackbot|TelegramBot|WhatsApp)/i.test(userAgent);
+    if (isBot && !req.path.startsWith('/api') && !req.path.includes('.')) {
+      try {
+        const data = parseOgRequest(req);
+        // Auto-detect route patterns if not explicit in query
+        if (req.path.startsWith('/playlist/')) {
+          data.type = 'playlist';
+          data.id = req.path.split('/')[2];
+          if (data.title === 'Great Music') data.title = 'NYRA Playlist';
+        } else if (req.path.startsWith('/artist/') || req.path.startsWith('/yt-artist/')) {
+          data.type = 'artist';
+          data.id = req.path.split('/')[2];
+          if (data.title === 'Great Music') data.title = 'NYRA Artist';
+        } else if (req.path.startsWith('/song/')) {
+          data.type = 'song';
+          data.id = req.path.split('/')[2];
+        }
+        const html = generateDiscordOgHtml(data);
+        res.setHeader('Content-Type', 'text/html; charset=UTF-8');
+        return res.send(html);
+      } catch {
+        // Fall through to standard routing
+      }
+    }
+    next();
   });
 
   // Setup dev / production static asset routing

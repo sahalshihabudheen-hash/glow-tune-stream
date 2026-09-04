@@ -11,6 +11,7 @@ import { toast } from 'sonner';
 import { useDownloadManager } from '@/contexts/DownloadManagerContext';
 import { useMusicPlayer } from '@/contexts/MusicPlayerContext';
 import { isTrackDownloadedOffline } from '@/lib/offlineStore';
+import { shareTrack } from '@/utils/shareUtils';
 
 interface Track {
   id: string;
@@ -218,7 +219,7 @@ const FullscreenPlayer = ({
 
   useEffect(() => {
     const handleOnline = () => setIsOnline(true);
-    const handleOffline = () => setIsOffline(false);
+    const handleOffline = () => setIsOnline(false);
     window.addEventListener('online', handleOnline);
     window.addEventListener('offline', handleOffline);
     return () => {
@@ -247,6 +248,8 @@ const FullscreenPlayer = ({
     setVolume,
     isMuted,
     setIsMuted,
+    loopOneCount,
+    toggleLoopOne,
   } = useMusicPlayer();
   const { startDownload, isDownloading } = useDownloadManager();
 
@@ -299,9 +302,7 @@ const FullscreenPlayer = ({
 
   const handleShare = () => {
     if (currentTrack) {
-      const shareUrl = `${window.location.origin}/api/og?id=${currentTrack.id}&title=${encodeURIComponent(currentTrack.title)}`;
-      navigator.clipboard.writeText(shareUrl);
-      toast.success('Share link copied!');
+      shareTrack(currentTrack);
     }
   };
 
@@ -341,10 +342,17 @@ const FullscreenPlayer = ({
           <>
             {/* Ambient Background Video or Offline/Downloaded Music Theme Visualizer */}
             {isOnline && !isOfflineTrack ? (
-              <div className="absolute inset-0 w-full h-full opacity-30 pointer-events-none scale-[1.35]">
+              <div
+                className="absolute inset-0 w-full h-full pointer-events-none overflow-hidden"
+                style={{ opacity: Math.max(0, Math.min(100, settings.backgroundVideoBrightness ?? 30)) / 100 }}
+              >
                 <iframe
-                  className="w-full h-full object-cover pointer-events-none select-none"
-                  src={`https://www.youtube-nocookie.com/embed/${currentTrack.id}?autoplay=1&mute=1&controls=0&loop=1&playlist=${currentTrack.id}&modestbranding=1&rel=0&iv_load_policy=3&showinfo=0&disablekb=1`}
+                  className="absolute left-1/2 top-1/2 max-w-none -translate-x-1/2 -translate-y-1/2 border-0 pointer-events-none select-none"
+                  style={{
+                    width: 'max(100vw, 177.78dvh)',
+                    height: 'max(100dvh, 56.25vw)',
+                  }}
+                  src={`https://www.youtube-nocookie.com/embed/${currentTrack.id}?autoplay=1&mute=1&controls=0&loop=1&playlist=${currentTrack.id}&modestbranding=1&rel=0&iv_load_policy=3&showinfo=0&disablekb=1&playsinline=1`}
                   title="Fullscreen Video Background"
                   frameBorder="0"
                   allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
@@ -530,9 +538,25 @@ const FullscreenPlayer = ({
                 <SkipForward className="w-6 h-6 fill-current" />
              </button>
 
-             <button onClick={onCycleLoopMode} className={cn("p-2.5 rounded-2xl transition-all active:scale-90", loopMode !== 'off' ? "text-primary bg-primary/15 shadow-[0_0_15px_hsl(var(--primary)/0.3)]" : "text-muted-foreground hover:text-foreground hover:bg-white/5")}>
+              <button onClick={onCycleLoopMode} className={cn("p-2.5 rounded-2xl transition-all active:scale-90", loopMode === 'all' ? "text-primary bg-primary/15 shadow-[0_0_15px_hsl(var(--primary)/0.3)]" : "text-muted-foreground hover:text-foreground hover:bg-white/5")}>
                 {loopMode === 'one' ? <Repeat1 className="w-5 h-5" /> : <Repeat className="w-5 h-5" />}
              </button>
+              <button
+                onClick={toggleLoopOne}
+                className={cn(
+                  "relative p-2.5 rounded-2xl transition-all active:scale-90",
+                  loopOneCount > 0 ? "text-primary bg-primary/15 shadow-[0_0_15px_hsl(var(--primary)/0.3)]" : "text-muted-foreground hover:text-foreground hover:bg-white/5"
+                )}
+                aria-label={loopOneCount > 0 ? `Replay ${loopOneCount} more times` : 'Add one song replay'}
+                title={loopOneCount > 0 ? `Replay ${loopOneCount} more time${loopOneCount === 1 ? '' : 's'}` : 'Add one replay'}
+              >
+                <Repeat1 className="w-5 h-5" />
+                {loopOneCount > 0 && (
+                  <span className="absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-primary px-1 text-[9px] font-black leading-none text-primary-foreground ring-1 ring-background/50">
+                    {loopOneCount}
+                  </span>
+                )}
+              </button>
           </div>
 
           {/* Volume Control Section */}

@@ -1,5 +1,5 @@
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, ArrowRight, Palette, Volume2, ListMusic, Trash2, Waves, Blend, User, Camera, KeyRound, Loader2, RotateCcw, Sliders, Shield, Sparkles, Smartphone, Home, Search, Users, Heart, Gamepad2, Settings as SettingsIcon, Menu, Download } from 'lucide-react';
+import { ArrowLeft, ArrowRight, Palette, Volume2, ListMusic, Trash2, Waves, Blend, User, Camera, KeyRound, Loader2, RotateCcw, Sliders, Shield, Sparkles, Smartphone, Home, Search, Users, Heart, Gamepad2, Settings as SettingsIcon, Menu, Download, Minus, Plus, Sun, Orbit } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import { useTheme, themes, ThemeName, ProgressBarStyle } from '@/contexts/ThemeContext';
 import { Switch } from '@/components/ui/switch';
@@ -16,6 +16,7 @@ import { useEffect, useState, useRef } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { getAllOfflineTracks, clearAllOfflineTracks } from '@/lib/offlineStore';
 import { useIsMobile } from '@/hooks/use-mobile';
+import { useAppSettings } from '@/hooks/useAppSettings';
 
 const themePreview: Record<ThemeName, { label: string; color: string }> = {
   yellow: { label: 'Neon Yellow', color: 'hsl(50 100% 50%)' },
@@ -54,6 +55,8 @@ const Settings = () => {
 
   const [offlineTrackCount, setOfflineTrackCount] = useState(0);
   const [offlineTrackSize, setOfflineTrackSize] = useState(0);
+  const [isAdmin, setIsAdmin] = useState(false);
+  const { settings: appSettings } = useAppSettings();
 
   // Load offline storage info
   useEffect(() => {
@@ -91,7 +94,7 @@ const Settings = () => {
     { id: 'theme', label: '🎨 Theme & Lights', icon: Palette, description: 'Configure custom colors, angles, and RGB modes' },
     { id: 'player', label: '🎵 Player Customizer', icon: Sliders, description: 'Tailor progress bars, soundwaves, and animations' },
     ...(isMobile ? [{ id: 'navigation', label: '📱 Bottom Nav Bar', icon: Smartphone, description: 'Reorder bottom navigation buttons for mobile' }] : []),
-    { id: 'system', label: '💾 Backup & Cache', icon: RotateCcw, description: 'Clear player cache, export ZIP backups, and download APKs' },
+    { id: 'system', label: '💾 Cache & App', icon: RotateCcw, description: 'Clear player cache and download APKs' },
   ];
 
   useEffect(() => {
@@ -100,7 +103,20 @@ const Settings = () => {
     }
   }, [isMobile, settingsTab]);
 
-  const currentNavItems = settings.mobileNavItems || ['home', 'playlists', 'favorites', 'settings'];
+  const isNavItemAllowed = (itemId: string) => {
+    if (itemId === 'admin') return isAdmin;
+    if (itemId === 'home' || itemId === 'settings') return true;
+    return !appSettings.hidden_tabs.includes(itemId);
+  };
+
+  const availableNavEntries = Object.entries(navItemMetadata).filter(([key]) => isNavItemAllowed(key));
+  const currentNavItems = (settings.mobileNavItems || ['home', 'playlists', 'favorites', 'settings']).filter(isNavItemAllowed);
+
+  const applyMobilePreset = (items: string[], message: string) => {
+    const allowedItems = items.filter(isNavItemAllowed);
+    updateSettings({ mobileNavItems: allowedItems.length ? allowedItems : ['home', 'settings'] });
+    toast.success(message);
+  };
 
   const handleMoveItem = (index: number, direction: 'left' | 'right') => {
     const newItems = [...currentNavItems];
@@ -136,17 +152,12 @@ const Settings = () => {
   const [displayName, setDisplayName] = useState('');
   const [displayNameSaving, setDisplayNameSaving] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const [isAdmin, setIsAdmin] = useState(false);
   const [apkFiles, setApkFiles] = useState<{ name: string; url: string; size: number; uploaded_at: string }[]>([]);
 
   // Check admin status
   useEffect(() => {
     if (!user) return;
     const checkAdmin = async () => {
-      if (user.email === 'admin@gmail.com' || user.email === 'sahalshihabudheen@gmail.com') {
-        setIsAdmin(true);
-        return;
-      }
       const { data } = await supabase.rpc('has_role', { _user_id: user.id, _role: 'admin' });
       setIsAdmin(!!data);
     };
@@ -275,6 +286,16 @@ const Settings = () => {
     localStorage.removeItem('nyra-playlist');
     localStorage.removeItem('nyra-queue');
     toast.success('Playlist and queue cleared');
+  };
+
+  const updateRgbSpeed = (nextSpeed: number) => {
+    const speed = Math.min(5, Math.max(0.1, Math.round(nextSpeed * 10) / 10));
+    updateSettings({ rgbConfig: { ...settings.rgbConfig, speed } });
+  };
+
+  const updateBackgroundVideoBrightness = (nextBrightness: number) => {
+    const backgroundVideoBrightness = Math.min(100, Math.max(0, Math.round(nextBrightness / 5) * 5));
+    updateSettings({ backgroundVideoBrightness });
   };
 
   return (
@@ -571,6 +592,27 @@ const Settings = () => {
             </div>
           </section>
 
+          {/* Light Mode Toggle */}
+          <section className="mb-10">
+            <div className="flex items-center gap-3 mb-6">
+              <Sun className="w-6 h-6 text-primary" />
+              <h2 className="text-xl md:text-2xl font-semibold text-foreground">Light Mode</h2>
+            </div>
+            <div className="bg-card rounded-xl p-4 md:p-6 border border-border">
+              <div className="flex items-center justify-between gap-4">
+                <div className="flex-1">
+                  <p className="font-medium text-foreground text-sm md:text-base">Light Theme</p>
+                  <p className="text-xs md:text-sm text-muted-foreground">Switch to light background — better for bright environments &amp; saves battery on OLED displays. Also improves performance on low-end devices.</p>
+                </div>
+                <Switch
+                  checked={settings.lightMode}
+                  onCheckedChange={(checked) => updateSettings({ lightMode: checked })}
+                  className="data-[state=checked]:bg-primary"
+                />
+              </div>
+            </div>
+          </section>
+
           {/* Gradient Settings */}
           <section className="mb-10">
             <div className="flex items-center gap-3 mb-6">
@@ -695,17 +737,40 @@ const Settings = () => {
                   <span>Transition Speed</span>
                   <span className="text-primary font-medium">{settings.rgbConfig.speed.toFixed(1)}x</span>
                 </label>
-                <Slider
-                  value={[settings.rgbConfig.speed]}
-                  onValueChange={([value]) => updateSettings({ 
-                    rgbConfig: { ...settings.rgbConfig, speed: value } 
-                  })}
-                  min={0.1}
-                  max={5}
-                  step={0.1}
-                  disabled={!settings.rgbConfig.enabled}
-                  className="w-full"
-                />
+                <div className="flex items-center gap-3">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="icon"
+                    disabled={!settings.rgbConfig.enabled || settings.rgbConfig.speed <= 0.1}
+                    onClick={() => updateRgbSpeed(settings.rgbConfig.speed - 0.1)}
+                    aria-label="Decrease transition speed"
+                    className="h-9 w-9 shrink-0"
+                  >
+                    <Minus className="h-4 w-4" />
+                  </Button>
+                  <Slider
+                    value={[settings.rgbConfig.speed]}
+                    onValueChange={([value]) => updateRgbSpeed(value)}
+                    onValueCommit={([value]) => updateRgbSpeed(value)}
+                    min={0.1}
+                    max={5}
+                    step={0.1}
+                    disabled={!settings.rgbConfig.enabled}
+                    className="w-full"
+                  />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="icon"
+                    disabled={!settings.rgbConfig.enabled || settings.rgbConfig.speed >= 5}
+                    onClick={() => updateRgbSpeed(settings.rgbConfig.speed + 0.1)}
+                    aria-label="Increase transition speed"
+                    className="h-9 w-9 shrink-0"
+                  >
+                    <Plus className="h-4 w-4" />
+                  </Button>
+                </div>
                 <div className="flex justify-between mt-2 text-[10px] text-muted-foreground uppercase tracking-widest">
                   <span>Slow</span>
                   <span>Fast</span>
@@ -847,6 +912,36 @@ const Settings = () => {
               <div className="border-t border-border pt-4">
                 <div className="flex items-center justify-between gap-4">
                   <div className="flex-1">
+                    <p className="font-medium text-foreground text-sm md:text-base">Smart Music Transitions</p>
+                    <p className="text-xs md:text-sm text-muted-foreground">Smoothly crossfade between songs instead of abrupt cuts</p>
+                  </div>
+                  <Switch
+                    checked={settings.smartTransitions}
+                    onCheckedChange={(checked) => updateSettings({ smartTransitions: checked })}
+                    className="data-[state=checked]:bg-primary"
+                  />
+                </div>
+
+                {settings.smartTransitions && (
+                  <div className="mt-4">
+                    <div className="flex items-center justify-between mb-2">
+                      <p className="text-xs md:text-sm text-muted-foreground">Transition Duration</p>
+                      <span className="text-xs md:text-sm font-medium text-primary">{settings.transitionDuration}s</span>
+                    </div>
+                    <Slider
+                      value={[settings.transitionDuration]}
+                      min={0}
+                      max={12}
+                      step={1}
+                      onValueChange={(v) => updateSettings({ transitionDuration: v[0] })}
+                    />
+                  </div>
+                )}
+              </div>
+
+              <div className="border-t border-border pt-4">
+                <div className="flex items-center justify-between gap-4">
+                  <div className="flex-1">
                     <p className="font-medium text-foreground text-sm md:text-base">Mini Player Mode</p>
                     <p className="text-xs md:text-sm text-muted-foreground">Show compact player bar</p>
                   </div>
@@ -871,10 +966,107 @@ const Settings = () => {
                   />
                 </div>
               </div>
+
+              <div className="border-t border-border pt-4">
+                <div className="flex flex-col gap-4">
+                  <div className="flex items-center justify-between gap-4">
+                    <div className="flex-1">
+                      <p className="font-medium text-foreground text-sm md:text-base">Fullscreen Video Brightness</p>
+                      <p className="text-xs md:text-sm text-muted-foreground">Adjust the muted background video behind the full-screen player</p>
+                    </div>
+                    <span className="text-sm font-bold text-primary tabular-nums min-w-12 text-right">
+                      {settings.backgroundVideoBrightness ?? 30}%
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="icon"
+                      disabled={(settings.backgroundVideoBrightness ?? 30) <= 0}
+                      onClick={() => updateBackgroundVideoBrightness((settings.backgroundVideoBrightness ?? 30) - 5)}
+                      aria-label="Decrease fullscreen video brightness"
+                      className="h-9 w-9 shrink-0"
+                    >
+                      <Minus className="h-4 w-4" />
+                    </Button>
+                    <Slider
+                      value={[settings.backgroundVideoBrightness ?? 30]}
+                      onValueChange={([value]) => updateBackgroundVideoBrightness(value)}
+                      onValueCommit={([value]) => updateBackgroundVideoBrightness(value)}
+                      min={0}
+                      max={100}
+                      step={5}
+                      className="w-full"
+                    />
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="icon"
+                      disabled={(settings.backgroundVideoBrightness ?? 30) >= 100}
+                      onClick={() => updateBackgroundVideoBrightness((settings.backgroundVideoBrightness ?? 30) + 5)}
+                      aria-label="Increase fullscreen video brightness"
+                      className="h-9 w-9 shrink-0"
+                    >
+                      <Plus className="h-4 w-4" />
+                    </Button>
+                  </div>
+                  <div className="flex justify-between text-[10px] text-muted-foreground uppercase tracking-widest">
+                    <span>Dim</span>
+                    <span>Bright</span>
+                  </div>
+                </div>
+              </div>
             </div>
           </section>
           </div>
           )}
+
+          {/* Music Experience */}
+          <section className="mb-10">
+            <div className="flex items-center gap-3 mb-6">
+              <Orbit className="w-6 h-6 text-primary" />
+              <h2 className="text-xl md:text-2xl font-semibold text-foreground">Music Experience</h2>
+            </div>
+
+            <div className="space-y-4 bg-card rounded-xl p-4 md:p-6 border border-border">
+              <div className="flex items-center justify-between gap-4">
+                <div className="flex-1">
+                  <p className="font-medium text-foreground text-sm md:text-base">Music Universe</p>
+                  <p className="text-xs md:text-sm text-muted-foreground">
+                    Interactive map of your library — songs as connected nodes by artist, genre and listening patterns
+                  </p>
+                </div>
+                <Switch
+                  checked={settings.musicUniverse}
+                  onCheckedChange={(checked) => updateSettings({ musicUniverse: checked })}
+                  className="data-[state=checked]:bg-primary"
+                />
+              </div>
+
+              {settings.musicUniverse && (
+                <Button variant="secondary" size="sm" className="gap-2" onClick={() => navigate('/universe')}>
+                  <Orbit className="w-4 h-4" /> Open Music Universe
+                </Button>
+              )}
+
+              <div className="border-t border-border pt-4 flex items-center justify-between gap-4">
+                <div className="flex-1">
+                  <p className="font-medium text-foreground text-sm md:text-base">Dynamic Music UI</p>
+                  <p className="text-xs md:text-sm text-muted-foreground">
+                    Subtle background atmosphere based on the current song's artwork
+                  </p>
+                </div>
+                <Switch
+                  checked={settings.dynamicMusicUI}
+                  onCheckedChange={(checked) => updateSettings({ dynamicMusicUI: checked })}
+                  className="data-[state=checked]:bg-primary"
+                />
+              </div>
+            </div>
+          </section>
+
+
 
           {/* Mobile Bottom Navigation Bar customizer (NEW FEATURE) */}
           {settingsTab === 'navigation' && (
@@ -993,9 +1185,7 @@ const Settings = () => {
                                 onChange={(e) => handleReplaceItem(idx, e.target.value)}
                                 className="h-8 text-xs bg-background border border-border rounded-lg px-2 text-foreground focus:outline-none focus:ring-1 focus:ring-primary font-medium"
                               >
-                                {Object.entries(navItemMetadata)
-                                  .filter(([key]) => key !== 'admin' || isAdmin)
-                                  .map(([key, meta]) => (
+                                {availableNavEntries.map(([key, meta]) => (
                                     <option key={key} value={key}>
                                       Replace with: {meta.label}
                                     </option>
@@ -1018,8 +1208,7 @@ const Settings = () => {
                       <Button
                         variant="outline"
                         onClick={() => {
-                          updateSettings({ mobileNavItems: ['home', 'playlists', 'favorites', 'settings'] });
-                          toast.success('Default Layout applied!');
+                          applyMobilePreset(['home', 'playlists', 'favorites', 'settings'], 'Default Layout applied!');
                         }}
                         className="text-xs py-2 active:scale-95 text-center flex flex-col items-center justify-center gap-1 h-auto"
                       >
@@ -1029,8 +1218,7 @@ const Settings = () => {
                       <Button
                         variant="outline"
                         onClick={() => {
-                          updateSettings({ mobileNavItems: ['home', 'search', 'favorites', 'playlists'] });
-                          toast.success('Discovery Layout applied!');
+                          applyMobilePreset(['home', 'search', 'favorites', 'playlists'], 'Discovery Layout applied!');
                         }}
                         className="text-xs py-2 active:scale-95 text-center flex flex-col items-center justify-center gap-1 h-auto"
                       >
@@ -1040,8 +1228,7 @@ const Settings = () => {
                       <Button
                         variant="outline"
                         onClick={() => {
-                          updateSettings({ mobileNavItems: ['home', 'favorites', 'games', 'settings'] });
-                          toast.success('Fun & Play Layout applied!');
+                          applyMobilePreset(['home', 'favorites', 'games', 'settings'], 'Fun & Play Layout applied!');
                         }}
                         className="text-xs py-2 active:scale-95 text-center flex flex-col items-center justify-center gap-1 h-auto"
                       >
@@ -1152,33 +1339,6 @@ const Settings = () => {
                 >
                   <Trash2 className="w-4 h-4" />
                   Clear All
-                </Button>
-              </div>
-            </div>
-          </section>
-
-          {/* Backup & Repository Source Section */}
-          <section className="mb-10">
-            <div className="flex items-center gap-3 mb-6">
-              <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-primary"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path><polyline points="3.27 6.96 12 12.01 20.73 6.96"></polyline><line x1="12" y1="22.08" x2="12" y2="12"></line></svg>
-              <h2 className="text-xl md:text-2xl font-semibold text-foreground">Export & Backup</h2>
-            </div>
-
-            <div className="bg-card rounded-xl p-4 md:p-6 border border-border">
-              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-                <div>
-                  <p className="font-medium text-foreground text-sm md:text-base">Download Complete Project ZIP</p>
-                  <p className="text-xs md:text-sm text-muted-foreground">Get a fully compiled source archive of your exact, current codebase. You can import this into any code editor or push to GitHub.</p>
-                </div>
-                <Button
-                  onClick={() => {
-                    toast.info("Bundling repository source code...");
-                    window.location.href = "/api/download-zip";
-                  }}
-                  className="flex items-center gap-2 active:scale-95 touch-manipulation w-full sm:w-auto bg-primary text-black hover:bg-primary/90 font-semibold"
-                >
-                  <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
-                  Export ZIP Backup
                 </Button>
               </div>
             </div>

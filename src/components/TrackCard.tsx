@@ -3,6 +3,8 @@ import { cn } from '@/lib/utils';
 import AddToPlaylistDialog from './AddToPlaylistDialog';
 import { toast } from 'sonner';
 import { useDownloadManager } from '@/contexts/DownloadManagerContext';
+import { useNavigate } from 'react-router-dom';
+import { shareTrack } from '@/utils/shareUtils';
 
 interface Track {
   id: string;
@@ -23,6 +25,7 @@ interface TrackCardProps {
 
 const TrackCard = ({ track, isCurrent, isPlaying, onPlay, onAddToQueue, isFavorite = false, onToggleFavorite }: TrackCardProps) => {
 
+  const navigate = useNavigate();
   const { startDownload, isDownloading } = useDownloadManager();
   const downloading = isDownloading(track.id);
 
@@ -43,7 +46,7 @@ const TrackCard = ({ track, isCurrent, isPlaying, onPlay, onAddToQueue, isFavori
   };
 
   const handleCardClick = () => {
-    onPlay(track);
+    navigate(`/song/${track.id}`, { state: { track } });
   };
 
   const handleToggleFavorite = async (e: React.MouseEvent) => {
@@ -55,9 +58,7 @@ const TrackCard = ({ track, isCurrent, isPlaying, onPlay, onAddToQueue, isFavori
 
   const handleShare = (e: React.MouseEvent) => {
     e.stopPropagation();
-    const shareUrl = `${window.location.origin}/api/og?id=${track.id}&title=${encodeURIComponent(track.title)}`;
-    navigator.clipboard.writeText(shareUrl);
-    toast.success('Link copied!');
+    shareTrack(track);
   };
 
   return (
@@ -77,12 +78,12 @@ const TrackCard = ({ track, isCurrent, isPlaying, onPlay, onAddToQueue, isFavori
           className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110"
         />
         
-        {/* Action Overlay (Bottom) - Always visible for better discoverability */}
+        {/* Action Overlay (Bottom) - pointer-events-none so card body clicks pass through */}
         <div className={cn(
-          "absolute inset-0 bg-gradient-to-t from-black/90 via-black/20 to-transparent transition-opacity duration-500 flex flex-col justify-end p-4",
+          "absolute inset-0 bg-gradient-to-t from-black/90 via-black/20 to-transparent transition-opacity duration-500 flex flex-col justify-end p-4 pointer-events-none",
           "opacity-100"
         )}>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 pointer-events-auto">
             <button
               onClick={handlePlayNow}
               className={cn(

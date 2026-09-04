@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { Play, Pause, SkipBack, SkipForward, Volume2, VolumeX, Volume1, Repeat, Shuffle, ListPlus, Check, Minus, Plus, Maximize2, Music2, SlidersHorizontal, Download, Loader2, Share2, Zap, Headphones, MonitorPlay } from 'lucide-react';
+import { Play, Pause, SkipBack, SkipForward, Volume2, VolumeX, Volume1, Repeat, Repeat1, Shuffle, ListPlus, Check, Minus, Plus, Maximize2, Music2, SlidersHorizontal, Download, Loader2, Share2, Zap, Headphones, MonitorPlay } from 'lucide-react';
 import { toast } from 'sonner';
 import SoundwaveVisualizer from './SoundwaveVisualizer';
 import { cn } from '@/lib/utils';
@@ -12,6 +12,7 @@ import NowPlayingPanel from './NowPlayingPanel';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useDownloadManager } from '@/contexts/DownloadManagerContext';
 import { useMusicPlayer } from '@/contexts/MusicPlayerContext';
+import { shareTrack } from '@/utils/shareUtils';
 
 const DownloadButton = ({ track, compact }: { track: { id: string; title: string; thumbnail: string }; compact?: boolean }) => {
   const { startDownload, isDownloading } = useDownloadManager();
@@ -111,7 +112,9 @@ const MusicPlayer = ({
     shuffleMode: ctxShuffleMode,
     toggleShuffle,
     loopMode: ctxLoopMode,
+    loopOneCount,
     cycleLoopMode,
+    toggleLoopOne,
     isFavorite,
     toggleFavorite,
     volume,
@@ -210,11 +213,7 @@ const MusicPlayer = ({
 
   const handleShare = () => {
     if (currentTrack) {
-      const shareUrl = `${window.location.origin}/api/og?id=${currentTrack.id}&title=${encodeURIComponent(currentTrack.title)}`;
-      navigator.clipboard.writeText(shareUrl);
-      toast.success('Share link copied!', {
-        icon: <Share2 className="w-4 h-4 text-primary" />,
-      });
+      shareTrack(currentTrack);
     }
   };
 
@@ -242,6 +241,12 @@ const MusicPlayer = ({
       setHasAutoOpened(true);
     }
   }, [isPlaying, currentTrack?.id, settings.autoMiniPlayer, isMiniMode, updateSettings, hasAutoOpened, nowPlayingOpen, setNowPlayingOpen]);
+
+  // Shift the whole app layout when the Now Playing side panel is open (desktop only)
+  useEffect(() => {
+    document.documentElement.classList.toggle('np-open', nowPlayingOpen);
+    return () => document.documentElement.classList.remove('np-open');
+  }, [nowPlayingOpen]);
 
   return (
     <>
@@ -281,6 +286,7 @@ const MusicPlayer = ({
                     <p className="text-[8px] font-black text-muted-foreground/60 truncate uppercase tracking-widest mt-0.5">
                       {currentTrack.channel}
                     </p>
+                    <SoundwaveVisualizer isPlaying={isPlaying} className="mt-1 h-4 w-full max-w-28" shape="spectrum" />
                   </div>
                 </>
               ) : (
@@ -295,48 +301,53 @@ const MusicPlayer = ({
             </div>
 
             {/* Bottom row: seek progress bar */}
-            <div className="flex items-center gap-1.5 mt-1.5 px-0.5 w-full">
-              <span className="text-[7px] font-bold text-muted-foreground tabular-nums w-6 text-right">{formatTime(progress)}</span>
+            <div className="flex items-center gap-1 mt-1.5 px-0.5 w-full">
+              <span className="text-[7px] font-bold text-muted-foreground tabular-nums w-5 text-right shrink-0">{formatTime(progress)}</span>
               <StyledProgressBar
                 progress={progress}
                 duration={duration}
                 onSeek={handleSeek}
-                className="flex-1 min-w-[120px]"
+                className="flex-1 min-w-[60px]"
               />
-              <span className="text-[7px] font-bold text-muted-foreground tabular-nums w-6">{formatTime(duration)}</span>
+              <span className="text-[7px] font-bold text-muted-foreground tabular-nums w-5 shrink-0">{formatTime(duration)}</span>
             </div>
           </div>
 
           {/* Center Play/Pause Pill */}
-          <div className="shrink-0 flex items-center justify-center px-1">
+          <div className="shrink-0 flex items-center justify-center">
             <button
               onClick={onPlayPause}
-              className="w-11 h-11 rounded-[1.25rem] bg-primary text-primary-foreground flex items-center justify-center shadow-[0_4px_15px_rgba(var(--primary),0.35)] hover:scale-105 active:scale-95 transition-all neon-glow"
+              className="w-10 h-10 rounded-[1.1rem] bg-primary text-primary-foreground flex items-center justify-center shadow-[0_4px_15px_rgba(var(--primary),0.35)] hover:scale-105 active:scale-95 transition-all neon-glow"
             >
               {isPlaying ? <Pause className="w-4 h-4 fill-current" /> : <Play className="w-4 h-4 fill-current ml-0.5" />}
             </button>
           </div>
 
-          {/* Right actions pill/capsule */}
+          {/* Right actions pill/capsule — kept minimal on small phones; full set in fullscreen player */}
           <div className="shrink-0 flex items-center justify-end">
-            <div className="flex items-center gap-1 px-2 py-1.5 rounded-full bg-white/5 border border-white/5">
+            <div className="flex items-center gap-0.5 px-1.5 py-1.5 rounded-full bg-white/5 border border-white/5">
               <button 
                 onClick={() => setLyricsOpen(!lyricsOpen)} 
-                className={cn("p-1.5 rounded-full transition-all", lyricsOpen ? "text-primary" : "text-muted-foreground hover:text-foreground")}
+                className={cn("hidden min-[420px]:flex p-1.5 rounded-full transition-all", lyricsOpen ? "text-primary" : "text-muted-foreground hover:text-foreground")}
                 title="Lyrics"
               >
                 <Music2 className="w-3.5 h-3.5" />
               </button>
               <button 
-                onClick={() => currentTrack && setIsFullscreen(true)} 
-                className="p-1.5 rounded-full text-muted-foreground hover:text-foreground transition-all"
-                title="Fullscreen"
+                onClick={toggleLoopOne} 
+                className={cn("relative p-1.5 rounded-full transition-all", loopOneCount > 0 ? "text-primary bg-primary/10" : "text-muted-foreground hover:text-foreground")}
+                title={loopOneCount > 0 ? `Replay ${loopOneCount} more time${loopOneCount === 1 ? '' : 's'}` : 'Add one replay'}
               >
-                <MonitorPlay className="w-3.5 h-3.5" />
+                <Repeat1 className="w-3.5 h-3.5" />
+                {loopOneCount > 0 && (
+                  <span className="absolute -right-1 -top-1 flex h-3.5 min-w-3.5 items-center justify-center rounded-full bg-primary px-0.5 text-[8px] font-black leading-none text-primary-foreground">
+                    {loopOneCount}
+                  </span>
+                )}
               </button>
               <button 
                 onClick={handleShare} 
-                className="p-1.5 rounded-full text-muted-foreground hover:text-foreground transition-all"
+                className="hidden min-[420px]:flex p-1.5 rounded-full text-muted-foreground hover:text-foreground transition-all"
                 title="Share"
               >
                 <Share2 className="w-3.5 h-3.5" />
@@ -353,6 +364,13 @@ const MusicPlayer = ({
                   {isDownloading(currentTrack.id) ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />}
                 </button>
               )}
+              <button 
+                onClick={() => currentTrack && setIsFullscreen(true)} 
+                className="p-1.5 rounded-full text-muted-foreground hover:text-foreground transition-all"
+                title="Fullscreen"
+              >
+                <MonitorPlay className="w-3.5 h-3.5" />
+              </button>
             </div>
           </div>
         </div>
@@ -446,19 +464,18 @@ const MusicPlayer = ({
           </div>
 
           {/* Right: Actions & Volume */}
-          <div className={cn(
-            "flex items-center justify-end gap-3 transition-all duration-500 shrink-0",
-            nowPlayingOpen ? "w-48 lg:w-60" : "w-64 lg:w-76"
-          )}>
             <div className={cn(
-              "flex items-center rounded-xl bg-white/5 border border-white/5 shadow-inner transition-all",
-              nowPlayingOpen ? "gap-0.5 p-0.5" : "gap-1 p-1 lg:p-1.5"
+              "flex items-center justify-end gap-2 transition-all duration-500 shrink-0",
+              nowPlayingOpen ? "w-48 lg:w-60" : "w-64 lg:w-76"
+            )}>
+            <div className={cn(
+                "grid grid-flow-col auto-cols-[2rem] items-center justify-center rounded-xl bg-white/5 border border-white/5 shadow-inner transition-all",
+                nowPlayingOpen ? "gap-0.5 p-0.5" : "gap-1 p-1"
             )}>
               <button 
                 onClick={() => setLyricsOpen(!lyricsOpen)} 
                 className={cn(
-                  "rounded-lg transition-all",
-                  nowPlayingOpen ? "p-1" : "p-1.5 lg:p-2",
+                  "h-8 w-8 rounded-lg transition-all flex items-center justify-center",
                   lyricsOpen ? "bg-primary text-primary-foreground shadow-sm" : "text-muted-foreground hover:text-foreground hover:bg-white/5"
                 )}
                 title="Lyrics"
@@ -468,8 +485,8 @@ const MusicPlayer = ({
               <button 
                 onClick={() => setNowPlayingOpen(!nowPlayingOpen)} 
                 className={cn(
-                  "rounded-lg transition-all",
-                  nowPlayingOpen ? "p-1 animate-pulse" : "p-1.5 lg:p-2",
+                  "h-8 w-8 rounded-lg transition-all flex items-center justify-center",
+                  nowPlayingOpen ? "animate-pulse" : "",
                   nowPlayingOpen ? "bg-primary text-primary-foreground shadow-sm" : "text-muted-foreground hover:text-foreground hover:bg-white/5"
                 )}
                 title="Now Playing"
@@ -479,8 +496,7 @@ const MusicPlayer = ({
               <button 
                 onClick={() => setShowEQ(!showEQ)} 
                 className={cn(
-                  "rounded-lg transition-all",
-                  nowPlayingOpen ? "p-1" : "p-1.5 lg:p-2",
+                  "h-8 w-8 rounded-lg transition-all flex items-center justify-center",
                   showEQ ? "bg-primary text-primary-foreground shadow-sm" : "text-muted-foreground hover:text-foreground hover:bg-white/5"
                 )}
                 title="Equalizer"
@@ -488,11 +504,23 @@ const MusicPlayer = ({
                 <SlidersHorizontal className="w-4 h-4" />
               </button>
               <button 
-                onClick={handleShare} 
+                onClick={toggleLoopOne} 
                 className={cn(
-                  "rounded-lg text-muted-foreground hover:text-foreground hover:bg-white/5 transition-all",
-                  nowPlayingOpen ? "p-1" : "p-1.5 lg:p-2"
+                  "relative h-8 w-8 rounded-lg transition-all flex items-center justify-center",
+                  loopOneCount > 0 ? "bg-primary text-primary-foreground shadow-sm" : "text-muted-foreground hover:text-foreground hover:bg-white/5"
                 )}
+                title={loopOneCount > 0 ? `Replay ${loopOneCount} more time${loopOneCount === 1 ? '' : 's'}` : 'Add one replay'}
+              >
+                <Repeat1 className="w-4 h-4" />
+                {loopOneCount > 0 && (
+                  <span className="absolute -right-1 -top-1 flex h-3.5 min-w-3.5 items-center justify-center rounded-full bg-background px-0.5 text-[8px] font-black leading-none text-primary ring-1 ring-primary/40">
+                    {loopOneCount}
+                  </span>
+                )}
+              </button>
+              <button 
+                onClick={handleShare} 
+                className="h-8 w-8 rounded-lg text-muted-foreground hover:text-foreground hover:bg-white/5 transition-all flex items-center justify-center"
                 title="Share"
               >
                 <Share2 className="w-4 h-4" />

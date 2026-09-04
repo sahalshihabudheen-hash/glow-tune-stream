@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useCallback } from 'react';
+import React, { createContext, useContext, useState, useCallback, useEffect, useRef } from 'react';
 import { toast } from 'sonner';
 import { useTheme } from '@/contexts/ThemeContext';
 import { saveTrackOffline } from '@/lib/offlineStore';
@@ -158,6 +158,34 @@ async function tryInnertube(videoId: string): Promise<string | null> {
   }
 }
 
+async function searchVideoIdByTitle(title: string): Promise<string | null> {
+  const query = sanitizeFilename(title);
+  if (!query) return null;
+
+  try {
+    const res = await fetch(`https://api.piped.private.coffee/search?q=${encodeURIComponent(query)}&filter=videos`, {
+      headers: { Accept: 'application/json' },
+      signal: getTimeoutSignal(8000),
+    });
+    if (res.ok) {
+      const data = await res.json();
+      const item = data?.items?.find((entry: any) => entry?.type === 'stream' && /watch\?v=/.test(entry?.url || ''));
+      const id = item?.url?.match(/[?&]v=([a-zA-Z0-9_-]{11})/)?.[1];
+      if (id) return id;
+    }
+  } catch { /* try next source */ }
+
+  try {
+    const res = await fetch(`https://www.youtube.com/results?search_query=${encodeURIComponent(query)}`, {
+      signal: getTimeoutSignal(8000),
+    });
+    const html = await res.text();
+    return html.match(/"videoId":"([a-zA-Z0-9_-]{11})"/)?.[1] || null;
+  } catch {
+    return null;
+  }
+}
+
 // Race ALL resolvers in parallel — first one to return a non-null URL wins
 async function resolveAudioUrl(videoId: string): Promise<string | null> {
   const promises: Promise<string | null>[] = [
@@ -188,41 +216,293 @@ async function resolveAudioUrl(videoId: string): Promise<string | null> {
   });
 }
 
-// ── Blob fetcher for in-app (IndexedDB) downloads ──────────────────────────
+async function resolveAudioUrlForTrack(track: { id: string; title: string }): Promise<string | null> {
+  const original = await resolveAudioUrl(track.id);
+  if (original) return original;
+
+  const replacementId = await searchVideoIdByTitle(track.title);
+  if (!replacementId || replacementId === track.id) return null;
+  return resolveAudioUrl(replacementId);
+}
+
+// ── Bulletproof audio blob pipeline ─────────────────────────────────────────
+
+const MIN_AUDIO_BYTES = 50_000;
+const MAX_FETCH_RETRIES = 3;
+
+type AudioBlobResult = { blob: Blob; mimeType: string; source: string };
+type AudioCandidate = { url: string; label: string };
+
+const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+const looksLikeAudioMime = (mimeType: string) => {
+  const type = mimeType.toLowerCase();
+  return (
+    type.startsWith('audio/') ||
+    type.startsWith('video/') ||
+    type.includes('application/octet-stream') ||
+    type.includes('binary/octet-stream')
+  );
+};
+
+const sniffTextHeader = (bytes: Uint8Array) =>
+  new TextDecoder()
+    .decode(bytes.slice(0, Math.min(bytes.length, 160)))
+    .trim()
+    .toLowerCase();
+
+const validateAudioHeader = (bytes: Uint8Array, mimeType: string) => {
+  const head = sniffTextHeader(bytes);
+  if (!bytes.length) throw new Error('No audio bytes received');
+  if (
+    head.startsWith('<!doctype') ||
+    head.startsWith('<html') ||
+    head.startsWith('{"error"') ||
+    head.startsWith('{"message"') ||
+    head.includes('<body') ||
+    mimeType.includes('text/html') ||
+    mimeType.includes('application/json')
+  ) {
+    throw new Error('Provider returned a webpage/error instead of audio');
+  }
+  if (!looksLikeAudioMime(mimeType)) {
+    throw new Error(`Unexpected content type: ${mimeType || 'unknown'}`);
+  }
+};
 
 async function fetchAudioBlob(
   audioUrl: string,
   onProgress: (p: number) => void
-): Promise<Blob> {
+): Promise<{ blob: Blob; mimeType: string }> {
   onProgress(10);
-  const response = await fetch(audioUrl, { signal: getTimeoutSignal(120_000) });
-  if (!response.ok) throw new Error(`HTTP ${response.status}`);
+  const response = await fetch(audioUrl, {
+    headers: { Accept: 'audio/*,video/*,application/octet-stream,*/*;q=0.5' },
+    signal: getTimeoutSignal(180_000),
+  });
 
+  const responseType = (response.headers.get('content-type') || '').split(';')[0].trim().toLowerCase();
+  if (!response.ok) {
+    let detail = '';
+    try {
+      const body = await response.text();
+      detail = body ? ` — ${body.slice(0, 120)}` : '';
+    } catch { /* ignore body parse errors */ }
+    throw new Error(`HTTP ${response.status}${detail}`);
+  }
+
+  const mimeType = responseType || 'audio/webm';
   const contentLength = response.headers.get('content-length');
   const total = contentLength ? parseInt(contentLength, 10) : 0;
   const reader = response.body?.getReader();
 
   if (!reader) {
     const blob = await response.blob();
-    if (blob.size < 50_000) throw new Error('File too small');
-    return blob;
+    const head = new Uint8Array(await blob.slice(0, 4096).arrayBuffer());
+    validateAudioHeader(head, mimeType);
+    if (blob.size < MIN_AUDIO_BYTES) throw new Error('Audio file was incomplete');
+    return { blob: blob.type ? blob : new Blob([blob], { type: mimeType }), mimeType };
   }
 
   let received = 0;
   const chunks: Uint8Array[] = [];
+  let firstChunkChecked = false;
+
   while (true) {
     const { done, value } = await reader.read();
     if (done) break;
+    if (!firstChunkChecked) {
+      validateAudioHeader(value, mimeType);
+      firstChunkChecked = true;
+    }
     chunks.push(value);
     received += value.length;
     if (total > 0) onProgress(Math.min(Math.max(Math.round((received / total) * 100), 15), 98));
-    else onProgress(50);
+    else onProgress(Math.min(95, 25 + Math.round(received / 300_000)));
   }
 
-  const blob = new Blob(chunks, { type: 'audio/mpeg' });
-  if (blob.size < 50_000) throw new Error('File too small');
-  return blob;
+  const blob = new Blob(chunks as BlobPart[], { type: mimeType });
+  if (!firstChunkChecked) throw new Error('No audio bytes received');
+  if (blob.size < MIN_AUDIO_BYTES) throw new Error('Audio file was incomplete');
+  return { blob, mimeType };
 }
+
+// Edge-function endpoint that resolves + proxies YouTube audio server-side.
+// Prefer Supabase when configured; fall back to the Vercel /api route so exports
+// still work if the app is deployed without VITE_SUPABASE_URL.
+const getAudioFunctionBases = () => {
+  const backendUrl = (import.meta.env.VITE_SUPABASE_URL || '').replace(/\/$/, '');
+  const bases = ['/api/get-audio-url'];
+  if (backendUrl) bases.push(`${backendUrl}/functions/v1/get-audio-url`);
+  return [...new Set(bases)];
+};
+
+const buildAudioFunctionUrl = (
+  track: { id: string; title: string },
+  options: { stream?: boolean; download?: boolean; proxyUrl?: string; base?: string } = {}
+) => {
+  const params = new URLSearchParams();
+  if (options.proxyUrl) params.set('proxyUrl', options.proxyUrl);
+  else params.set('videoId', track.id);
+  if (options.stream) params.set('stream', '1');
+  if (options.download) params.set('download', '1');
+  params.set('title', sanitizeFilename(track.title) || 'audio');
+  return `${options.base || getAudioFunctionBases()[0]}?${params.toString()}`;
+};
+
+const extForMime = (mimeType: string) => {
+  if (mimeType.includes('mp4') || mimeType.includes('m4a') || mimeType.includes('aac')) return 'm4a';
+  if (mimeType.includes('mpeg') || mimeType.includes('mp3')) return 'mp3';
+  return 'webm';
+};
+
+const resolveServerAudioUrl = async (track: { id: string; title: string }) => {
+  let lastError: unknown;
+  for (const base of getAudioFunctionBases()) {
+    try {
+      const response = await fetch(buildAudioFunctionUrl(track, { base }), {
+        signal: getTimeoutSignal(35_000),
+      });
+      if (!response.ok) {
+        throw new Error(`Audio link failed (HTTP ${response.status})`);
+      }
+      const responseType = response.headers.get('content-type') || '';
+      if (responseType.includes('text/html')) throw new Error('Resolver returned HTML');
+      const data = await response.json();
+      const url = data?.audioUrl || data?.audioUrl1;
+      if (!url) throw new Error('No audio link found');
+      return { url, mimeType: data?.mimeType || 'audio/webm', base };
+    } catch (err) {
+      lastError = err;
+    }
+  }
+  throw lastError instanceof Error ? lastError : new Error('No audio link found');
+};
+
+const assertDownloadUrlReady = async (url: string) => {
+  const controller = new AbortController();
+  const timer = window.setTimeout(() => controller.abort(), 45_000);
+  const response = await fetch(url, {
+    headers: { Range: 'bytes=0-4095' },
+    signal: controller.signal,
+  });
+  try {
+    if (!response.ok && response.status !== 206) {
+      throw new Error(`HTTP ${response.status}`);
+    }
+    const mimeType = (response.headers.get('content-type') || 'audio/webm').split(';')[0];
+    const reader = response.body?.getReader();
+    const first = reader ? await reader.read() : null;
+    const probe = first?.value || new Uint8Array();
+    try { await reader?.cancel(); } catch { /* ignore */ }
+    validateAudioHeader(probe, mimeType);
+    return mimeType;
+  } finally {
+    window.clearTimeout(timer);
+    controller.abort();
+  }
+};
+
+const firstReadyDownload = async (track: { id: string; title: string }, options: { download?: boolean; stream?: boolean; proxyUrl?: string } = {}) => {
+  let lastError: unknown;
+  for (const base of getAudioFunctionBases()) {
+    const url = buildAudioFunctionUrl(track, { ...options, base });
+    try {
+      const mimeType = await assertDownloadUrlReady(url);
+      return { url, mimeType, base };
+    } catch (err) {
+      lastError = err;
+    }
+  }
+  throw lastError instanceof Error ? lastError : new Error('Audio stream unavailable');
+};
+
+const fetchAudioBlobWithRetries = async (
+  candidate: AudioCandidate,
+  onProgress: (p: number) => void
+): Promise<AudioBlobResult> => {
+  let lastError: unknown;
+  for (let attempt = 1; attempt <= MAX_FETCH_RETRIES; attempt++) {
+    try {
+      const result = await fetchAudioBlob(candidate.url, onProgress);
+      return { ...result, source: candidate.label };
+    } catch (err) {
+      lastError = err;
+      console.warn(`[Download] ${candidate.label} attempt ${attempt} failed:`, err);
+      if (attempt < MAX_FETCH_RETRIES) await wait(700 * attempt);
+    }
+  }
+  throw lastError instanceof Error ? lastError : new Error(`${candidate.label} failed`);
+};
+
+const buildBackendCandidates = (
+  track: { id: string; title: string },
+  mode: 'download' | 'stream',
+  proxyUrl?: string
+): AudioCandidate[] =>
+  getAudioFunctionBases().map((base) => ({
+    url: buildAudioFunctionUrl(track, {
+      base,
+      proxyUrl,
+      download: mode === 'download',
+      stream: mode === 'stream',
+    }),
+    label: `${base.includes('/api/') ? 'Vercel' : 'Backend'} ${proxyUrl ? 'proxy' : 'resolver'}`,
+  }));
+
+const fetchFirstAudioBlob = async (
+  track: { id: string; title: string },
+  mode: 'download' | 'stream',
+  onProgress: (p: number) => void
+): Promise<AudioBlobResult> => {
+  const errors: string[] = [];
+
+  const tryCandidates = async (candidates: AudioCandidate[]) => {
+    for (const candidate of candidates) {
+      try {
+        return await fetchAudioBlobWithRetries(candidate, onProgress);
+      } catch (err: any) {
+        errors.push(`${candidate.label}: ${err?.message || 'failed'}`);
+      }
+    }
+    return null;
+  };
+
+  const direct = await tryCandidates(buildBackendCandidates(track, mode));
+  if (direct) return direct;
+
+  try {
+    const serverAudio = await resolveServerAudioUrl(track);
+    const proxied = await tryCandidates(buildBackendCandidates(track, mode, serverAudio.url));
+    if (proxied) return proxied;
+  } catch (err: any) {
+    errors.push(`Backend resolver: ${err?.message || 'failed'}`);
+  }
+
+  try {
+    const fallbackUrl = await resolveAudioUrlForTrack(track);
+    if (fallbackUrl) {
+      const clientProxied = await tryCandidates(buildBackendCandidates(track, mode, fallbackUrl));
+      if (clientProxied) return clientProxied;
+    } else {
+      errors.push('Browser resolver: no audio URL found');
+    }
+  } catch (err: any) {
+    errors.push(`Browser resolver: ${err?.message || 'failed'}`);
+  }
+
+  throw new Error(`No valid audio blob found. ${errors.slice(-3).join(' | ')}`);
+};
+
+const triggerBrowserDownload = (blob: Blob, title: string, mimeType = 'audio/webm') => {
+  const blobUrl = URL.createObjectURL(blob.type ? blob : new Blob([blob], { type: mimeType }));
+  const link = document.createElement('a');
+  link.href = blobUrl;
+  link.download = `${sanitizeFilename(title)}.${extForMime(mimeType)}`;
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  window.setTimeout(() => URL.revokeObjectURL(blobUrl), 30_000);
+};
 
 // ── Provider ──────────────────────────────────────────────────────────────────
 
@@ -239,6 +519,7 @@ export function DownloadManagerProvider({ children }: { children: React.ReactNod
     duration?: number;
   } | null>(null);
   const [dontAskAgain, setDontAskAgain] = useState(false);
+  const queueCacheInFlight = useRef(new Set<string>());
 
   const addItem = useCallback((item: DownloadItem) => {
     setDownloads((prev) => [item, ...prev.filter((d) => d.id !== item.id)]);
@@ -264,63 +545,31 @@ export function DownloadManagerProvider({ children }: { children: React.ReactNod
   );
 
   // ── Download to Device ──────────────────────────────────────────────────────
-  // Strategy: resolve audio URL client-side (residential IP, no Vercel involved),
-  // then trigger a native <a> download. No blob fetching = no CORS issues.
+  // Always fetches and validates a real audio Blob before creating the file.
+  // If every resolver fails, it shows a clear error instead of saving HTML/JSON.
   const downloadToDevice = useCallback(
     async (track: { id: string; title: string; thumbnail: string }) => {
       addItem({ id: track.id, title: track.title, thumbnail: track.thumbnail, status: 'preparing', progress: 0 });
-      updateItem(track.id, { status: 'downloading', progress: 15 });
+      updateItem(track.id, { status: 'downloading', progress: 5 });
 
       try {
-        toast.loading('Finding audio stream…', { id: `dl-${track.id}` });
-        const audioUrl = await resolveAudioUrl(track.id);
+        toast.loading('Preparing verified audio file…', { id: `dl-${track.id}` });
+        const result = await fetchFirstAudioBlob(track, 'download', (p) =>
+          updateItem(track.id, { progress: Math.round(5 + p * 0.9) })
+        );
+
         toast.dismiss(`dl-${track.id}`);
-
-        if (!audioUrl) {
-          throw new Error('Could not resolve audio stream. Try again in a moment.');
-        }
-
-        updateItem(track.id, { progress: 80 });
-
-        // Try blob download first (gives proper .mp3 filename in most browsers)
-        let blobSuccess = false;
-        try {
-          const proxiedUrl = `/api/get-audio-url?proxyUrl=${encodeURIComponent(audioUrl)}`;
-          const blob = await fetchAudioBlob(proxiedUrl, (p) => updateItem(track.id, { progress: Math.round(10 + p * 0.7) }));
-          const blobUrl = URL.createObjectURL(blob);
-          const link = document.createElement('a');
-          link.href = blobUrl;
-          link.download = `${sanitizeFilename(track.title)}.mp3`;
-          document.body.appendChild(link);
-          link.click();
-          document.body.removeChild(link);
-          setTimeout(() => URL.revokeObjectURL(blobUrl), 5000);
-          blobSuccess = true;
-        } catch (blobErr) {
-          console.warn('[Download] Blob fetch failed, falling back to direct link:', blobErr);
-        }
-
-        // Fallback: direct browser link — browser handles download natively (no CORS restriction)
-        if (!blobSuccess) {
-          const link = document.createElement('a');
-          const proxiedUrl = `/api/get-audio-url?proxyUrl=${encodeURIComponent(audioUrl)}&download=1&title=${encodeURIComponent(track.title)}`;
-          link.href = proxiedUrl;
-          link.download = `${sanitizeFilename(track.title)}.mp3`;
-          link.target = '_blank';
-          link.rel = 'noreferrer noopener';
-          document.body.appendChild(link);
-          link.click();
-          document.body.removeChild(link);
-        }
+        updateItem(track.id, { progress: 95 });
+        triggerBrowserDownload(result.blob, track.title, result.mimeType);
 
         updateItem(track.id, { status: 'done', progress: 100 });
-        toast.success(`🎵 Download started: ${track.title}`);
+        toast.success(`🎵 Audio download ready: ${track.title}`);
         removeItem(track.id, 15_000);
       } catch (err: any) {
         console.error('[Download] Device download failed:', err);
         toast.dismiss(`dl-${track.id}`);
         updateItem(track.id, { status: 'error', progress: 0 });
-        toast.error(err.message || 'Download failed. Please try again.');
+        toast.error(err.message || 'Could not get a valid audio file. Please try again.');
         removeItem(track.id, 8_000);
       }
     },
@@ -335,17 +584,11 @@ export function DownloadManagerProvider({ children }: { children: React.ReactNod
 
       try {
         toast.loading('Finding audio stream…', { id: `dl-app-${track.id}` });
-        const audioUrl = await resolveAudioUrl(track.id);
-        toast.dismiss(`dl-app-${track.id}`);
 
-        if (!audioUrl) {
-          throw new Error('Could not resolve audio stream. Try again in a moment.');
-        }
-
-        const proxiedUrl = `/api/get-audio-url?proxyUrl=${encodeURIComponent(audioUrl)}`;
-        const audioBlob = await fetchAudioBlob(proxiedUrl, (p) =>
-          updateItem(track.id, { progress: Math.round(10 + p * 0.85) })
+        const { blob: audioBlob } = await fetchFirstAudioBlob(track, 'stream', (p) =>
+          updateItem(track.id, { progress: Math.round(10 + p * 0.8) })
         );
+        toast.dismiss(`dl-app-${track.id}`);
 
         await saveTrackOffline(track, audioBlob);
         updateItem(track.id, { status: 'done', progress: 100 });
@@ -354,14 +597,52 @@ export function DownloadManagerProvider({ children }: { children: React.ReactNod
       } catch (err: any) {
         console.error('[Download] In-app download failed:', err);
         toast.dismiss(`dl-app-${track.id}`);
-        updateItem(track.id, { status: 'error', progress: 0 });
-        toast.error(err.message || 'Failed to save for offline. Please try again.');
-        removeItem(track.id, 8_000);
+        toast.info('Offline save failed, switching to device download…');
+        await downloadToDevice(track);
       }
 
     },
-    [addItem, updateItem, removeItem]
+    [addItem, updateItem, removeItem, downloadToDevice]
   );
+
+  // Queueing a song also warms its full audio blob in IndexedDB. This is best
+  // effort and intentionally silent: playback remains available while caching,
+  // and a failed provider can be retried the next time the song is queued.
+  useEffect(() => {
+    type QueuedTrack = { id: string; title: string; thumbnail: string; channel?: string };
+    const cacheQueuedTrack = async (track: QueuedTrack) => {
+      if (!track?.id || queueCacheInFlight.current.has(track.id)) return;
+      queueCacheInFlight.current.add(track.id);
+      try {
+        const result = await fetchFirstAudioBlob(track, 'stream', () => {});
+        await saveTrackOffline({ ...track, artist: track.channel }, result.blob);
+        window.dispatchEvent(new CustomEvent('nyra:offline-cache-updated', { detail: { id: track.id } }));
+      } catch (error) {
+        console.warn('[Queue Cache] Could not cache queued track yet:', error);
+      } finally {
+        queueCacheInFlight.current.delete(track.id);
+      }
+    };
+
+    const handleQueuedTrack = (event: Event) => {
+      const track = (event as CustomEvent<QueuedTrack>).detail;
+      void cacheQueuedTrack(track);
+    };
+
+    window.addEventListener('nyra:cache-queued-track', handleQueuedTrack);
+    // Warm only the next few restored queue entries, sequentially, to avoid
+    // saturating a weak mobile connection when the app launches.
+    try {
+      const restored = JSON.parse(localStorage.getItem('nyra-queue') || '[]') as QueuedTrack[];
+      void restored.slice(0, 3).reduce(
+        (previous, track) => previous.then(() => cacheQueuedTrack(track)),
+        Promise.resolve(),
+      );
+    } catch {
+      // A malformed legacy queue should not block the player.
+    }
+    return () => window.removeEventListener('nyra:cache-queued-track', handleQueuedTrack);
+  }, []);
 
   // ── Entry point ─────────────────────────────────────────────────────────────
   const startDownload = useCallback(
@@ -457,7 +738,7 @@ export function DownloadManagerProvider({ children }: { children: React.ReactNod
                 </div>
                 <div>
                   <h4 className="text-sm font-bold text-foreground">Download to Device</h4>
-                  <p className="text-xs text-muted-foreground">Saves file (.mp3) to your downloads folder.</p>
+                  <p className="text-xs text-muted-foreground">Saves an audio file to your downloads folder.</p>
                 </div>
               </button>
 

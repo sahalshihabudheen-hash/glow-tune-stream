@@ -36,7 +36,15 @@ const Auth = () => {
         });
         if (error) throw error;
         toast.success('Welcome back!');
-        if (data.user?.email === 'admin@gmail.com' || data.user?.email === 'sahalshihabudheen@gmail.com') {
+        let isAdmin = false;
+        if (data.user) {
+          const { data: hasAdmin } = await supabase.rpc('has_role', {
+            _user_id: data.user.id,
+            _role: 'admin',
+          });
+          isAdmin = !!hasAdmin;
+        }
+        if (isAdmin) {
           navigate('/admin');
         } else {
           navigate('/');

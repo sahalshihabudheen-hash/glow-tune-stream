@@ -1,4 +1,4 @@
-import { Home, Search, ListMusic, Heart, Settings, Menu, X, Users, Shield, Gamepad2, Sparkles, AlertTriangle, Wand2, Headphones, Play, Disc3, Download } from 'lucide-react';
+import { Home, Search, ListMusic, Heart, Settings, Menu, X, Users, Shield, Gamepad2, Sparkles, AlertTriangle, Wand2, Headphones, Play, Disc3, Download, MonitorSmartphone, BarChart3, Orbit } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { cn } from '@/lib/utils';
@@ -32,7 +32,6 @@ const Sidebar = ({ activeTab, onTabChange }: SidebarProps) => {
   useEffect(() => {
     const checkAdmin = async () => {
       if (!user) { setIsAdmin(false); return; }
-      if (user.email === 'admin@gmail.com' || user.email === 'sahalshihabudheen@gmail.com') { setIsAdmin(true); return; }
       const { data } = await supabase.rpc('has_role', { _user_id: user.id, _role: 'admin' });
       setIsAdmin(!!data);
     };
@@ -46,7 +45,10 @@ const Sidebar = ({ activeTab, onTabChange }: SidebarProps) => {
     { id: 'playlists', label: 'Playlists', icon: ListMusic, path: '/playlists' },
     { id: 'favorites', label: 'Favorites', icon: Heart, path: '/favorites' },
     { id: 'offline', label: 'Downloads', icon: Download, path: '/offline' },
+    { id: 'get-app', label: 'Get App', icon: MonitorSmartphone, path: '/get-app' },
+    { id: 'stats', label: 'Statistics', icon: BarChart3, path: '/stats' },
     { id: 'ai-dj', label: 'AI DJ', icon: Sparkles, path: '/ai-dj' },
+    ...(userSettings.musicUniverse ? [{ id: 'universe', label: 'Music Universe', icon: Orbit, path: '/universe' }] : []),
     { id: 'games', label: 'Games', icon: Gamepad2, path: '/games' },
     { id: 'settings', label: 'Settings', icon: Settings, path: '/settings' },
     ...(isAdmin ? [{ id: 'admin', label: 'Admin', icon: Shield, path: '/admin' }] : []),
@@ -77,8 +79,11 @@ const Sidebar = ({ activeTab, onTabChange }: SidebarProps) => {
     if (item.path === '/admin' && location.pathname === '/admin') return true;
     if (item.path === '/settings' && location.pathname === '/settings') return true;
     if (item.path === '/offline' && location.pathname === '/offline') return true;
+    if (item.path === '/get-app' && location.pathname === '/get-app') return true;
     if (item.path === '/games' && location.pathname === '/games') return true;
+    if (item.path === '/stats' && (location.pathname === '/stats' || location.pathname === '/statistics')) return true;
     if (item.path === '/ai-dj' && location.pathname === '/ai-dj') return true;
+    if (item.path === '/universe' && location.pathname === '/universe') return true;
     if (item.id === 'playlists' && location.pathname.startsWith('/playlist')) return true;
     if (item.id === 'artists' && (location.pathname === '/artists' || location.pathname.startsWith('/artist'))) return true;
     if (item.path === '/' && location.pathname === '/' && item.id === activeTab) return true;
@@ -95,7 +100,7 @@ const Sidebar = ({ activeTab, onTabChange }: SidebarProps) => {
       {/* Sleek Mobile Bottom Navigation Bar */}
       <div className="md:hidden fixed bottom-0 left-0 right-0 h-16 bg-sidebar/95 backdrop-blur-xl border-t border-border z-[140] px-2 flex items-center justify-around pb-safe shadow-[0_-10px_30px_rgba(0,0,0,0.5)]">
         {(userSettings.mobileNavItems || ['home', 'playlists', 'favorites', 'settings']).map((itemId) => {
-          const item = allMenuItems.find(m => m.id === itemId);
+          const item = menuItems.find(m => m.id === itemId);
           if (!item) return null;
           const Icon = item.icon;
           const isActive = isItemActive(item) && !moreExpanded;
@@ -176,7 +181,7 @@ const Sidebar = ({ activeTab, onTabChange }: SidebarProps) => {
               <div className="px-5 py-4">
                 <p className="text-[9px] font-bold text-muted-foreground uppercase tracking-widest mb-2 px-1">Channels & Controls</p>
                 <div className="grid grid-cols-4 gap-2">
-                  {allMenuItems.map((item) => {
+                  {menuItems.map((item) => {
                     const Icon = item.icon;
                     const isActive = isItemActive(item);
                     return (

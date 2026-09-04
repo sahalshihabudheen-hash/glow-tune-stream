@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { TrendingUp, Play, ListPlus, ChevronLeft, ChevronRight, Heart, Pause, Flame, Download } from 'lucide-react';
-
+import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { useTheme } from '@/contexts/ThemeContext';
@@ -28,6 +28,7 @@ interface TrendingSectionProps {
 const TrendingSection = ({ onPlayTrack, currentTrack, isPlaying, onAddToQueue, isFavorite, onToggleFavorite }: TrendingSectionProps) => {
   const { gradient } = useTheme();
   const { startDownload } = useDownloadManager();
+  const navigate = useNavigate();
 
   const [trendingTracks, setTrendingTracks] = useState<Track[]>([]);
   const [loading, setLoading] = useState(true);
@@ -201,6 +202,7 @@ const TrendingSection = ({ onPlayTrack, currentTrack, isPlaying, onAddToQueue, i
                   'flex-shrink-0 w-40 md:w-48 group cursor-pointer animate-in-up',
                 )}
                 style={{ animationDelay: `${index * 0.05}s` }}
+                onClick={() => navigate(`/song/${track.id}`, { state: { track } })}
               >
                 <div className={cn(
                   "relative w-full aspect-square rounded-2xl overflow-hidden bg-secondary transition-all duration-300",
@@ -212,15 +214,15 @@ const TrendingSection = ({ onPlayTrack, currentTrack, isPlaying, onAddToQueue, i
                     className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110"
                   />
                   
-                  {/* Overlay - Always visible */}
+                  {/* Overlay - pointer-events-none so card clicks pass through */}
                   <div className={cn(
-                    "absolute inset-0 bg-gradient-to-t from-black/90 via-black/20 to-transparent transition-opacity duration-300",
+                    "absolute inset-0 bg-gradient-to-t from-black/90 via-black/20 to-transparent transition-opacity duration-300 pointer-events-none",
                     "opacity-100"
                   )}>
                     {/* Action buttons */}
-                    <div className="absolute bottom-3 left-3 right-3 flex items-center gap-2">
+                    <div className="absolute bottom-3 left-3 right-3 flex items-center gap-2 pointer-events-auto">
                       <button
-                        onClick={() => onPlayTrack(track)}
+                        onClick={(e) => { e.stopPropagation(); onPlayTrack(track); }}
                         className={cn(
                           "w-11 h-11 rounded-full flex items-center justify-center transition-all shadow-lg",
                           isTrackPlaying 

@@ -353,7 +353,7 @@ const AdminChat = () => {
       const { error: uploadError } = await supabase.storage.from('admin-chat').upload(path, imageFile);
       if (uploadError) throw uploadError;
       const { data: urlData } = supabase.storage.from('admin-chat').getPublicUrl(path);
-      await sendMessage('image', null, urlData.publicUrl);
+      await sendMessage('image', undefined, urlData.publicUrl);
       setImageFile(null);
       setImagePreview(null);
     } catch {

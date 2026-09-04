@@ -13,6 +13,15 @@ const DB_NAME = 'NyraOfflineDB';
 const STORE_NAME = 'tracks';
 const DB_VERSION = 1;
 
+export type OfflineTrackInput = {
+  id: string;
+  title: string;
+  thumbnail: string;
+  artist?: string;
+  channel?: string;
+  duration?: number;
+};
+
 function initDB(): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
     const request = indexedDB.open(DB_NAME, DB_VERSION);
@@ -36,7 +45,7 @@ function initDB(): Promise<IDBDatabase> {
 }
 
 export async function saveTrackOffline(
-  track: { id: string; title: string; thumbnail: string; artist?: string; duration?: number },
+  track: OfflineTrackInput,
   audioBlob: Blob
 ): Promise<void> {
   const db = await initDB();
@@ -51,7 +60,7 @@ export async function saveTrackOffline(
       audioBlob,
       downloadedAt: Date.now(),
       size: audioBlob.size,
-      artist: track.artist || 'Unknown Artist',
+      artist: track.artist || track.channel || 'Unknown Artist',
       duration: track.duration || 0,
     };
 

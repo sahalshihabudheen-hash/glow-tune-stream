@@ -9,4 +9,7 @@ coverage/
 zip.zip
 temp_unzip/
 yt-dlp
-
+glow-tune-stream-main/
+glow-tune-stream-main.zip
+*-player-script.js
+.idea/

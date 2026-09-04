@@ -33,9 +33,16 @@ serve(async (req) => {
       });
     }
 
-    // Only OG admin can delete users
-    if (user.email !== "admin@gmail.com" && user.email !== "sahalshihabudheen@gmail.com") {
-      return new Response(JSON.stringify({ error: "Only the original admins can delete users" }), {
+    // Only admins (by role) can delete users
+    const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey);
+    const { data: callerRole } = await supabaseAdmin
+      .from("user_roles")
+      .select("role")
+      .eq("user_id", user.id)
+      .eq("role", "admin")
+      .maybeSingle();
+    if (!callerRole) {
+      return new Response(JSON.stringify({ error: "Access denied. Admin only." }), {
         status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
@@ -54,7 +61,6 @@ serve(async (req) => {
       });
     }
 
-    const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey);
     const { error: deleteError } = await supabaseAdmin.auth.admin.deleteUser(target_user_id);
 
     if (deleteError) throw deleteError;

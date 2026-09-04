@@ -74,6 +74,12 @@ interface AppSettings {
   rgbConfig: RgbConfig;
   mobileNavItems?: string[];
   downloadPreference?: 'ask' | 'device' | 'app';
+  backgroundVideoBrightness: number;
+  lightMode: boolean;
+  smartTransitions: boolean;
+  transitionDuration: number; // seconds, 0-12
+  musicUniverse: boolean;
+  dynamicMusicUI: boolean;
 }
 
 interface ThemeContextType {
@@ -166,6 +172,12 @@ export const ThemeProvider = ({ children }: { children: ReactNode }) => {
         speed: 1,
       },
       downloadPreference: 'ask' as 'ask' | 'device' | 'app',
+      backgroundVideoBrightness: 30,
+      lightMode: false,
+      smartTransitions: false,
+      transitionDuration: 4,
+      musicUniverse: false,
+      dynamicMusicUI: false,
     };
     const saved = localStorage.getItem('nyra-settings');
     if (!saved) return defaults;
@@ -180,6 +192,15 @@ export const ThemeProvider = ({ children }: { children: ReactNode }) => {
       return defaults;
     }
   });
+
+  // Apply / remove .light class on <html> whenever lightMode changes
+  useEffect(() => {
+    if (settings.lightMode) {
+      document.documentElement.classList.add('light');
+    } else {
+      document.documentElement.classList.remove('light');
+    }
+  }, [settings.lightMode]);
 
   // Use refs for RGB values to avoid re-rendering the whole app 60 times a second
   // since these only update CSS variables directly
@@ -331,7 +352,16 @@ export const ThemeProvider = ({ children }: { children: ReactNode }) => {
   }, []);
 
   const updateSettings = useCallback((newSettings: Partial<AppSettings>) => {
-    setSettings(prev => ({ ...prev, ...newSettings }));
+    setSettings(prev => {
+      const next = { ...prev, ...newSettings };
+      if (newSettings.backgroundVideoBrightness !== undefined) {
+        const value = Number(newSettings.backgroundVideoBrightness);
+        next.backgroundVideoBrightness = Number.isFinite(value)
+          ? Math.max(0, Math.min(100, Math.round(value)))
+          : prev.backgroundVideoBrightness;
+      }
+      return next;
+    });
   }, []);
 
   const contextValue = useMemo(() => ({

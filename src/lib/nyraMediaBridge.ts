@@ -33,13 +33,17 @@ export async function notifyNativePlayback(isPlaying: boolean, positionMs: numbe
 export function listenCarCommands(
   onPlay: () => void,
   onPause: () => void,
-  onSeek: (ms: number) => void
+  onSeek: (ms: number) => void,
+  onNext?: () => void,
+  onPrevious?: () => void
 ) {
   if (!isNative()) return () => {};
   const handle = NyraMedia.addListener('carCommand', ({ command, position }) => {
     if (command === 'play') onPlay();
     else if (command === 'pause') onPause();
     else if (command === 'seek') onSeek(position);
+    else if (command === 'next') onNext?.();
+    else if (command === 'previous') onPrevious?.();
   });
   return () => handle.remove();
 }

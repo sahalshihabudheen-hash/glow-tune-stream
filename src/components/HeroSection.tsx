@@ -4,7 +4,7 @@ import { cn } from '@/lib/utils';
 import { useTheme } from '@/contexts/ThemeContext';
 import { famousSongs } from '@/data/famousSongs';
 import { getFunctionAuthHeaders } from '@/lib/functionAuth';
-import { motion, AnimatePresence } from 'motion/react';
+import { motion, AnimatePresence, type Variants } from 'motion/react';
 
 interface Track {
   id: string;
@@ -86,7 +86,7 @@ const HeroSection = ({ onPlayTrack, featuredTrack: propFeaturedTrack }: HeroSect
   const activeTrack = spotlightSongs[currentIndex];
 
   // Motion Variants for smooth right-to-left sliding animation
-  const slideVariants = {
+  const slideVariants: Variants = {
     enter: (dir: number) => ({
       x: dir > 0 ? 300 : -300,
       opacity: 0,

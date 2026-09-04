@@ -24,7 +24,7 @@ const Navbar = ({ searchQuery, onSearchChange, onSearch, onClearSearch }: Navbar
   };
 
   return (
-    <header className="fixed top-0 left-0 md:left-64 right-0 h-16 md:h-20 bg-background/80 backdrop-blur-xl border-b border-border z-30 flex items-center justify-between px-4 md:px-8">
+    <header className="app-navbar fixed top-0 left-0 md:left-64 right-0 h-16 md:h-20 transition-[right] duration-500 pt-safe px-safe bg-background/80 backdrop-blur-xl border-b border-border z-30 flex items-center justify-between px-4 md:px-8">
       {/* Search Bar */}
       <div className="flex-1 max-w-xl">
         <div className="relative">
