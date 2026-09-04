@@ -1,5 +1,5 @@
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, ArrowRight, Palette, Volume2, ListMusic, Trash2, Waves, Blend, User, Camera, KeyRound, Loader2, RotateCcw, Sliders, Shield, Sparkles, Smartphone, Home, Search, Users, Heart, Gamepad2, Settings as SettingsIcon, Menu, Download, Minus, Plus, Sun } from 'lucide-react';
+import { ArrowLeft, ArrowRight, Palette, Volume2, ListMusic, Trash2, Waves, Blend, User, Camera, KeyRound, Loader2, RotateCcw, Sliders, Shield, Sparkles, Smartphone, Home, Search, Users, Heart, Gamepad2, Settings as SettingsIcon, Menu, Download, Minus, Plus, Sun, Orbit } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import { useTheme, themes, ThemeName, ProgressBarStyle } from '@/contexts/ThemeContext';
 import { Switch } from '@/components/ui/switch';
@@ -1021,6 +1021,52 @@ const Settings = () => {
           </section>
           </div>
           )}
+
+          {/* Music Experience */}
+          <section className="mb-10">
+            <div className="flex items-center gap-3 mb-6">
+              <Orbit className="w-6 h-6 text-primary" />
+              <h2 className="text-xl md:text-2xl font-semibold text-foreground">Music Experience</h2>
+            </div>
+
+            <div className="space-y-4 bg-card rounded-xl p-4 md:p-6 border border-border">
+              <div className="flex items-center justify-between gap-4">
+                <div className="flex-1">
+                  <p className="font-medium text-foreground text-sm md:text-base">Music Universe</p>
+                  <p className="text-xs md:text-sm text-muted-foreground">
+                    Interactive map of your library — songs as connected nodes by artist, genre and listening patterns
+                  </p>
+                </div>
+                <Switch
+                  checked={settings.musicUniverse}
+                  onCheckedChange={(checked) => updateSettings({ musicUniverse: checked })}
+                  className="data-[state=checked]:bg-primary"
+                />
+              </div>
+
+              {settings.musicUniverse && (
+                <Button variant="secondary" size="sm" className="gap-2" onClick={() => navigate('/universe')}>
+                  <Orbit className="w-4 h-4" /> Open Music Universe
+                </Button>
+              )}
+
+              <div className="border-t border-border pt-4 flex items-center justify-between gap-4">
+                <div className="flex-1">
+                  <p className="font-medium text-foreground text-sm md:text-base">Dynamic Music UI</p>
+                  <p className="text-xs md:text-sm text-muted-foreground">
+                    Subtle background atmosphere based on the current song's artwork
+                  </p>
+                </div>
+                <Switch
+                  checked={settings.dynamicMusicUI}
+                  onCheckedChange={(checked) => updateSettings({ dynamicMusicUI: checked })}
+                  className="data-[state=checked]:bg-primary"
+                />
+              </div>
+            </div>
+          </section>
+
+
 
           {/* Mobile Bottom Navigation Bar customizer (NEW FEATURE) */}
           {settingsTab === 'navigation' && (
