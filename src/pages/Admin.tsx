@@ -11,7 +11,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogTrigger, DialogDescription } from '@/components/ui/dialog';
 import { Switch } from '@/components/ui/switch';
 import { toast } from 'sonner';
-import { Shield, ShieldAlert, Users, LogOut, ArrowLeft, Loader2, Music, ListMusic, Clock, Gamepad2, MapPin, Smartphone, Monitor, Laptop, Tablet, Copy, KeyRound, Wrench, X, Plus, Trash2, Circle, Search, Watch, Wifi, WifiOff, Key, RefreshCw, CheckCircle, XCircle, AlertTriangle, GraduationCap, Settings2, MessageCircle, ScrollText, Download, Upload, Zap, Activity } from 'lucide-react';
+import { Shield, ShieldAlert, Users, LogOut, ArrowLeft, Loader2, Music, ListMusic, Clock, Gamepad2, MapPin, Smartphone, Monitor, Laptop, Tablet, Copy, KeyRound, Wrench, X, Plus, Trash2, Circle, Search, Watch, Wifi, WifiOff, Key, RefreshCw, CheckCircle, XCircle, AlertTriangle, GraduationCap, Settings2, MessageCircle, ScrollText, Download, Upload, Zap, Activity, BarChart3 } from 'lucide-react';
 import { Progress } from '@/components/ui/progress';
 import { useMaintenanceMode } from '@/hooks/useMaintenanceMode';
 import AdminTutorial from '@/components/AdminTutorial';
@@ -1401,6 +1401,18 @@ const Admin = () => {
                                     className="text-xs text-destructive hover:text-destructive h-7 px-2"
                                   >
                                     {roleLoading === u.id ? <Loader2 className="w-3 h-3 animate-spin" /> : 'Revoke'}
+                                  </Button>
+                                )}
+                                {u.id !== user?.id && (
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    title="View user statistics"
+                                    onClick={() => navigate(`/stats/${u.id}`, { state: { email: u.email, display_name: u.display_name } })}
+                                    className="text-xs h-7 gap-1"
+                                  >
+                                    <BarChart3 className="w-3 h-3" />
+                                    Stats
                                   </Button>
                                 )}
                                 {u.email !== user?.email && (
