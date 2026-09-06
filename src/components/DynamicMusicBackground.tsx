@@ -162,6 +162,13 @@ const DynamicMusicBackground = () => {
 
   if (!settings.dynamicMusicUI) return null;
 
+  const particles = Array.from({ length: 18 }, (_, i) => ({
+    left: (i * 37) % 100,
+    delay: (i % 9) * 1.1,
+    duration: 14 + (i % 6) * 3,
+    size: 3 + (i % 4) * 2,
+  }));
+
   const intensityPct = (settings.dynamicIntensity ?? 70) / 100;
   const baseOpacity = Math.max(0.2, Math.min(0.95, intensityPct * 0.85));
   const layerClass =
@@ -200,6 +207,32 @@ const DynamicMusicBackground = () => {
           opacity: Math.max(0.3, 0.7 - intensityPct * 0.3),
         }}
       />
+
+      {/* Music-reactive particle field (whole app) */}
+      {isPlaying && (
+        <>
+          <style>{`@keyframes nyra-particle-rise{0%{transform:translateY(105vh) scale(.6);opacity:0}10%{opacity:.7}90%{opacity:.5}100%{transform:translateY(-10vh) scale(1.1);opacity:0}}`}</style>
+          <div className="absolute inset-0">
+            {particles.map((p, i) => (
+              <span
+                key={i}
+                className="absolute rounded-full bg-primary"
+                style={{
+                  left: `${p.left}%`,
+                  bottom: 0,
+                  width: `${p.size}px`,
+                  height: `${p.size}px`,
+                  filter: 'blur(1px)',
+                  opacity: 0.5,
+                  boxShadow: '0 0 var(--beat-glow-px, 0px) hsl(var(--primary))',
+                  transform: 'scale(var(--beat-scale, 1))',
+                  animation: `nyra-particle-rise ${p.duration}s linear ${p.delay}s infinite`,
+                }}
+              />
+            ))}
+          </div>
+        </>
+      )}
     </div>
   );
 };
