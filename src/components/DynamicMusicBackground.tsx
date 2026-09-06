@@ -162,6 +162,13 @@ const DynamicMusicBackground = () => {
 
   if (!settings.dynamicMusicUI) return null;
 
+  const particles = Array.from({ length: 18 }, (_, i) => ({
+    left: (i * 37) % 100,
+    delay: (i % 9) * 1.1,
+    duration: 14 + (i % 6) * 3,
+    size: 3 + (i % 4) * 2,
+  }));
+
   const intensityPct = (settings.dynamicIntensity ?? 70) / 100;
   const baseOpacity = Math.max(0.2, Math.min(0.95, intensityPct * 0.85));
   const layerClass =
