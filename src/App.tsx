@@ -7,7 +7,7 @@ import { ThemeProvider } from "@/contexts/ThemeContext";
 import { MusicPlayerProvider } from "@/contexts/MusicPlayerContext";
 import { DownloadManagerProvider } from "@/contexts/DownloadManagerContext";
 import FloatingMiniPlayer from "@/components/FloatingMiniPlayer";
-import DynamicMusicBackground from "@/components/DynamicMusicBackground";
+import DynamicMusicBackground, { DynamicMusicParticles } from "@/components/DynamicMusicBackground";
 
 import DownloadQueue from "@/components/DownloadQueue";
 import MaintenanceGuard from "@/components/MaintenanceGuard";
@@ -50,6 +50,7 @@ const App = () => (
         <Router>
           <MusicPlayerProvider>
             <DynamicMusicBackground />
+            <DynamicMusicParticles />
             <DownloadManagerProvider>
             <DiscordPresence />
             <SmartTransitions />
