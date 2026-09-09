@@ -11,6 +11,7 @@ import ImportYouTubePlaylistDialog from '@/components/ImportYouTubePlaylistDialo
 import PlaylistGridPhoto from '@/components/PlaylistGridPhoto';
 import { cn } from '@/lib/utils';
 import { readCache, writeCache, prefetchThumbs } from '@/lib/offlineCache';
+import SEO from '@/components/SEO';
 
 interface Playlist {
   id: string;
@@ -99,6 +100,11 @@ const PlaylistsManager = () => {
 
   return (
     <div className="min-h-screen bg-background flex flex-col">
+      <SEO 
+        title="Curated Playlists & Collections" 
+        canonicalPath="/playlists"
+        description="Organize, manage, and explore playlists with custom cover artwork and high fidelity sound on NYRA."
+      />
       <Sidebar activeTab={activeTab} onTabChange={setActiveTab} />
       <Navbar
         searchQuery={searchQuery}

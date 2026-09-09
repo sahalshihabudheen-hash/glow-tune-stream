@@ -9,6 +9,7 @@ import Sidebar from '@/components/Sidebar';
 import SoundwaveVisualizer from '@/components/SoundwaveVisualizer';
 import { useAllArtists } from '@/hooks/useArtist';
 import { useAuth } from '@/hooks/useAuth';
+import SEO from '@/components/SEO';
 
 const Artists = () => {
   const { artists, loading } = useAllArtists();
@@ -25,6 +26,11 @@ const Artists = () => {
 
   return (
     <div className="min-h-screen bg-background">
+      <SEO 
+        title="Featured Artists & Discographies" 
+        canonicalPath="/artists"
+        description="Discover trending and verified artists on NYRA. Explore artist discographies, top music tracks, albums, and biography highlights."
+      />
       <Sidebar activeTab={activeTab} onTabChange={setActiveTab} />
       
       <div className="ml-0 md:ml-64">

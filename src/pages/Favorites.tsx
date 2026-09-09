@@ -12,6 +12,7 @@ import { useFavorites } from '@/hooks/useFavorites';
 import { useAuth } from '@/hooks/useAuth';
 import { useMusicPlayer } from '@/contexts/MusicPlayerContext';
 import { Link } from 'react-router-dom';
+import SEO from '@/components/SEO';
 
 interface Track {
   id: string;
@@ -73,6 +74,11 @@ const Favorites = () => {
 
   return (
     <div className="min-h-screen bg-background">
+      <SEO 
+        title="My Favorites" 
+        canonicalPath="/favorites"
+        noindex={true}
+      />
       <Sidebar activeTab={activeTab} onTabChange={setActiveTab} />
       
       <div className="ml-0 md:ml-64">

@@ -7,6 +7,7 @@ import TrackCard from '@/components/TrackCard';
 import { toast } from 'sonner';
 import Sidebar from '@/components/Sidebar';
 import MusicPlayer from '@/components/MusicPlayer';
+import SEO from '@/components/SEO';
 
 interface Track {
   id: string;
@@ -155,6 +156,13 @@ const YouTubeArtistPage = () => {
 
   return (
     <div className="min-h-screen bg-[#050505] text-foreground">
+      <SEO 
+        title={channelInfo ? `${channelInfo.name} - Artist Music & Discography` : 'Artist Discography'}
+        description={channelInfo?.description ? channelInfo.description.slice(0, 160) : 'Listen to top songs, albums, and discography on NYRA.'}
+        canonicalPath={`/yt-artist/${channelId || ''}`}
+        ogType="profile"
+        ogImage={channelInfo?.photo || undefined}
+      />
       <Sidebar activeTab="" onTabChange={() => {}} />
 
       <div className="ml-0 md:ml-64 min-h-screen pb-48">

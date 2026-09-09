@@ -1,6 +1,7 @@
 import { useLocation, Link } from "react-router-dom";
 import { useEffect } from "react";
 import { Home, Music2 } from "lucide-react";
+import SEO from "@/components/SEO";
 
 const NotFound = () => {
   const location = useLocation();
@@ -11,6 +12,7 @@ const NotFound = () => {
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-background px-6">
+      <SEO title="Page Not Found" noindex={true} />
       <div className="text-center max-w-md">
         <div className="mx-auto mb-6 grid h-16 w-16 place-items-center rounded-2xl bg-primary/10 text-primary">
           <Music2 className="h-8 w-8" />

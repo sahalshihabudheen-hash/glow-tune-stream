@@ -19,6 +19,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { useMusicPlayer } from '@/contexts/MusicPlayerContext';
 import { useDownloadManager } from '@/contexts/DownloadManagerContext';
 import { isTrackDownloadedOffline } from '@/lib/offlineStore';
+import SEO from '@/components/SEO';
 
 interface Track {
   id: string;
@@ -432,6 +433,12 @@ const PlaylistView = () => {
 
   return (
     <div className="min-h-screen bg-background/80 flex flex-col">
+      <SEO 
+        title={playlist?.name ? `${playlist.name} - Playlist` : 'Playlist'}
+        description={playlist?.description || `Listen to ${playlist?.name || 'playlist'} with high fidelity audio and dynamic visualizers on NYRA.`}
+        canonicalPath={`/playlist/${id || ''}`}
+        ogType="music.playlist"
+      />
       <Sidebar activeTab={activeTab} onTabChange={setActiveTab} />
       
       <Navbar

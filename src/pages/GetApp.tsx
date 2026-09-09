@@ -3,6 +3,7 @@ import { Smartphone, Monitor, Download, Apple, Terminal, CheckCircle2, Music4 } 
 import Navbar from '@/components/Navbar';
 import Sidebar from '@/components/Sidebar';
 import { cn } from '@/lib/utils';
+import SEO from '@/components/SEO';
 
 const platforms = [
   {
@@ -77,6 +78,11 @@ const GetApp = () => {
 
   return (
     <div className="min-h-screen bg-background">
+      <SEO 
+        title="Download NYRA App — Android, Windows, Mac & Linux" 
+        canonicalPath="/get-app"
+        description="Download NYRA Music Player for Android, Windows, macOS, and Linux. Enjoy background audio playback, offline playlists, and Discord Rich Presence."
+      />
       <Navbar searchQuery="" onSearchChange={() => {}} onSearch={() => {}} />
       <Sidebar activeTab={activeTab} onTabChange={setActiveTab} />
 

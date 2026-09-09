@@ -11,6 +11,7 @@ import MusicPlayer from '@/components/MusicPlayer';
 import { useAuth } from '@/hooks/useAuth';
 import { useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
+import SEO from '@/components/SEO';
 
 interface Song {
   title: string;
@@ -137,6 +138,11 @@ const AiDj = () => {
 
   return (
     <div className="min-h-screen bg-background/80 gradient-bg noise-overlay">
+      <SEO 
+        title="AI Mood DJ - Smart Music Flow" 
+        canonicalPath="/ai-dj"
+        description="Experience NYRA AI Mood DJ. Continuous, intelligent music flow powered by AI, tailored in real-time to your mood, activity, and vibe."
+      />
       <Sidebar activeTab={activeTab} onTabChange={setActiveTab} />
 
       <div className="ml-0 md:ml-64">

@@ -22,6 +22,7 @@ import { Sparkles, TrendingUp, Compass, Users } from 'lucide-react';
 import FavoriteArtistsSection from '@/components/FavoriteArtistsSection';
 import MadeForYouSection from '@/components/MadeForYouSection';
 
+import SEO from '@/components/SEO';
 import { getFunctionAuthHeaders } from '@/lib/functionAuth';
 
 
@@ -111,6 +112,11 @@ const Index = () => {
 
   return (
     <div className="min-h-screen bg-[#050505] text-foreground relative overflow-hidden">
+      <SEO 
+        title="Discover & Stream Free Music" 
+        canonicalPath="/"
+        description="Stream millions of songs for free on NYRA. Discover trending music, explore high-fidelity lossless audio, dynamic beat-reactive visualizers, and curated playlists."
+      />
       {/* Immersive Background Effects */}
       <div className="fixed inset-0 z-0 pointer-events-none hidden md:block">
         <div className="absolute top-[-10%] right-[-5%] w-[50%] h-[50%] rounded-full bg-primary/10 blur-[150px] animate-pulse-slow" />

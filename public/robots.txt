@@ -1,0 +1,51 @@
+# https://www.robotstxt.org/robotstxt.html
+# Robots.txt for NYRA Music Player (https://nyra-music-player.vercel.app)
+
+User-agent: *
+Allow: /
+Allow: /artists
+Allow: /artist/*
+Allow: /song/*
+Allow: /playlists
+Allow: /playlist/*
+Allow: /universe
+Allow: /ai-dj
+Allow: /games
+Allow: /get-app
+Allow: /offline
+Allow: /become-artist
+Allow: /stats
+Allow: /api/og*
+Disallow: /admin
+Disallow: /debug
+Disallow: /settings
+
+# Specific Crawler Rules
+User-agent: Googlebot
+Allow: /
+Allow: /api/og*
+Disallow: /admin
+Disallow: /debug
+
+User-agent: Bingbot
+Allow: /
+Disallow: /admin
+Disallow: /debug
+
+User-agent: Applebot
+Allow: /
+Disallow: /admin
+Disallow: /debug
+
+User-agent: Twitterbot
+Allow: /
+
+User-agent: facebookexternalhit
+Allow: /
+
+User-agent: Discordbot
+Allow: /
+
+# Canonical Sitemaps & Host
+Sitemap: https://nyra-music-player.vercel.app/sitemap.xml
+Host: https://nyra-music-player.vercel.app

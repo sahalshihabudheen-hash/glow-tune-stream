@@ -19,6 +19,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { getFunctionAuthHeaders } from '@/lib/functionAuth';
 import { shareTrack } from '@/utils/shareUtils';
 import { useTasteProfile } from '@/hooks/useTasteProfile';
+import SEO from '@/components/SEO';
 
 interface Track {
   id: string;
@@ -275,6 +276,13 @@ const SongDetails = () => {
 
   return (
     <div className="min-h-screen bg-background">
+      <SEO 
+        title={track ? `${track.title} - ${track.channel}` : 'Song Details'}
+        description={track ? `Listen to ${track.title} by ${track.channel} on NYRA. Lossless streaming, synchronized lyrics, and beat-reactive visualizers.` : 'Listen to songs on NYRA music streaming.'}
+        canonicalPath={`/song/${id || ''}`}
+        ogType="music.song"
+        ogImage={track?.thumbnail}
+      />
       <Sidebar activeTab={activeTab} onTabChange={setActiveTab} />
 
       <div className="ml-0 md:ml-64">

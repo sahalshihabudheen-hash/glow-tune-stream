@@ -6,6 +6,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
 import { ArrowLeft, Music, Disc, Edit, Calendar } from "lucide-react";
 import { format } from "date-fns";
+import SEO from "@/components/SEO";
 
 const ArtistProfile = () => {
   const { id } = useParams();
@@ -50,6 +51,13 @@ const ArtistProfile = () => {
 
   return (
     <div className="min-h-screen bg-background">
+      <SEO 
+        title={`${artist.artist_name} - Discography & Albums`}
+        description={artist.bio || `Explore music tracks, albums, and discography from ${artist.artist_name} on NYRA.`}
+        canonicalPath={`/artist/${id || ''}`}
+        ogType="profile"
+        ogImage={artist.image_url}
+      />
       {/* Hero Section with gradient */}
       <div className="relative">
         <div className="absolute inset-0 bg-gradient-to-b from-primary/20 via-primary/5 to-background" />

@@ -50,9 +50,6 @@ export function useTabTitle(trackTitle: string | null, isPlaying: boolean) {
     }
 
     const appName = settings.app_name || 'NYRA';
-    const tagline = settings.app_tagline || 'Feel the Pulse';
-    updateMetaTag('og:title', `${appName} - ${tagline}`);
-    updateMetaTag('og:description', `${appName} - A premium music streaming platform.`);
 
     // Tab title logic
     if (intervalRef.current) {
@@ -70,8 +67,6 @@ export function useTabTitle(trackTitle: string | null, isPlaying: boolean) {
       intervalRef.current = setInterval(update, 500);
     } else if (trackTitle) {
       document.title = `⏸ ${trackTitle} - ${appName}`;
-    } else {
-      document.title = `${appName} - ${tagline}`;
     }
 
     return () => {

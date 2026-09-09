@@ -23,6 +23,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Link } from "react-router-dom";
 import { toast } from "sonner";
+import SEO from "@/components/SEO";
 
 const BecomeArtist = () => {
   const navigate = useNavigate();
@@ -135,6 +136,11 @@ const BecomeArtist = () => {
   if (!myArtistProfile) {
     return (
       <div className="min-h-screen bg-background">
+        <SEO 
+          title="Artist Portal - Join & Share Music" 
+          canonicalPath="/become-artist"
+          description="Join the NYRA Artist Community. Share your tracks and albums with music lovers worldwide with zero barriers."
+        />
         <div className="container mx-auto px-4 py-8">
           <Link to="/artists" className="inline-flex items-center gap-2 text-muted-foreground hover:text-foreground transition-colors mb-8">
             <ArrowLeft className="h-4 w-4" />
@@ -193,6 +199,11 @@ const BecomeArtist = () => {
   // Already registered - show dashboard
   return (
     <div className="min-h-screen bg-background">
+      <SEO 
+        title="Artist Dashboard" 
+        canonicalPath="/become-artist"
+        description="Manage your music releases, track uploads, and albums on the NYRA artist dashboard."
+      />
       <div className="container mx-auto px-4 py-8">
         <div className="flex items-center justify-between mb-8">
           <div>

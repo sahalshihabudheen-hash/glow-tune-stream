@@ -1,0 +1,52 @@
+{
+  "name": "NYRA - Feel the Pulse",
+  "short_name": "NYRA",
+  "description": "A premium music streaming platform. Discover, play, and experience music with beat-reactive visualizers, AI DJ, and lossless audio.",
+  "start_url": "/",
+  "id": "/",
+  "display": "standalone",
+  "background_color": "#090a10",
+  "theme_color": "#ffd300",
+  "orientation": "portrait-primary",
+  "scope": "/",
+  "categories": ["music", "entertainment", "multimedia"],
+  "icons": [
+    {
+      "src": "/favicon.png",
+      "sizes": "64x64 32x32 24x24 16x16",
+      "type": "image/png"
+    },
+    {
+      "src": "/headphones.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Discover Music",
+      "short_name": "Discover",
+      "url": "/",
+      "icons": [{ "src": "/favicon.png", "sizes": "64x64" }]
+    },
+    {
+      "name": "AI Mood DJ",
+      "short_name": "AI DJ",
+      "url": "/ai-dj",
+      "icons": [{ "src": "/favicon.png", "sizes": "64x64" }]
+    },
+    {
+      "name": "Music Universe",
+      "short_name": "Universe",
+      "url": "/universe",
+      "icons": [{ "src": "/favicon.png", "sizes": "64x64" }]
+    },
+    {
+      "name": "Playlists",
+      "short_name": "Playlists",
+      "url": "/playlists",
+      "icons": [{ "src": "/favicon.png", "sizes": "64x64" }]
+    }
+  ]
+}

@@ -6,6 +6,7 @@ import { toast } from 'sonner';
 import Sidebar from '@/components/Sidebar';
 import MusicPlayer from '@/components/MusicPlayer';
 import { motion, AnimatePresence } from 'motion/react';
+import SEO from '@/components/SEO';
 
 interface OfflineTrackItem {
   id: string;
@@ -157,6 +158,11 @@ export default function OfflineDownloads() {
 
   return (
     <div className="flex h-screen bg-background overflow-hidden">
+      <SEO 
+        title="Offline Music Player & Saved Downloads" 
+        canonicalPath="/offline"
+        description="Listen to your downloaded music offline without internet connectivity. Seamless caching and lossless playback on NYRA."
+      />
       {/* Sidebar Navigation */}
       <Sidebar activeTab="offline" onTabChange={() => {}} />
 

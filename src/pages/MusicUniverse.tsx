@@ -12,6 +12,7 @@ import { useMusicPlayer } from '@/contexts/MusicPlayerContext';
 import { supabase } from '@/integrations/supabase/client';
 import { guessGenre } from '@/hooks/useListeningStats';
 import { cn } from '@/lib/utils';
+import SEO from '@/components/SEO';
 
 interface UniNode {
   id: string;
@@ -417,6 +418,11 @@ const MusicUniverse = () => {
 
   return (
     <div className="min-h-screen bg-background">
+      <SEO 
+        title="3D Music Universe & Audio Galaxy" 
+        canonicalPath="/universe"
+        description="Explore an interactive 3D constellation of songs, artists, and music genres with real-time audio visualizers on NYRA."
+      />
       <Sidebar activeTab={activeTab} onTabChange={setActiveTab} />
       <div className="ml-0 md:ml-64">
         <Navbar searchQuery={navSearch} onSearchChange={setNavSearch} onSearch={() => navSearch.trim() && navigate(`/?search=${encodeURIComponent(navSearch)}`)} />

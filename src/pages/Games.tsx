@@ -9,6 +9,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Gamepad2, Grid3X3, Brain, ArrowLeft, Disc } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useNavigate } from 'react-router-dom';
+import SEO from '@/components/SEO';
 
 const Games = () => {
   const [activeTab, setActiveTab] = useState('games');
@@ -18,6 +19,11 @@ const Games = () => {
 
   return (
     <div className="min-h-screen bg-background text-foreground">
+      <SEO 
+        title="Music Games Arcade" 
+        canonicalPath="/games"
+        description="Play interactive rhythm and casual arcade games like Rolling Sky, 2048, Snake, and Memory Match on NYRA while streaming music."
+      />
       <Sidebar activeTab={activeTab} onTabChange={setActiveTab} />
 
       <div className="md:ml-64">
