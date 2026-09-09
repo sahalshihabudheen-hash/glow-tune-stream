@@ -200,8 +200,73 @@ const DynamicMusicBackground = () => {
           opacity: Math.max(0.3, 0.7 - intensityPct * 0.3),
         }}
       />
+
     </div>
   );
 };
 
+/** Separate overlay so particles sit ABOVE page backgrounds but BELOW content. */
+const DynamicMusicParticles = () => {
+  const { settings } = useTheme();
+  const { isPlaying } = useMusicPlayer();
+
+  if (!settings.dynamicMusicUI) return null;
+
+  // Alternate primary / accent / secondary colors so particles follow the active mood theme.
+  const themeColors = ['primary', 'accent', 'secondary'] as const;
+
+  const particles = Array.from({ length: 28 }, (_, i) => ({
+    left: (i * 41) % 100,
+    top: (i * 29) % 100,
+    delay: (i % 11) * 0.9,
+    duration: 10 + (i % 6) * 3,
+    size: 3 + (i % 4) * 2,
+    color: themeColors[i % themeColors.length],
+  }));
+
+  return (
+    <div aria-hidden className="pointer-events-none fixed inset-0 z-[1] overflow-hidden">
+      <style>{`
+        @keyframes nyra-particle-float{
+          0%{transform:translate3d(0,0,0) scale(.6);opacity:0}
+          15%{opacity:.8}
+          50%{transform:translate3d(3vw,-6vh,0) scale(1)}
+          85%{opacity:.6}
+          100%{transform:translate3d(-2vw,-12vh,0) scale(1.2);opacity:0}
+        }
+        /* Beat pulse layered on top of the float drift: size + glow snap on every kick. */
+        @keyframes nyra-particle-beat{
+          0%,100%{
+            width:calc(var(--p-size) * (1 + var(--beat-bass,0) * 1.4));
+            height:calc(var(--p-size) * (1 + var(--beat-bass,0) * 1.4));
+            opacity:calc(.35 + var(--beat-energy,0) * .65);
+            box-shadow:0 0 calc(6px + var(--beat-glow-px,0px)) hsl(var(--p-color) / .8),
+                       0 0 calc(var(--beat-glow-px-strong,0px) * .6) hsl(var(--p-color) / .5);
+          }
+        }
+      `}</style>
+      {particles.map((p, i) => (
+        <span
+          key={i}
+          className="absolute rounded-full"
+          style={{
+            left: `${p.left}%`,
+            top: `${p.top}%`,
+            width: `${p.size}px`,
+            height: `${p.size}px`,
+            ['--p-size' as string]: `${p.size}px`,
+            ['--p-color' as string]: `var(--${p.color})`,
+            backgroundColor: `hsl(var(--${p.color}))`,
+            filter: 'blur(0.5px)',
+            // Float drift (theme-colored orbs) + beat pulse (size/glow with the rhythm).
+            animation: `nyra-particle-float ${p.duration}s ease-in-out ${p.delay}s infinite, nyra-particle-beat ${Math.max(0.5, 60 / (108 * (isPlaying ? 1 : 0.5)))}s ease-out infinite`,
+            animationPlayState: isPlaying ? 'running' : 'paused',
+          }}
+        />
+      ))}
+    </div>
+  );
+};
+
+export { DynamicMusicParticles };
 export default DynamicMusicBackground;
