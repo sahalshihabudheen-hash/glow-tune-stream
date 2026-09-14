@@ -51,11 +51,12 @@ const Sidebar = ({ activeTab, onTabChange }: SidebarProps) => {
     ...(userSettings.musicUniverse ? [{ id: 'universe', label: 'Music Universe', icon: Orbit, path: '/universe' }] : []),
     { id: 'games', label: 'Games', icon: Gamepad2, path: '/games' },
     { id: 'settings', label: 'Settings', icon: Settings, path: '/settings' },
+    { id: 'creator', label: 'Made by Sahal', icon: Sparkles, path: '/creator' },
     ...(isAdmin ? [{ id: 'admin', label: 'Admin', icon: Shield, path: '/admin' }] : []),
   ];
 
-  // Filter out hidden tabs (never hide home, settings, admin)
-  const protectedTabs = ['home', 'settings', 'admin'];
+  // Filter out hidden tabs (never hide home, settings, admin, creator)
+  const protectedTabs = ['home', 'settings', 'admin', 'creator'];
   const menuItems = allMenuItems.filter(
     item => protectedTabs.includes(item.id) || !appSettings.hidden_tabs.includes(item.id)
   );
@@ -77,6 +78,7 @@ const Sidebar = ({ activeTab, onTabChange }: SidebarProps) => {
 
   const isItemActive = (item: typeof menuItems[0]) => {
     if (item.path === '/admin' && location.pathname === '/admin') return true;
+    if ((item.path === '/creator' || item.id === 'creator') && (location.pathname === '/creator' || location.pathname === '/sahal-shihabudheen')) return true;
     if (item.path === '/settings' && location.pathname === '/settings') return true;
     if (item.path === '/offline' && location.pathname === '/offline') return true;
     if (item.path === '/get-app' && location.pathname === '/get-app') return true;
@@ -343,7 +345,20 @@ const Sidebar = ({ activeTab, onTabChange }: SidebarProps) => {
         <div className="p-4 border-t border-border">
           <div className="text-xs text-muted-foreground text-center">
             <p>{appSettings.footer_text}</p>
-            <p className="mt-1">{appSettings.footer_powered_by}</p>
+            <p className="mt-1">
+              Crafted by{' '}
+              <a
+                href="/creator"
+                onClick={(e) => {
+                  e.preventDefault();
+                  navigate('/creator');
+                }}
+                className="text-primary hover:underline font-semibold"
+                title="Sahal Shihabudheen - Founder of NYRA"
+              >
+                Sahal Shihabudheen
+              </a>
+            </p>
           </div>
         </div>
       </aside>

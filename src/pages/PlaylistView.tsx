@@ -1,6 +1,6 @@
 import { useState, useCallback, useEffect, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { Play, Pause, Trash2, Shuffle, Repeat, Repeat1, ArrowLeft, Search, Music2, Download, Check, Filter, Flame, Heart, Zap, Moon, Dumbbell, Sparkles } from 'lucide-react';
+import { Play, Pause, Trash2, Shuffle, Repeat, Repeat1, ArrowLeft, Search, Music2, Download, Check, Filter, Flame, Heart, Zap, Moon, Dumbbell, Sparkles, Plus, BookmarkPlus } from 'lucide-react';
 import { getFunctionAuthHeaders } from '@/lib/functionAuth';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
@@ -12,6 +12,8 @@ import Sidebar from '@/components/Sidebar';
 import PlaylistGridPhoto from '@/components/PlaylistGridPhoto';
 import MadeForYouSection from '@/components/MadeForYouSection';
 import { readCache, writeCache, prefetchThumbs } from '@/lib/offlineCache';
+import { getSpotifyPlaylistById, SpotifyPlaylist } from '@/data/spotifyPlaylists';
+import { SpotifyIcon } from '@/components/SpotifyPlaylistsSection';
 
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
@@ -110,6 +112,9 @@ const PlaylistView = () => {
   const [playlistMode, setPlaylistMode] = useState<PlaylistMode>('original');
   
   const [loading, setLoading] = useState(true);
+  const isSpotifyPlaylist = Boolean(id?.startsWith('spotify-'));
+  const [spotifyData, setSpotifyData] = useState<SpotifyPlaylist | null>(null);
+  const [savingToLibrary, setSavingToLibrary] = useState(false);
   const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
   const [touchStartY, setTouchStartY] = useState<number | null>(null);
   const [touchDragIndex, setTouchDragIndex] = useState<number | null>(null);
@@ -178,12 +183,69 @@ const PlaylistView = () => {
   };
 
   useEffect(() => {
+    if (isSpotifyPlaylist && id) {
+      const sp = getSpotifyPlaylistById(id);
+      if (sp) {
+        setSpotifyData(sp);
+        setPlaylist({
+          id: sp.id,
+          name: sp.name,
+          description: sp.description,
+        });
+        setPlaylistTracks(sp.tracks);
+        setLoading(false);
+        prefetchThumbs(sp.tracks.map(t => t.thumbnail));
+        return;
+      }
+    }
+
     if (!authLoading && !user) {
       navigate('/auth');
     } else if (user && id) {
       fetchPlaylist();
     }
-  }, [user, authLoading, id, navigate]);
+  }, [user, authLoading, id, isSpotifyPlaylist, navigate]);
+
+  const handleSaveSpotifyToLibrary = async () => {
+    if (!user) {
+      toast.info('Please sign in to save playlists to your library');
+      navigate('/auth');
+      return;
+    }
+    if (!playlist) return;
+    try {
+      setSavingToLibrary(true);
+      const { data: newP, error: pErr } = await supabase
+        .from('playlists')
+        .insert({
+          user_id: user.id,
+          name: playlist.name,
+          description: playlist.description || 'Imported from Spotify Curated',
+        })
+        .select('id')
+        .single();
+      if (pErr) throw pErr;
+
+      const items = playlistTracks.map((t, idx) => ({
+        playlist_id: newP.id,
+        track_id: t.id,
+        track_title: t.title,
+        track_thumbnail: t.thumbnail,
+        track_channel: t.channel,
+        position: idx,
+      }));
+
+      const { error: iErr } = await supabase.from('playlist_items').insert(items);
+      if (iErr) throw iErr;
+
+      toast.success(`Saved "${playlist.name}" to your library!`);
+      navigate(`/playlist/${newP.id}`);
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to save to library');
+    } finally {
+      setSavingToLibrary(false);
+    }
+  };
 
   const fetchPlaylist = async () => {
     if (!user) return;
@@ -279,6 +341,11 @@ const PlaylistView = () => {
   }, [currentTrack, visiblePlaylistTracks, handlePlayTrack]);
 
   const handleRemoveTrack = async (trackId: string) => {
+    if (isSpotifyPlaylist) {
+      setPlaylistTracks(prev => prev.filter(t => t.id !== trackId));
+      toast.success('Track removed from queue');
+      return;
+    }
     try {
       const { error } = await supabase
         .from('playlist_items')
@@ -458,33 +525,94 @@ const PlaylistView = () => {
           </button>
           
           <div className="flex flex-col md:flex-row items-center md:items-end gap-5 md:gap-8">
-            <PlaylistGridPhoto 
-              thumbnails={playlistTracks.map(t => t.thumbnail)} 
-              size="lg"
-            />
+            {isSpotifyPlaylist && spotifyData?.cover ? (
+              <div className="relative w-44 h-44 md:w-56 md:h-56 rounded-3xl overflow-hidden shadow-2xl flex-shrink-0 bg-black/40 border border-white/10 group">
+                <img
+                  src={spotifyData.cover}
+                  alt={spotifyData.name}
+                  className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                />
+                <div className="absolute top-3 left-3 px-2.5 py-1 rounded-lg bg-black/70 backdrop-blur-md flex items-center gap-1.5 border border-white/10">
+                  <SpotifyIcon className="w-3.5 h-3.5" />
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-white">Spotify</span>
+                </div>
+              </div>
+            ) : (
+              <PlaylistGridPhoto 
+                thumbnails={playlistTracks.map(t => t.thumbnail)} 
+                size="lg"
+              />
+            )}
             
             <div className="flex-1 flex flex-col items-center md:items-start text-center md:text-left">
-              <p className="text-[10px] font-black text-primary uppercase tracking-[0.3em] mb-3">Private Playlist</p>
-              <h1 className="text-3xl md:text-7xl font-black tracking-tighter uppercase italic neon-text mb-4 leading-none">
+              {isSpotifyPlaylist ? (
+                <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#1db954]/20 border border-[#1db954]/30 text-[#1db954] text-xs font-black uppercase tracking-wider mb-3">
+                  <SpotifyIcon className="w-3.5 h-3.5 text-[#1db954]" />
+                  Spotify Curated Playlist
+                </div>
+              ) : (
+                <p className="text-[10px] font-black text-primary uppercase tracking-[0.3em] mb-3">Private Playlist</p>
+              )}
+
+              <h1 className="text-3xl md:text-6xl font-black tracking-tighter uppercase italic neon-text mb-4 leading-none">
                 {playlist?.name}
               </h1>
               <div className="flex flex-col gap-4">
                 {playlist?.description && (
                   <p className="text-muted-foreground text-sm font-medium max-w-2xl">{playlist.description}</p>
                 )}
-                <div className="flex items-center gap-2 text-xs font-bold">
-                  <div className="w-6 h-6 rounded-full bg-primary/20 flex items-center justify-center">
-                    <Music2 className="w-3 h-3 text-primary" />
+                {isSpotifyPlaylist ? (
+                  <div className="flex items-center gap-2 text-xs font-bold">
+                    <div className="w-6 h-6 rounded-full bg-[#1db954]/20 flex items-center justify-center">
+                      <SpotifyIcon className="w-3.5 h-3.5" />
+                    </div>
+                    <span className="text-white font-black uppercase tracking-wider">Spotify</span>
+                    <span className="text-muted-foreground/40">•</span>
+                    <span className="text-muted-foreground">{spotifyData?.followers || '10M+'} followers</span>
+                    <span className="text-muted-foreground/40">•</span>
+                    <span className="text-muted-foreground">{playlistTracks.length} tracks</span>
                   </div>
-                  <span className="text-foreground font-black uppercase italic tracking-widest">{user?.email?.split('@')[0]}</span>
-                  <span className="text-muted-foreground/40">•</span>
-                  <span className="text-muted-foreground">{playlistTracks.length} tracks</span>
-                </div>
+                ) : (
+                  <div className="flex items-center gap-2 text-xs font-bold">
+                    <div className="w-6 h-6 rounded-full bg-primary/20 flex items-center justify-center">
+                      <Music2 className="w-3 h-3 text-primary" />
+                    </div>
+                    <span className="text-foreground font-black uppercase italic tracking-widest">{user?.email?.split('@')[0]}</span>
+                    <span className="text-muted-foreground/40">•</span>
+                    <span className="text-muted-foreground">{playlistTracks.length} tracks</span>
+                  </div>
+                )}
               </div>
             </div>
             
-            <div className="flex items-center justify-center gap-3 md:gap-4 w-full md:w-auto">
-               <button
+            <div className="flex flex-wrap items-center justify-center gap-3 md:gap-4 w-full md:w-auto">
+              {isSpotifyPlaylist && (
+                <>
+                  <Button
+                    onClick={() => {
+                      if (visiblePlaylistTracks.length > 0) {
+                        handlePlayTrack(visiblePlaylistTracks[0], visiblePlaylistTracks);
+                      }
+                    }}
+                    className="h-12 px-6 rounded-2xl bg-[#1db954] text-black font-black hover:bg-[#1ed760] shadow-lg shadow-[#1db954]/25 flex items-center gap-2 hover:scale-105 active:scale-95 transition-all"
+                  >
+                    <Play className="w-4 h-4 fill-current ml-0.5" />
+                    <span>Play All</span>
+                  </Button>
+
+                  <Button
+                    onClick={handleSaveSpotifyToLibrary}
+                    disabled={savingToLibrary}
+                    className="h-12 px-4 rounded-2xl bg-white/10 hover:bg-white/20 text-white font-bold border border-white/10 flex items-center gap-2 transition-all"
+                    title="Save to My Library"
+                  >
+                    <BookmarkPlus className="w-4 h-4 text-[#1db954]" />
+                    <span>{savingToLibrary ? 'Saving...' : 'Save to Library'}</span>
+                  </Button>
+                </>
+              )}
+
+              <button
                 onClick={toggleShuffle}
                 className={cn(
                   'w-12 h-12 rounded-2xl flex items-center justify-center transition-all shadow-lg',

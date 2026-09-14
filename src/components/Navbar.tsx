@@ -2,6 +2,8 @@ import { Search, Bell, LogOut, X } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { useAuth } from '@/hooks/useAuth';
 
+import { useNavigate, useLocation } from 'react-router-dom';
+
 interface NavbarProps {
   searchQuery: string;
   onSearchChange: (query: string) => void;
@@ -11,10 +13,16 @@ interface NavbarProps {
 
 const Navbar = ({ searchQuery, onSearchChange, onSearch, onClearSearch }: NavbarProps) => {
   const { user, signOut } = useAuth();
+  const navigate = useNavigate();
+  const location = useLocation();
   
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter') {
-      onSearch();
+      if (location.pathname !== '/' && location.pathname !== '/home') {
+        navigate(`/?q=${encodeURIComponent(searchQuery.trim())}`);
+      } else {
+        onSearch();
+      }
     }
   };
 

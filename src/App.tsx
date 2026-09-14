@@ -33,6 +33,7 @@ import GetApp from "./pages/GetApp";
 import Debug from "./pages/Debug";
 import Stats from "./pages/Stats";
 import DiscordPresence from "./hooks/useDiscordPresence";
+import CreatorPage from "./pages/CreatorPage";
 
 import NotFound from "./pages/NotFound";
 
@@ -90,6 +91,9 @@ const App = () => (
                 <Route path="/dj" element={<AiDj />} />
                 <Route path="/dj-mode" element={<AiDj />} />
                 <Route path="/universe" element={<MusicUniverse />} />
+                <Route path="/creator" element={<CreatorPage />} />
+                <Route path="/sahal-shihabudheen" element={<CreatorPage />} />
+                <Route path="/about" element={<CreatorPage />} />
 
                 {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
                 <Route path="*" element={<NotFound />} />

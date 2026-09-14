@@ -14,7 +14,8 @@ export interface SEOProps {
 
 const DOMAIN = 'https://nyra-music-player.vercel.app';
 const DEFAULT_TITLE = 'NYRA - Feel the Pulse | Free Music Streaming, Visualizers & AI DJ';
-const DEFAULT_DESCRIPTION = 'Stream millions of songs for free on NYRA. Discover high-fidelity audio, beat-reactive neon visualizers, AI Mood DJ, synchronized lyrics, custom playlists, and seamless offline playback.';
+const DEFAULT_DESCRIPTION = 'Stream millions of songs for free on NYRA. Made by Sahal Shihabudheen. Discover high-fidelity audio, beat-reactive neon visualizers, AI Mood DJ, built-in Spotify playlists, synchronized lyrics, custom playlists, and seamless offline playback.';
+const DEFAULT_KEYWORDS = 'Sahal Shihabudheen, sahal shihabudheen, sahal shihabudheen nyra, made by sahal shihabudheen, NYRA music player app, free music streaming, built-in spotify playlists, aesthetic music player';
 const DEFAULT_IMAGE = `${DOMAIN}/og-image.png`;
 
 function setMetaTag(attribute: 'name' | 'property', name: string, content: string) {
@@ -63,9 +64,7 @@ export const SEO: React.FC<SEOProps> = ({
 
     // 3. Meta Description & Keywords
     setMetaTag('name', 'description', description);
-    if (keywords) {
-      setMetaTag('name', 'keywords', keywords);
-    }
+    setMetaTag('name', 'keywords', keywords || DEFAULT_KEYWORDS);
 
     // 4. Robots Directives
     if (noindex) {

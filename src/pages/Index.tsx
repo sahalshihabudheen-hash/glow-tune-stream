@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import SplashScreen from '@/components/SplashScreen';
 import Sidebar from '@/components/Sidebar';
 import Navbar from '@/components/Navbar';
@@ -10,6 +10,8 @@ import HeroSection from '@/components/HeroSection';
 import PersonalizedSection from '@/components/PersonalizedSection';
 import RecentlyPlayedSection from '@/components/RecentlyPlayedSection';
 import GenreOnboarding from '@/components/GenreOnboarding';
+import SpotifyPlaylistsSection from '@/components/SpotifyPlaylistsSection';
+import CreatorDashboard from '@/components/CreatorDashboard';
 import { toast } from 'sonner';
 import { useAuth } from '@/hooks/useAuth';
 import { useTheme } from '@/contexts/ThemeContext';
@@ -28,6 +30,7 @@ import { getFunctionAuthHeaders } from '@/lib/functionAuth';
 
 const Index = () => {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const { user, loading: authLoading } = useAuth();
   const { settings } = useTheme();
   const [showSplash, setShowSplash] = useState(true);
@@ -54,6 +57,63 @@ const Index = () => {
   const { preferences, showOnboarding, savePreferences } = useUserPreferences();
   const { location } = useUserLocation();
 
+  const isSahalSearch = useCallback((q: string) => {
+    const norm = (q || '').toLowerCase().replace(/[^a-z0-9]/g, ' ');
+    return (
+      norm.includes('sahal') ||
+      norm.includes('shihabudheen') ||
+      norm.includes('shihab')
+    );
+  }, []);
+
+  const performSearch = useCallback(async (query: string) => {
+    const trimmed = query.trim();
+    if (!trimmed) {
+      toast.error('Please enter a search query');
+      return;
+    }
+
+    setIsLoading(true);
+    setSearchPerformed(true);
+
+    try {
+      const response = await fetch(
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/youtube-search?q=${encodeURIComponent(trimmed)}`,
+        {
+          headers: await getFunctionAuthHeaders(),
+        }
+      );
+
+      if (!response.ok) throw new Error('Search failed');
+      const results = await response.json();
+      if (results.error) throw new Error(results.error);
+
+      setTracks(results);
+      if (results.length > 0) {
+        toast.success(`Found ${results.length} tracks`);
+      }
+    } catch (error) {
+      console.error('Search error:', error);
+      if (!isSahalSearch(trimmed)) {
+        toast.error('Failed to search. Please try again.');
+      }
+    } finally {
+      setIsLoading(false);
+    }
+  }, [isSahalSearch, setTracks]);
+
+  const handleSearch = () => {
+    performSearch(searchQuery);
+  };
+
+  useEffect(() => {
+    const urlQ = searchParams.get('q');
+    if (urlQ && urlQ.trim()) {
+      setSearchQuery(urlQ.trim());
+      performSearch(urlQ.trim());
+    }
+  }, [searchParams, performSearch]);
+
   useEffect(() => {
     setMounted(true);
     if (!authLoading && !user) {
@@ -70,37 +130,6 @@ const Index = () => {
   useEffect(() => {
     setShowMiniPlayer(true);
   }, [setShowMiniPlayer]);
-
-  const handleSearch = async () => {
-    if (!searchQuery.trim()) {
-      toast.error('Please enter a search query');
-      return;
-    }
-
-    setIsLoading(true);
-    setSearchPerformed(true);
-
-    try {
-      const response = await fetch(
-        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/youtube-search?q=${encodeURIComponent(searchQuery)}`,
-        {
-          headers: await getFunctionAuthHeaders(),
-        }
-      );
-
-      if (!response.ok) throw new Error('Search failed');
-      const results = await response.json();
-      if (results.error) throw new Error(results.error);
-
-      setTracks(results);
-      toast.success(`Found ${results.length} tracks`);
-    } catch (error) {
-      console.error('Search error:', error);
-      toast.error('Failed to search. Please try again.');
-    } finally {
-      setIsLoading(false);
-    }
-  };
 
   const handleSplashComplete = useCallback(() => {
     setShowSplash(false);
@@ -156,6 +185,12 @@ const Index = () => {
           )}
 
           <div className="space-y-16 mt-12">
+            {!searchPerformed && (
+              <section className="animate-in-up" style={{ animationDelay: '0.15s' }}>
+                <SpotifyPlaylistsSection onPlayTrack={handlePlayTrack} />
+              </section>
+            )}
+
             {!searchPerformed && (
               <section className="animate-in-up" style={{ animationDelay: '0.2s' }}>
                 <RecentlyPlayedSection
@@ -266,6 +301,10 @@ const Index = () => {
               ))
             )}
 
+            {searchPerformed && isSahalSearch(searchQuery) && (
+              <CreatorDashboard onPlayTrack={handlePlayTrack} />
+            )}
+
             {searchPerformed && tracks.length > 0 && (
               <div className="mb-12 animate-in-up">
                 <div className="flex items-center gap-4 mb-4">
@@ -291,17 +330,19 @@ const Index = () => {
               </div>
             )}
 
-            <TrackGrid
-              tracks={tracks}
-              currentTrack={currentTrack}
-              isPlaying={isPlaying}
-              onPlayTrack={handlePlayTrack}
-              onAddToQueue={handleAddToQueue}
-              isLoading={isLoading}
-              searchPerformed={searchPerformed}
-              isFavorite={isFavorite}
-              onToggleFavorite={toggleFavorite}
-            />
+            {(!isSahalSearch(searchQuery) || tracks.length > 0) && (
+              <TrackGrid
+                tracks={tracks}
+                currentTrack={currentTrack}
+                isPlaying={isPlaying}
+                onPlayTrack={handlePlayTrack}
+                onAddToQueue={handleAddToQueue}
+                isLoading={isLoading}
+                searchPerformed={searchPerformed}
+                isFavorite={isFavorite}
+                onToggleFavorite={toggleFavorite}
+              />
+            )}
           </div>
         </main>
       </div>

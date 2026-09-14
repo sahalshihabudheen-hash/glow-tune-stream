@@ -7,9 +7,23 @@
   <!-- Homepage / Discover Music -->
   <url>
     <loc>https://nyra-music-player.vercel.app/</loc>
-    <lastmod>2026-09-10</lastmod>
+    <lastmod>2026-09-14</lastmod>
     <changefreq>daily</changefreq>
     <priority>1.0</priority>
+  </url>
+
+  <!-- Creator: Sahal Shihabudheen Profile -->
+  <url>
+    <loc>https://nyra-music-player.vercel.app/creator</loc>
+    <lastmod>2026-09-14</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>0.95</priority>
+  </url>
+  <url>
+    <loc>https://nyra-music-player.vercel.app/sahal-shihabudheen</loc>
+    <lastmod>2026-09-14</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>0.95</priority>
   </url>
 
   <!-- Artists Catalog -->
@@ -39,9 +53,57 @@
   <!-- Curated Playlists -->
   <url>
     <loc>https://nyra-music-player.vercel.app/playlists</loc>
-    <lastmod>2026-09-10</lastmod>
+    <lastmod>2026-09-14</lastmod>
     <changefreq>daily</changefreq>
-    <priority>0.8</priority>
+    <priority>0.9</priority>
+  </url>
+  <url>
+    <loc>https://nyra-music-player.vercel.app/playlist/spotify-todays-top-hits</loc>
+    <lastmod>2026-09-14</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>0.85</priority>
+  </url>
+  <url>
+    <loc>https://nyra-music-player.vercel.app/playlist/spotify-top-50-global</loc>
+    <lastmod>2026-09-14</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>0.85</priority>
+  </url>
+  <url>
+    <loc>https://nyra-music-player.vercel.app/playlist/spotify-rapcaviar</loc>
+    <lastmod>2026-09-14</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>0.85</priority>
+  </url>
+  <url>
+    <loc>https://nyra-music-player.vercel.app/playlist/spotify-all-out-2010s</loc>
+    <lastmod>2026-09-14</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>0.85</priority>
+  </url>
+  <url>
+    <loc>https://nyra-music-player.vercel.app/playlist/spotify-chill-lofi-beats</loc>
+    <lastmod>2026-09-14</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>0.85</priority>
+  </url>
+  <url>
+    <loc>https://nyra-music-player.vercel.app/playlist/spotify-bollywood-butter</loc>
+    <lastmod>2026-09-14</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>0.85</priority>
+  </url>
+  <url>
+    <loc>https://nyra-music-player.vercel.app/playlist/spotify-rock-classics</loc>
+    <lastmod>2026-09-14</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>0.85</priority>
+  </url>
+  <url>
+    <loc>https://nyra-music-player.vercel.app/playlist/spotify-beast-mode-workout</loc>
+    <lastmod>2026-09-14</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>0.85</priority>
   </url>
 
   <!-- Interactive Music Games -->

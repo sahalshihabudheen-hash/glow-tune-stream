@@ -14,7 +14,9 @@ Allow: /games
 Allow: /get-app
 Allow: /offline
 Allow: /become-artist
-Allow: /stats
+Allow: /creator
+Allow: /sahal-shihabudheen
+Allow: /about
 Allow: /api/og*
 Disallow: /admin
 Disallow: /debug
