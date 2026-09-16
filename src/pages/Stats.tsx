@@ -139,20 +139,14 @@ const Stats = () => {
 
               {/* ── Daily Usage Panel ── */}
               {(() => {
-                const todayKey = new Date().toISOString().slice(0, 10);
-                const todayRows = s.recent.filter(r => r.played_at.slice(0, 10) === todayKey);
-                const uniqueTodaySongs = new Set(todayRows.map(r => r.track_id)).size;
-                const todaySeconds = todayRows.length * 210;
-                const todayMins = Math.round(todaySeconds / 60);
+                const todayMins = Math.round(s.todaySeconds / 60);
 
-                // Last 7 days daily breakdown
-                const last7: { label: string; plays: number; mins: number }[] = Array.from({ length: 7 }, (_, i) => {
-                  const d = new Date(Date.now() - (6 - i) * 86400000);
-                  const key = d.toISOString().slice(0, 10);
-                  const label = i === 6 ? 'Today' : d.toLocaleDateString([], { weekday: 'short' });
-                  const rows = s.recent.filter(r => r.played_at.slice(0, 10) === key);
-                  return { label, plays: rows.length, mins: Math.round(rows.length * 210 / 60) };
-                });
+                // Last 7 days from the activity array (last 7 entries = last 7 days, index 29 = today)
+                const last7 = s.activity.slice(-7).map((day, i, arr) => ({
+                  label: i === arr.length - 1 ? 'Today' : new Date(day.date + 'T00:00:00').toLocaleDateString([], { weekday: 'short' }),
+                  plays: day.plays,
+                  mins: Math.round(day.plays * 210 / 60),
+                }));
                 const maxPlays = Math.max(...last7.map(d => d.plays), 1);
 
                 return (
@@ -163,11 +157,11 @@ const Stats = () => {
                         <p className="text-[10px] text-muted-foreground uppercase tracking-widest mt-1">Listen Time</p>
                       </div>
                       <div className="rounded-xl bg-cyan-500/10 border border-cyan-500/20 p-3 text-center">
-                        <p className="text-2xl font-black text-cyan-400">{todayRows.length}</p>
+                        <p className="text-2xl font-black text-cyan-400">{s.todayPlays}</p>
                         <p className="text-[10px] text-muted-foreground uppercase tracking-widest mt-1">Songs Played</p>
                       </div>
                       <div className="rounded-xl bg-purple-500/10 border border-purple-500/20 p-3 text-center">
-                        <p className="text-2xl font-black text-purple-400">{uniqueTodaySongs}</p>
+                        <p className="text-2xl font-black text-purple-400">{s.todayUnique}</p>
                         <p className="text-[10px] text-muted-foreground uppercase tracking-widest mt-1">Unique Tracks</p>
                       </div>
                     </div>

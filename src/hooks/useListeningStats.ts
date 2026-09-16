@@ -151,6 +151,10 @@ export function useListeningStats(targetUserId?: string) {
     const sortDesc = <T,>(m: Map<T, number>) =>
       [...m.entries()].sort((a, b) => b[1] - a[1]).map(([name, plays]) => ({ name: String(name), plays }));
 
+    const todayKey = new Date().toISOString().slice(0, 10);
+    const todayRows = history.filter((r) => r.played_at.slice(0, 10) === todayKey);
+    const todayUnique = new Set(todayRows.map((r) => r.track_id)).size;
+
     return {
       totalPlays: history.length,
       uniqueTracks: byTrack.size,
@@ -168,6 +172,9 @@ export function useListeningStats(targetUserId?: string) {
       activity,
       recent: history.slice(0, 20),
       favoritesCount,
+      todayPlays: todayRows.length,
+      todayUnique,
+      todaySeconds: todayRows.length * AVG_TRACK_SECONDS,
     };
   }, [history, favoritesCount]);
 

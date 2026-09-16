@@ -1449,28 +1449,26 @@ const Settings = () => {
                   Visit Portfolio
                 </a>
               </div>
-            </div>
-          )}
 
-          {/* Decorative Soundwave Section */}
-          <section className="mb-10">
-            <div className="bg-card rounded-xl p-6 md:p-8 border border-border flex flex-col items-center gap-4">
-              <p className="text-base md:text-lg font-medium text-foreground">Your Music, Your Vibe</p>
-              <div className="flex items-end gap-1 h-16">
-                {[...Array(15)].map((_, index) => (
-                  <div
-                    key={index}
-                    className="w-1.5 md:w-2 bg-primary rounded-full soundwave-bar"
-                    style={{
-                      height: `${20 + Math.random() * 40}px`,
-                      animationDelay: `${index * 0.08}s`,
-                    }}
-                  />
-                ))}
-              </div>
-              <p className="text-xs md:text-sm text-muted-foreground">NYRA - Feel the Pulse</p>
-            </div>
-          </section>
+              {/* Decorative Soundwave Section */}
+              <section className="mb-10">
+                <div className="bg-card rounded-xl p-6 md:p-8 border border-border flex flex-col items-center gap-4">
+                  <p className="text-base md:text-lg font-medium text-foreground">Your Music, Your Vibe</p>
+                  <div className="flex items-end gap-1 h-16">
+                    {[...Array(15)].map((_, index) => (
+                      <div
+                        key={index}
+                        className="w-1.5 md:w-2 bg-primary rounded-full soundwave-bar"
+                        style={{
+                          height: `${20 + Math.random() * 40}px`,
+                          animationDelay: `${index * 0.08}s`,
+                        }}
+                      />
+                    ))}
+                  </div>
+                  <p className="text-xs md:text-sm text-muted-foreground">NYRA - Feel the Pulse</p>
+                </div>
+              </section>
             </div>
           )}
         </main>
