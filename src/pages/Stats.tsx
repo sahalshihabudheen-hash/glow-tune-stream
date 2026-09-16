@@ -139,9 +139,12 @@ const Stats = () => {
 
               {/* ── Daily Usage Panel ── */}
               {(() => {
+                const todayKey = new Date().toISOString().slice(0, 10);
                 const todayMins = Math.round(s.todaySeconds / 60);
+                // todayRows from recent — used only for the "Played Today" song list display
+                const todayRows = s.recent.filter(r => r.played_at.slice(0, 10) === todayKey);
 
-                // Last 7 days from the activity array (last 7 entries = last 7 days, index 29 = today)
+                // Last 7 days from the activity array (last 7 entries, index -1 = today)
                 const last7 = s.activity.slice(-7).map((day, i, arr) => ({
                   label: i === arr.length - 1 ? 'Today' : new Date(day.date + 'T00:00:00').toLocaleDateString([], { weekday: 'short' }),
                   plays: day.plays,
