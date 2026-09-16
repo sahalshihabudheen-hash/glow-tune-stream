@@ -51,12 +51,11 @@ const Sidebar = ({ activeTab, onTabChange }: SidebarProps) => {
     ...(userSettings.musicUniverse ? [{ id: 'universe', label: 'Music Universe', icon: Orbit, path: '/universe' }] : []),
     { id: 'games', label: 'Games', icon: Gamepad2, path: '/games' },
     { id: 'settings', label: 'Settings', icon: Settings, path: '/settings' },
-    { id: 'creator', label: 'Made by Sahal', icon: Sparkles, path: '/creator' },
     ...(isAdmin ? [{ id: 'admin', label: 'Admin', icon: Shield, path: '/admin' }] : []),
   ];
 
-  // Filter out hidden tabs (never hide home, settings, admin, creator)
-  const protectedTabs = ['home', 'settings', 'admin', 'creator'];
+  // Filter out hidden tabs (never hide home, settings, admin)
+  const protectedTabs = ['home', 'settings', 'admin'];
   const menuItems = allMenuItems.filter(
     item => protectedTabs.includes(item.id) || !appSettings.hidden_tabs.includes(item.id)
   );

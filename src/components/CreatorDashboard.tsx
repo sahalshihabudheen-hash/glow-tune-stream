@@ -93,6 +93,15 @@ const CreatorDashboard = ({ onPlayTrack }: CreatorDashboardProps) => {
               {copied ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Share2 className="w-3.5 h-3.5" />}
               <span>{copied ? 'Copied' : 'Share Profile'}</span>
             </button>
+            <a
+              href="https://sahal-shihabudheen.vercel.app/"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/5 hover:bg-white/10 border border-white/10 text-xs font-semibold text-foreground transition-all"
+            >
+              <ExternalLink className="w-3.5 h-3.5 text-cyan-400" />
+              <span>Know More</span>
+            </a>
             <button
               onClick={playCreatorMix}
               className="flex items-center gap-2 px-4 py-1.5 rounded-full bg-primary hover:bg-primary/90 text-primary-foreground text-xs font-bold shadow-lg shadow-primary/20 transition-all hover:scale-105 active:scale-95"

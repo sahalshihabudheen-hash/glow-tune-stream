@@ -137,6 +137,88 @@ const Stats = () => {
                 <StatCard icon={Users} label="Top artist" value={s.topArtists[0]?.plays ? `${s.topArtists[0].plays}x` : '—'} sub={s.topArtists[0]?.name} />
               </div>
 
+              {/* ── Daily Usage Panel ── */}
+              {(() => {
+                const todayKey = new Date().toISOString().slice(0, 10);
+                const todayRows = s.recent.filter(r => r.played_at.slice(0, 10) === todayKey);
+                const uniqueTodaySongs = new Set(todayRows.map(r => r.track_id)).size;
+                const todaySeconds = todayRows.length * 210;
+                const todayMins = Math.round(todaySeconds / 60);
+
+                // Last 7 days daily breakdown
+                const last7: { label: string; plays: number; mins: number }[] = Array.from({ length: 7 }, (_, i) => {
+                  const d = new Date(Date.now() - (6 - i) * 86400000);
+                  const key = d.toISOString().slice(0, 10);
+                  const label = i === 6 ? 'Today' : d.toLocaleDateString([], { weekday: 'short' });
+                  const rows = s.recent.filter(r => r.played_at.slice(0, 10) === key);
+                  return { label, plays: rows.length, mins: Math.round(rows.length * 210 / 60) };
+                });
+                const maxPlays = Math.max(...last7.map(d => d.plays), 1);
+
+                return (
+                  <Panel title="🕐 Today's Usage" subtitle={`${new Date().toLocaleDateString([], { weekday: 'long', month: 'long', day: 'numeric' })}`}>
+                    <div className="grid grid-cols-3 gap-3 mb-5">
+                      <div className="rounded-xl bg-primary/10 border border-primary/20 p-3 text-center">
+                        <p className="text-2xl font-black text-primary">{todayMins}<span className="text-sm font-semibold ml-0.5">m</span></p>
+                        <p className="text-[10px] text-muted-foreground uppercase tracking-widest mt-1">Listen Time</p>
+                      </div>
+                      <div className="rounded-xl bg-cyan-500/10 border border-cyan-500/20 p-3 text-center">
+                        <p className="text-2xl font-black text-cyan-400">{todayRows.length}</p>
+                        <p className="text-[10px] text-muted-foreground uppercase tracking-widest mt-1">Songs Played</p>
+                      </div>
+                      <div className="rounded-xl bg-purple-500/10 border border-purple-500/20 p-3 text-center">
+                        <p className="text-2xl font-black text-purple-400">{uniqueTodaySongs}</p>
+                        <p className="text-[10px] text-muted-foreground uppercase tracking-widest mt-1">Unique Tracks</p>
+                      </div>
+                    </div>
+
+                    {/* Last 7 days mini-bar chart */}
+                    <p className="text-[11px] font-bold uppercase tracking-widest text-muted-foreground mb-3">Last 7 Days</p>
+                    <div className="flex items-end gap-2 h-24">
+                      {last7.map((day, i) => (
+                        <div key={i} className="flex-1 flex flex-col items-center gap-1 group">
+                          <div className="relative w-full flex flex-col items-center justify-end" style={{ height: '72px' }}>
+                            <div
+                              className={`w-full rounded-t-md transition-all ${i === 6 ? 'bg-primary' : 'bg-primary/30 group-hover:bg-primary/50'}`}
+                              style={{ height: `${Math.max(4, (day.plays / maxPlays) * 72)}px` }}
+                              title={`${day.plays} plays · ${day.mins}m`}
+                            />
+                          </div>
+                          <span className={`text-[9px] font-bold ${i === 6 ? 'text-primary' : 'text-muted-foreground'}`}>{day.label}</span>
+                        </div>
+                      ))}
+                    </div>
+
+                    {/* Today's song list */}
+                    {todayRows.length > 0 && (
+                      <div className="mt-4 border-t border-white/10 pt-4">
+                        <p className="text-[11px] font-bold uppercase tracking-widest text-muted-foreground mb-2">Played Today</p>
+                        <div className="space-y-1 max-h-48 overflow-y-auto pr-1">
+                          {todayRows.slice(0, 15).map((r, i) => (
+                            <button
+                              key={r.id}
+                              onClick={() => handlePlayTrack({ id: r.track_id, title: r.track_title, thumbnail: r.track_thumbnail, channel: r.track_channel })}
+                              className="w-full flex items-center gap-3 p-2 rounded-xl hover:bg-white/5 transition-colors text-left"
+                            >
+                              <span className="w-4 text-[10px] font-bold text-muted-foreground shrink-0">{i + 1}</span>
+                              <img src={r.track_thumbnail} alt={r.track_title} loading="lazy" className="w-9 h-9 rounded-lg object-cover" />
+                              <div className="min-w-0 flex-1">
+                                <p className="text-xs font-medium truncate">{r.track_title}</p>
+                                <p className="text-[10px] text-muted-foreground truncate">{r.track_channel}</p>
+                              </div>
+                              <span className="text-[9px] text-muted-foreground shrink-0">{new Date(r.played_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                    {todayRows.length === 0 && (
+                      <p className="text-sm text-muted-foreground text-center mt-4 py-4">No songs played today yet. Start listening! 🎵</p>
+                    )}
+                  </Panel>
+                );
+              })()}
+
               <Panel title="Listening activity" subtitle="Plays per day, last 30 days">
                 <div className="h-56">
                   <ResponsiveContainer width="100%" height="100%">

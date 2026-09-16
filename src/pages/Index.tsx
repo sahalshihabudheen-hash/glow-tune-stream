@@ -10,7 +10,6 @@ import HeroSection from '@/components/HeroSection';
 import PersonalizedSection from '@/components/PersonalizedSection';
 import RecentlyPlayedSection from '@/components/RecentlyPlayedSection';
 import GenreOnboarding from '@/components/GenreOnboarding';
-import SpotifyPlaylistsSection from '@/components/SpotifyPlaylistsSection';
 import CreatorDashboard from '@/components/CreatorDashboard';
 import { toast } from 'sonner';
 import { useAuth } from '@/hooks/useAuth';
@@ -187,12 +186,6 @@ const Index = () => {
           <div className="space-y-16 mt-12">
             {!searchPerformed && (
               <section className="animate-in-up" style={{ animationDelay: '0.15s' }}>
-                <SpotifyPlaylistsSection onPlayTrack={handlePlayTrack} />
-              </section>
-            )}
-
-            {!searchPerformed && (
-              <section className="animate-in-up" style={{ animationDelay: '0.2s' }}>
                 <RecentlyPlayedSection
                   onPlayTrack={handlePlayTrack}
                   currentTrack={currentTrack}
@@ -205,7 +198,13 @@ const Index = () => {
             )}
 
             {!searchPerformed && (
-              <section className="animate-in-up" style={{ animationDelay: '0.22s' }}>
+              <section className="animate-in-up" style={{ animationDelay: '0.2s' }}>
+                <FavoriteArtistsSection onPlayTrack={handlePlayTrack} />
+              </section>
+            )}
+
+            {!searchPerformed && (
+              <section className="animate-in-up" style={{ animationDelay: '0.25s' }}>
                 <MadeForYouSection
                   onPlayTrack={handlePlayTrack}
                   currentTrack={currentTrack}
@@ -214,12 +213,6 @@ const Index = () => {
                   isFavorite={isFavorite}
                   onToggleFavorite={toggleFavorite}
                 />
-              </section>
-            )}
-
-            {!searchPerformed && (
-              <section className="animate-in-up" style={{ animationDelay: '0.25s' }}>
-                <FavoriteArtistsSection />
               </section>
             )}
 

@@ -1,5 +1,5 @@
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, ArrowRight, Palette, Volume2, ListMusic, Trash2, Waves, Blend, User, Camera, KeyRound, Loader2, RotateCcw, Sliders, Shield, Sparkles, Smartphone, Home, Search, Users, Heart, Gamepad2, Settings as SettingsIcon, Menu, Download, Minus, Plus, Sun, Orbit } from 'lucide-react';
+import { ArrowLeft, ArrowRight, Palette, Volume2, ListMusic, Trash2, Waves, Blend, User, Camera, KeyRound, Loader2, RotateCcw, Sliders, Shield, Sparkles, Smartphone, Home, Search, Users, Heart, Gamepad2, Settings as SettingsIcon, Menu, Download, Minus, Plus, Sun, Orbit, Info, ExternalLink } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import { useTheme, themes, ThemeName, ProgressBarStyle } from '@/contexts/ThemeContext';
 import { Switch } from '@/components/ui/switch';
@@ -10,6 +10,7 @@ import Navbar from '@/components/Navbar';
 import SettingsSoundwave from '@/components/SettingsSoundwave';
 import SoundwaveVisualizer, { SoundwaveShape } from '@/components/SoundwaveVisualizer';
 import StyledProgressBar from '@/components/StyledProgressBar';
+import CreatorDashboard from '@/components/CreatorDashboard';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { useEffect, useState, useRef } from 'react';
@@ -48,7 +49,7 @@ const Settings = () => {
     setGradient,
   } = useTheme();
   
-  const [settingsTab, setSettingsTab] = useState<'profile' | 'theme' | 'player' | 'navigation' | 'system'>('profile');
+  const [settingsTab, setSettingsTab] = useState<'profile' | 'theme' | 'player' | 'navigation' | 'system' | 'about'>('profile');
   const [activeTab, setActiveTab] = useState('settings');
   const [searchQuery, setSearchQuery] = useState('');
   const [previewPlaying, setPreviewPlaying] = useState(true);
@@ -95,6 +96,7 @@ const Settings = () => {
     { id: 'player', label: '🎵 Player Customizer', icon: Sliders, description: 'Tailor progress bars, soundwaves, and animations' },
     ...(isMobile ? [{ id: 'navigation', label: '📱 Bottom Nav Bar', icon: Smartphone, description: 'Reorder bottom navigation buttons for mobile' }] : []),
     { id: 'system', label: '💾 Cache & App', icon: RotateCcw, description: 'Clear player cache and download APKs' },
+    { id: 'about', label: '✨ About Creator', icon: Info, description: 'Meet the creator of NYRA Music' },
   ];
 
   useEffect(() => {
@@ -1418,6 +1420,36 @@ const Settings = () => {
                 </div>
               </div>
             </section>
+          )}
+
+          {/* About Creator Tab */}
+          {settingsTab === 'about' && (
+            <div className="animate-fade-in space-y-6">
+              <div className="flex items-center gap-3 mb-6">
+                <Info className="w-6 h-6 text-primary" />
+                <h2 className="text-xl md:text-2xl font-semibold text-foreground">About the Creator</h2>
+              </div>
+
+              {/* Creator Dashboard embed */}
+              <CreatorDashboard />
+
+              {/* Know More Card */}
+              <div className="rounded-2xl border border-primary/20 bg-gradient-to-br from-primary/10 via-card/60 to-card/40 backdrop-blur-xl p-6 flex flex-col sm:flex-row items-center gap-5 shadow-[0_0_30px_rgba(var(--primary-rgb),0.1)]">
+                <div className="flex-1 text-center sm:text-left">
+                  <p className="text-lg font-bold text-foreground mb-1">Want to know more about the creator?</p>
+                  <p className="text-sm text-muted-foreground">Visit Sahal Shihabudheen's personal portfolio to explore his projects, skills, and more.</p>
+                </div>
+                <a
+                  href="https://sahal-shihabudheen.vercel.app/"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center gap-2 px-6 py-3 rounded-full bg-primary hover:bg-primary/90 text-primary-foreground font-bold text-sm shadow-lg shadow-primary/20 transition-all hover:scale-105 active:scale-95 shrink-0"
+                >
+                  <ExternalLink className="w-4 h-4" />
+                  Visit Portfolio
+                </a>
+              </div>
+            </div>
           )}
 
           {/* Decorative Soundwave Section */}
