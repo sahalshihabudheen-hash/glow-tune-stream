@@ -95,7 +95,7 @@ const FavoriteArtistsSection = ({ onPlayTrack }: FavoriteArtistsSectionProps) =>
     let cancelled = false;
     const fetchArtistSongs = async () => {
       setLoadingTracks(true);
-      const cacheKey = `artist_spotlight_${spotlightArtist.toLowerCase()}`;
+      const cacheKey = `artist_spotlight_v2_${spotlightArtist.toLowerCase()}`;
       const cached = readCache<Track[]>(cacheKey);
 
       if (cached && cached.length > 0) {
@@ -114,7 +114,22 @@ const FavoriteArtistsSection = ({ onPlayTrack }: FavoriteArtistsSectionProps) =>
         const data = await res.json();
         if (cancelled || !Array.isArray(data)) return;
 
-        const filtered = filterOutShorts(data).slice(0, 10);
+        const raw = filterOutShorts(data);
+
+        // Deduplicate: first by video ID, then by normalized title
+        const seenIds = new Set<string>();
+        const seenTitles = new Set<string>();
+        const deduped: Track[] = [];
+        for (const t of raw) {
+          const normTitle = t.title.toLowerCase().replace(/[^a-z0-9]/g, '');
+          if (seenIds.has(t.id) || seenTitles.has(normTitle)) continue;
+          seenIds.add(t.id);
+          seenTitles.add(normTitle);
+          deduped.push(t);
+          if (deduped.length >= 10) break;
+        }
+
+        const filtered = deduped;
         setArtistTracks(filtered);
         writeCache(cacheKey, filtered);
         prefetchThumbs(filtered.map((t: Track) => t.thumbnail));
