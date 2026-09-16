@@ -1386,6 +1386,8 @@ const Settings = () => {
               </div>
             </div>
           </section>
+            </div>
+          )}
 
           {/* APK Download Section */}
           {apkFiles.length > 0 && (
