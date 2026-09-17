@@ -1379,6 +1379,7 @@ export function MusicPlayerProvider({ children }: { children: React.ReactNode })
       setCurrentTrack(nextFromQueue);
       setPlayingFromPlaylist(false);
       setLastPlayed(nextFromQueue.id);
+      recordPlay(nextFromQueue);
       playStandardOrOffline(nextFromQueue.id);
       return;
     }
@@ -1387,12 +1388,14 @@ export function MusicPlayerProvider({ children }: { children: React.ReactNode })
       if (nextTrack) {
         setCurrentTrack(nextTrack);
         setLastPlayed(nextTrack.id);
+        recordPlay(nextTrack);
         playStandardOrOffline(nextTrack.id);
         return;
       } else if (loopMode === 'all' && playlist.length > 0) {
         const firstTrack = playlist[0];
         setCurrentTrack(firstTrack);
         setLastPlayed(firstTrack.id);
+        recordPlay(firstTrack);
         playStandardOrOffline(firstTrack.id);
         return;
       } else { setIsPlaying(false); toast.info('Playlist ended'); return; }
@@ -1405,6 +1408,7 @@ export function MusicPlayerProvider({ children }: { children: React.ReactNode })
         setCurrentTrack(firstTrack);
         setCurrentTrackIndex(0);
         setLastPlayed(firstTrack.id);
+        recordPlay(firstTrack);
         playStandardOrOffline(firstTrack.id);
         return;
       }
@@ -1415,8 +1419,9 @@ export function MusicPlayerProvider({ children }: { children: React.ReactNode })
     setCurrentTrackIndex(nextIndex);
     setPlayingFromPlaylist(false);
     setLastPlayed(nextTrack.id);
+    recordPlay(nextTrack);
     playStandardOrOffline(nextTrack.id);
-  }, [currentTrackIndex, tracks, playStandardOrOffline, playingFromPlaylist, currentTrack, getNextTrack, getNextFromQueue, playlist, setLastPlayed, loopMode, audioRef, ytPlayerRef]);
+  }, [currentTrackIndex, tracks, playStandardOrOffline, playingFromPlaylist, currentTrack, getNextTrack, getNextFromQueue, playlist, setLastPlayed, loopMode, recordPlay, audioRef, ytPlayerRef]);
 
   useEffect(() => { handleNextRef.current = handleNext; }, [handleNext]);
 
