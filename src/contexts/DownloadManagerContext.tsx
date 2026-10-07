@@ -331,8 +331,12 @@ async function fetchAudioBlob(
 // still work if the app is deployed without VITE_SUPABASE_URL.
 const getAudioFunctionBases = () => {
   const backendUrl = (import.meta.env.VITE_SUPABASE_URL || '').replace(/\/$/, '');
-  const bases = ['/api/get-audio-url'];
+  const bases: string[] = [];
   if (backendUrl) bases.push(`${backendUrl}/functions/v1/get-audio-url`);
+  // Prefer the streaming edge endpoint for Vercel-hosted frontends: serverless
+  // functions have stricter execution limits for long audio transfers. Keep
+  // the same-origin Vercel API as a fallback for deployments without Cloud.
+  bases.push('/api/get-audio-url');
   return [...new Set(bases)];
 };
 
