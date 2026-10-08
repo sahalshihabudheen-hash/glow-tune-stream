@@ -56,7 +56,7 @@ const ArtistProfile = () => {
         description={artist.bio || `Explore music tracks, albums, and discography from ${artist.artist_name} on NYRA.`}
         canonicalPath={`/artist/${id || ''}`}
         ogType="profile"
-        ogImage={artist.image_url}
+        ogImage={artist.profile_image_url}
       />
       {/* Hero Section with gradient */}
       <div className="relative">
