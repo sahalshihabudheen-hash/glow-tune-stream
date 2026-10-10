@@ -340,6 +340,46 @@ const getAudioFunctionBases = () => {
   return [...new Set(bases)];
 };
 
+// JioSaavn resolver — free full-song 320kbps AAC from a CORS-open CDN.
+// Tried FIRST: YouTube now blocks every server-side resolver, so this is the
+// only provider that reliably returns a complete, downloadable audio file.
+const buildSaavnFunctionUrl = (
+  track: { id: string; title: string; artist?: string; duration?: number },
+  base: string
+) => {
+  const params = new URLSearchParams();
+  params.set('title', track.title);
+  if (track.artist) params.set('artist', track.artist);
+  if (track.duration) params.set('duration', String(Math.round(track.duration)));
+  return `${base}?${params.toString()}`;
+};
+
+const resolveSaavnCandidates = async (
+  track: { id: string; title: string; artist?: string; duration?: number }
+): Promise<AudioCandidate[]> => {
+  const backendUrl = (import.meta.env.VITE_SUPABASE_URL || '').replace(/\/$/, '');
+  if (!backendUrl) return [];
+  try {
+    const response = await fetch(buildSaavnFunctionUrl(track, `${backendUrl}/functions/v1/saavn-audio`), {
+      signal: getTimeoutSignal(25_000),
+    });
+    if (!response.ok) return [];
+    const contentType = response.headers.get('content-type') || '';
+    if (contentType.includes('text/html')) return [];
+    const data = await response.json();
+    const urls = [
+      data?.audioUrl,
+      ...(Array.isArray(data?.fallbackUrls) ? data.fallbackUrls : []),
+    ].filter(Boolean);
+    return urls.map((url: string, index: number) => ({
+      url,
+      label: index === 0 ? 'JioSaavn 320kbps' : `JioSaavn fallback ${index}`,
+    }));
+  } catch {
+    return [];
+  }
+};
+
 const buildAudioFunctionUrl = (
   track: { id: string; title: string },
   options: { stream?: boolean; download?: boolean; proxyUrl?: string; base?: string } = {}
@@ -454,7 +494,7 @@ const buildBackendCandidates = (
   }));
 
 const fetchFirstAudioBlob = async (
-  track: { id: string; title: string },
+  track: { id: string; title: string; artist?: string; duration?: number },
   mode: 'download' | 'stream',
   onProgress: (p: number) => void
 ): Promise<AudioBlobResult> => {
@@ -471,6 +511,20 @@ const fetchFirstAudioBlob = async (
     return null;
   };
 
+  // 1) JioSaavn — direct CDN audio, no proxy needed (CORS-open).
+  try {
+    const saavnCandidates = await resolveSaavnCandidates(track);
+    if (saavnCandidates.length) {
+      const saavn = await tryCandidates(saavnCandidates);
+      if (saavn) return saavn;
+    } else {
+      errors.push('JioSaavn: no confident match');
+    }
+  } catch (err: any) {
+    errors.push(`JioSaavn: ${err?.message || 'failed'}`);
+  }
+
+  // 2) Backend audio resolver (YouTube sources — often blocked).
   const direct = await tryCandidates(buildBackendCandidates(track, mode));
   if (direct) return direct;
 
@@ -552,7 +606,7 @@ export function DownloadManagerProvider({ children }: { children: React.ReactNod
   // Always fetches and validates a real audio Blob before creating the file.
   // If every resolver fails, it shows a clear error instead of saving HTML/JSON.
   const downloadToDevice = useCallback(
-    async (track: { id: string; title: string; thumbnail: string }) => {
+    async (track: { id: string; title: string; thumbnail: string; artist?: string; duration?: number }) => {
       addItem({ id: track.id, title: track.title, thumbnail: track.thumbnail, status: 'preparing', progress: 0 });
       updateItem(track.id, { status: 'downloading', progress: 5 });
 
@@ -618,7 +672,7 @@ export function DownloadManagerProvider({ children }: { children: React.ReactNod
       if (!track?.id || queueCacheInFlight.current.has(track.id)) return;
       queueCacheInFlight.current.add(track.id);
       try {
-        const result = await fetchFirstAudioBlob(track, 'stream', () => {});
+        const result = await fetchFirstAudioBlob({ ...track, artist: track.channel }, 'stream', () => {});
         await saveTrackOffline({ ...track, artist: track.channel }, result.blob);
         window.dispatchEvent(new CustomEvent('nyra:offline-cache-updated', { detail: { id: track.id } }));
       } catch (error) {
