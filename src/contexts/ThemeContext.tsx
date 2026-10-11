@@ -79,6 +79,7 @@ interface AppSettings {
   smartTransitions: boolean;
   transitionDuration: number; // seconds, 0-12
   musicUniverse: boolean;
+  showInstagramPage: boolean; // Reel Saver page visible in menus (off by default)
   dynamicMusicUI: boolean;
   dynamicIntensity: number; // 0-100 percentage
   beatReactive: boolean; // whole app reacts to music beats & tone
@@ -179,6 +180,7 @@ export const ThemeProvider = ({ children }: { children: ReactNode }) => {
       smartTransitions: false,
       transitionDuration: 4,
       musicUniverse: false,
+      showInstagramPage: false,
       dynamicMusicUI: false,
       dynamicIntensity: 70,
       beatReactive: true,

@@ -46,7 +46,7 @@ const Sidebar = ({ activeTab, onTabChange }: SidebarProps) => {
     { id: 'favorites', label: 'Favorites', icon: Heart, path: '/favorites' },
     { id: 'offline', label: 'Downloads', icon: Download, path: '/offline' },
     { id: 'get-app', label: 'Get App', icon: MonitorSmartphone, path: '/get-app' },
-    { id: 'instagram', label: 'Reel Saver', icon: Instagram, path: '/instagram' },
+    ...(userSettings.showInstagramPage ? [{ id: 'instagram', label: 'Reel Saver', icon: Instagram, path: '/instagram' }] : []),
     { id: 'stats', label: 'Statistics', icon: BarChart3, path: '/stats' },
     { id: 'ai-dj', label: 'AI DJ', icon: Sparkles, path: '/ai-dj' },
     ...(userSettings.musicUniverse ? [{ id: 'universe', label: 'Music Universe', icon: Orbit, path: '/universe' }] : []),

@@ -5,6 +5,8 @@ import Navbar from '@/components/Navbar';
 import Sidebar from '@/components/Sidebar';
 import SEO from '@/components/SEO';
 import { cn } from '@/lib/utils';
+import { useTheme } from '@/contexts/ThemeContext';
+import { useNavigate } from 'react-router-dom';
 
 type Mode = 'audio' | 'video' | 'both';
 
@@ -32,6 +34,8 @@ const formatDuration = (s: number | null) => {
 };
 
 const InstagramDownloader = () => {
+  const { settings, updateSettings } = useTheme();
+  const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState('instagram');
   const [link, setLink] = useState('');
   const [loading, setLoading] = useState(false);
@@ -135,6 +139,26 @@ const InstagramDownloader = () => {
           </p>
         </header>
 
+        {!settings.showInstagramPage ? (
+          <section className="rounded-3xl border border-white/10 bg-white/[0.03] p-8 text-center backdrop-blur-xl">
+            <p className="text-muted-foreground mb-5">Reel Saver is turned off.</p>
+            <div className="flex flex-col sm:flex-row gap-3 justify-center">
+              <button
+                onClick={() => updateSettings({ showInstagramPage: true })}
+                className="h-11 px-6 rounded-2xl bg-primary text-primary-foreground font-black uppercase text-xs tracking-widest active:scale-95 transition-transform"
+              >
+                Turn on
+              </button>
+              <button
+                onClick={() => navigate('/settings')}
+                className="h-11 px-6 rounded-2xl border border-white/10 text-xs font-bold uppercase tracking-widest hover:bg-white/5 active:scale-95 transition-transform"
+              >
+                Open Settings
+              </button>
+            </div>
+          </section>
+        ) : (
+        <>
         <section className="rounded-3xl border border-white/10 bg-white/[0.03] p-4 md:p-6 backdrop-blur-xl">
           <form
             onSubmit={(e) => {
@@ -241,6 +265,8 @@ const InstagramDownloader = () => {
           Works with public reels and posts. Stories can only be saved when they are publicly viewable to the server.
           Only download content you own or have permission to use, and respect the creator&apos;s rights.
         </p>
+        </>
+        )}
       </main>
     </div>
   );
