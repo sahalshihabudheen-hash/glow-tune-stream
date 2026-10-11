@@ -83,9 +83,9 @@ export const Platter = ({
 };
 
 /* ───────────────────────── Level meter ─────────────────────────
- * Flat LED ladder: accent → amber → red, like the real thing. */
-export const LevelMeter = ({ level, segments = 14, className }: { level: number; segments?: number; className?: string }) => (
-  <div className={cn('flex items-end gap-[2px] h-5', className)} role="meter" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(level * 100)}>
+ * Plain segmented progress bar. Same size everywhere (decks + master). */
+export const LevelMeter = ({ level, segments = 20, className }: { level: number; segments?: number; className?: string }) => (
+  <div className={cn('flex gap-[2px] h-4', className)} role="meter" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(level * 100)}>
     {Array.from({ length: segments }).map((_, i) => {
       const on = level >= (i + 1) / segments;
       const hot = i >= segments - 2;
@@ -97,7 +97,6 @@ export const LevelMeter = ({ level, segments = 14, className }: { level: number;
             'flex-1 rounded-[1px]',
             on ? (hot ? 'bg-[#d9382c]' : warm ? 'bg-[#e8731a]' : 'bg-primary') : 'bg-[#1d1c19]'
           )}
-          style={{ height: `${45 + (i / segments) * 55}%` }}
         />
       );
     })}
@@ -140,9 +139,9 @@ export const HFader = ({
   return (
     <div className={cn('relative h-12 flex items-center touch-pan-y', disabled && 'opacity-40')}>
       {/* slot */}
-      <div className="absolute left-2 right-2 top-1/2 -translate-y-[calc(50%+4px)] h-[6px] rounded-[2px] bg-[#080807] border border-[#2b2a25]">
+      <div className="absolute left-2 right-2 top-1/2 -translate-y-[calc(50%+4px)] h-2 rounded-[1px] bg-[#1d1c19] overflow-hidden">
         <div
-          className="absolute top-1/2 -translate-y-1/2 h-[2px] bg-primary"
+          className="absolute inset-y-0 bg-primary"
           style={{ left: `${fillLeft}%`, right: `${fillRight}%`, minWidth: center ? 2 : 0 }}
         />
       </div>
@@ -256,7 +255,7 @@ export const VFader = ({
         className="relative w-16 cursor-ns-resize touch-none outline-none focus-visible:ring-1 focus-visible:ring-primary rounded-[2px]"
         style={{ height }}
       >
-        <div ref={trackRef} className="absolute left-1/2 -translate-x-1/2 top-3 bottom-3 w-[6px] rounded-[2px] bg-[#080807] border border-[#2b2a25]">
+        <div ref={trackRef} className="absolute left-1/2 -translate-x-1/2 top-3 bottom-3 w-2 rounded-[1px] bg-[#1d1c19]">
           {/* fill from the 0 dB line */}
           <div
             className="absolute left-0 right-0"
@@ -325,7 +324,7 @@ export const Chip = ({
     disabled={disabled}
     aria-pressed={on}
     className={cn(
-      'min-h-[44px] px-3 rounded-[3px] border text-[11px] font-medium uppercase tracking-[0.1em] transition-colors active:translate-y-px flex items-center justify-center gap-2.5 disabled:opacity-40',
+      'min-h-[44px] px-3 rounded-[4px] border text-[11px] font-medium uppercase tracking-[0.1em] transition-colors active:translate-y-px flex items-center justify-center gap-2.5 disabled:opacity-40',
       on
         ? 'bg-[#1f1d14] border-primary/70 text-primary'
         : 'bg-[#131312] border-[#2b2a25] text-[#8c8a7d] hover:text-[#e9e7dc] hover:border-[#3d3b33]',
@@ -339,7 +338,7 @@ export const Chip = ({
 
 /* ───────────────────────── Panel + section label ───────────────────────── */
 export const Panel = ({ className, children }: { className?: string; children: ReactNode }) => (
-  <section className={cn('rounded-md border border-[#2b2a25] bg-[#131312] p-4', className)}>{children}</section>
+  <section className={cn('rounded-[4px] border border-[#2b2a25] bg-[#131312] p-4', className)}>{children}</section>
 );
 
 export const Label = ({ children, right }: { children: ReactNode; right?: ReactNode }) => (
@@ -393,5 +392,5 @@ export const Spectrum = ({ getData, active }: { getData: () => Uint8Array; activ
       ro?.disconnect();
     };
   }, [getData, active]);
-  return <canvas ref={ref} className="w-full h-16 rounded-[3px] bg-[#080807] border border-[#2b2a25]" aria-hidden />;
+  return <canvas ref={ref} className="w-full h-16 rounded-[4px] bg-[#080807] border border-[#2b2a25]" aria-hidden />;
 };

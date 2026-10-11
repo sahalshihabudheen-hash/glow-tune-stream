@@ -20,7 +20,7 @@ import {
 } from '@/components/dj/DjPrimitives';
 
 /* Shared button looks (flat, matte, pressed = 1px down) */
-const BTN = 'rounded-[3px] border text-[11px] font-medium uppercase tracking-[0.1em] transition-colors active:translate-y-px flex items-center justify-center gap-2 disabled:opacity-60';
+const BTN = 'rounded-[4px] border text-[11px] font-medium uppercase tracking-[0.1em] transition-colors active:translate-y-px flex items-center justify-center gap-2 disabled:opacity-60';
 const BTN_PRIMARY = `${BTN} bg-primary border-primary text-primary-foreground hover:brightness-95`;
 const BTN_PLAIN = `${BTN} bg-[#131312] border-[#2b2a25] text-[#e9e7dc] hover:border-[#3d3b33] hover:bg-[#1a1a18]`;
 
@@ -56,7 +56,7 @@ const TrackRow = ({
     onClick={onPlay}
     onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onPlay(); } }}
     className={cn(
-      'relative flex items-center gap-3 p-2 pr-3 rounded-[3px] border cursor-pointer transition-colors',
+      'relative flex items-center gap-3 p-2 pr-3 rounded-[4px] border cursor-pointer transition-colors',
       active ? 'bg-[#1f1d14] border-primary/60' : 'bg-[#131312] border-[#2b2a25] hover:bg-[#1a1a18]'
     )}
   >
@@ -88,7 +88,7 @@ const Deck = ({
 }) => (
   <section
     className={cn(
-      'rounded-md border border-[#2b2a25] bg-[#131312] p-3 sm:p-4 flex flex-col gap-3',
+      'rounded-[4px] border border-[#2b2a25] bg-[#131312] p-3 sm:p-4 flex flex-col gap-3',
       muted && 'opacity-60'
     )}
   >
@@ -101,7 +101,7 @@ const Deck = ({
         aria-pressed={solo}
         title={solo ? 'Back to stereo' : `Play ${side === 'L' ? 'left' : 'right'} ear only`}
         className={cn(
-          'min-h-[32px] px-2.5 rounded-[3px] border text-[10px] font-medium uppercase tracking-[0.1em] transition-colors active:translate-y-px',
+          'min-h-[32px] px-2.5 rounded-[4px] border text-[10px] font-medium uppercase tracking-[0.1em] transition-colors active:translate-y-px',
           solo ? 'bg-primary text-primary-foreground border-primary' : muted ? 'border-[#d9382c]/60 text-[#d9382c] bg-transparent' : 'border-[#2b2a25] text-[#8c8a7d] hover:text-[#e9e7dc] hover:border-[#3d3b33]'
         )}
       >
@@ -495,7 +495,7 @@ const DjMode = () => {
         {/* ── Header ── */}
         <header className="flex flex-wrap items-center gap-x-4 gap-y-3 mb-4">
           <div className={cn(
-            'w-12 h-12 rounded-[3px] flex items-center justify-center border shrink-0',
+            'w-12 h-12 rounded-[4px] flex items-center justify-center border shrink-0',
             state.active ? 'bg-primary text-primary-foreground border-primary' : 'bg-[#131312] text-[#8c8a7d] border-[#2b2a25]'
           )}>
             <Headphones className="w-6 h-6" />
@@ -567,7 +567,7 @@ const DjMode = () => {
                   onChange={e => setQuery(e.target.value)}
                   placeholder="Search tracks to load into DJ…"
                   enterKeyHint="search"
-                  className="w-full min-h-[48px] pl-10 pr-4 rounded-[3px] bg-[#080807] border border-[#2b2a25] text-sm focus:outline-none focus:border-primary/70 transition-colors"
+                  className="w-full min-h-[48px] pl-10 pr-4 rounded-[4px] bg-[#080807] border border-[#2b2a25] text-sm focus:outline-none focus:border-primary/70 transition-colors"
                 />
               </div>
               <button type="submit" disabled={searching}
@@ -597,7 +597,7 @@ const DjMode = () => {
               <div className="mt-3">
                 {loadingPlaylists ? (
                   <div className="flex gap-2 animate-pulse">
-                    {Array.from({ length: 3 }).map((_, i) => <div key={i} className="w-32 h-11 rounded-[3px] bg-[#1d1c19]" />)}
+                    {Array.from({ length: 3 }).map((_, i) => <div key={i} className="w-32 h-11 rounded-[4px] bg-[#1d1c19]" />)}
                   </div>
                 ) : userPlaylists.length > 0 ? (
                   <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-none -mx-1 px-1">
@@ -644,7 +644,7 @@ const DjMode = () => {
         {/* ── Now playing ── */}
         {currentTrack && (
           <div className={cn(
-            'mb-4 flex items-center gap-3 p-2.5 rounded-md border bg-[#131312]',
+            'mb-4 flex items-center gap-3 p-2.5 rounded-[4px] border bg-[#131312]',
             state.active ? 'border-primary/50' : 'border-[#2b2a25]'
           )}>
             <img src={currentTrack.thumbnail} alt="" className="w-11 h-11 rounded-[2px] object-cover shrink-0" />
@@ -683,7 +683,7 @@ const DjMode = () => {
           </div>
 
           {/* Section tabs (phones / tablets). On wide screens everything is visible at once. */}
-          <nav className="order-3 col-span-2 xl:hidden grid grid-cols-4 gap-px p-px rounded-md bg-[#2b2a25] border border-[#2b2a25] overflow-hidden" aria-label="Mixer sections">
+          <nav className="order-3 col-span-2 xl:hidden grid grid-cols-4 gap-px p-px rounded-[4px] bg-[#2b2a25] border border-[#2b2a25] overflow-hidden" aria-label="Mixer sections">
             {TABS.map(({ key, label, Icon }) => (
               <button key={key} onClick={() => { buzz(); setTab(key); }} aria-pressed={tab === key}
                 className={cn(
@@ -700,7 +700,7 @@ const DjMode = () => {
           <div className={cn('order-4 col-span-2 xl:order-2 xl:col-span-1 flex-col gap-3', tab === 'mix' ? 'flex' : 'hidden', 'xl:flex')}>
             <Panel>
               <Label right={<span className="font-mono text-[11px] tabular-nums text-primary">{Math.round(totalLevel * 100)}%</span>}>Master level</Label>
-              <LevelMeter level={totalLevel} segments={20} className="mt-3 h-6" />
+              <LevelMeter level={totalLevel} className="mt-3" />
             </Panel>
 
             {/* Auto DJ */}
@@ -709,7 +709,7 @@ const DjMode = () => {
                 onClick={toggleAuto}
                 aria-pressed={autoDjActive}
                 className={cn(
-                  'w-full min-h-[84px] py-4 rounded-md font-semibold uppercase tracking-[0.14em] transition-colors flex flex-col items-center justify-center gap-1.5 border active:translate-y-px',
+                  'w-full min-h-[84px] py-4 rounded-[4px] font-semibold uppercase tracking-[0.14em] transition-colors flex flex-col items-center justify-center gap-1.5 border active:translate-y-px',
                   autoDjActive ? 'bg-primary border-primary text-primary-foreground' : 'bg-[#131312] border-[#2b2a25] hover:border-[#3d3b33] hover:bg-[#1a1a18]'
                 )}
               >
@@ -726,7 +726,7 @@ const DjMode = () => {
                 {STYLES.map(({ key, label, hint }) => (
                   <button key={key} onClick={() => { buzz(); apply({ auto: { style: key } }); }} aria-pressed={state.auto.style === key}
                     className={cn(
-                      'min-h-[52px] rounded-[3px] border flex flex-col items-center justify-center transition-colors active:translate-y-px',
+                      'min-h-[52px] rounded-[4px] border flex flex-col items-center justify-center transition-colors active:translate-y-px',
                       state.auto.style === key
                         ? 'bg-[#1f1d14] border-primary/70 text-primary'
                         : 'bg-[#131312] border-[#2b2a25] text-[#8c8a7d] hover:text-[#e9e7dc] hover:border-[#3d3b33]'
@@ -781,7 +781,7 @@ const DjMode = () => {
               <button onClick={() => { buzz(); setUseBackgroundAudioOnly(v => !v); }} aria-pressed={useBackgroundAudioOnly}
                 title="Streams audio through the DJ engine so effects can reach it"
                 className={cn(
-                  'min-h-[32px] px-3 rounded-[3px] text-[10px] font-medium uppercase tracking-[0.1em] border transition-colors',
+                  'min-h-[32px] px-3 rounded-[4px] text-[10px] font-medium uppercase tracking-[0.1em] border transition-colors',
                   useBackgroundAudioOnly ? 'bg-primary border-primary text-primary-foreground' : 'bg-[#131312] border-[#2b2a25] text-[#8c8a7d]'
                 )}>
                 No limit {useBackgroundAudioOnly ? 'on' : 'off'}
