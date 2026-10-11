@@ -64,10 +64,8 @@ const EqualizerPanel = ({ isOpen, onClose }: EqualizerPanelProps) => {
     if (!state.active) {
       init();
     }
-    apply({
-      ...state,
-      [band]: val
-    });
+    // patch only the changed band (spreading stale `state` here would undo init()'s active:true)
+    apply({ [band]: val });
   };
 
   return (
