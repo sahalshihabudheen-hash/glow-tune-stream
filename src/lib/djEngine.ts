@@ -32,6 +32,11 @@ export interface DjState {
   auto: { enabled: boolean; style: DjAutoStyle; pan: boolean; bass: boolean; filter: boolean; pump: boolean };
 }
 
+export type DjPatch = Partial<Omit<DjState, 'fx' | 'auto'>> & {
+  fx?: Partial<DjState['fx']>;
+  auto?: Partial<DjState['auto']>;
+};
+
 export const DEFAULT_DJ_STATE: DjState = {
   active: false,
   balance: 0,
@@ -315,7 +320,7 @@ class DjEngine {
     this.setParam(this.master.gain, v.master, 0.02, immediate);
   }
 
-  set(patch: Partial<DjState>) {
+  set(patch: DjPatch) {
     const prev = this.state;
     this.state = {
       ...prev,

@@ -12,6 +12,7 @@ import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { filterDjModeTracks, getLikelyDjModeTracks } from '@/lib/djStream';
+import { djEngine, type DjAutoStyle, type DjChannelMode } from '@/lib/djEngine';
 
 interface Track { id: string; title: string; thumbnail: string; channel: string; }
 
@@ -145,6 +146,65 @@ const EQFader = ({ label, value, onChange }: { label: string; value: number; onC
 };
 
 /* ─── Main Component ─── */
+/* ─── Mixer slider (0–100) ─── */
+const MixSlider = ({ label, value, onChange, disabled, hint }: { label: string; value: number; onChange: (v: number) => void; disabled?: boolean; hint?: string }) => (
+  <div className={cn('space-y-2 transition-opacity', disabled && 'opacity-40')}>
+    <div className="flex justify-between items-center">
+      <span className="text-[9px] font-black uppercase tracking-[0.4em] text-muted-foreground">{label}</span>
+      <span className="text-xs font-black tabular-nums text-primary">{Math.round(value * 100)}%</span>
+    </div>
+    <div className="relative h-3 md:h-2 bg-white/5 rounded-full overflow-hidden">
+      <div className="absolute inset-y-0 left-0 rounded-full transition-all duration-100"
+        style={{ width: `${value * 100}%`, background: 'linear-gradient(90deg, hsl(var(--primary)), #a855f7)' }} />
+      <input type="range" min={0} max={100} step={1} value={Math.round(value * 100)} disabled={disabled}
+        onChange={e => onChange(+e.target.value / 100)}
+        className="absolute inset-0 opacity-0 cursor-pointer w-full h-full" />
+    </div>
+    {hint && <p className="text-[9px] text-muted-foreground/60">{hint}</p>}
+  </div>
+);
+
+/* ─── ON/OFF chip ─── */
+const FxChip = ({ label, on, onClick, disabled }: { label: string; on: boolean; onClick: () => void; disabled?: boolean }) => (
+  <button onClick={onClick} disabled={disabled} aria-pressed={on}
+    className={cn(
+      'px-3 py-2 rounded-xl border text-[10px] font-black uppercase tracking-widest transition-all active:scale-95 flex items-center gap-2 disabled:opacity-40',
+      on ? 'bg-primary/20 border-primary/50 text-primary shadow-[0_0_14px_hsl(var(--primary)/0.25)]' : 'bg-white/5 border-white/10 text-muted-foreground hover:text-white'
+    )}>
+    <span className={cn('w-1.5 h-1.5 rounded-full', on ? 'bg-primary shadow-[0_0_8px_hsl(var(--primary))]' : 'bg-white/20')} />
+    {label}
+  </button>
+);
+
+/* ─── Live spectrum (canvas, own rAF so it doesn't re-render the page) ─── */
+const Spectrum = ({ getData, active }: { getData: () => Uint8Array; active: boolean }) => {
+  const ref = useRef<HTMLCanvasElement>(null);
+  useEffect(() => {
+    const c = ref.current; if (!c) return;
+    const g = c.getContext('2d'); if (!g) return;
+    let raf = 0;
+    const draw = () => {
+      const w = c.width, h = c.height;
+      g.clearRect(0, 0, w, h);
+      const d = active ? getData() : new Uint8Array(16);
+      const n = d.length, bw = w / n;
+      const grad = g.createLinearGradient(0, h, 0, 0);
+      grad.addColorStop(0, '#3b82f6'); grad.addColorStop(1, '#a855f7');
+      g.fillStyle = grad;
+      for (let i = 0; i < n; i++) {
+        const v = Math.max(0.04, d[i] / 255);
+        const bh = v * h;
+        g.fillRect(i * bw + 2, h - bh, bw - 4, bh);
+      }
+      raf = requestAnimationFrame(draw);
+    };
+    raf = requestAnimationFrame(draw);
+    return () => cancelAnimationFrame(raf);
+  }, [getData, active]);
+  return <canvas ref={ref} width={320} height={64} className="w-full h-14 rounded-lg bg-black/30" />;
+};
+
+
 const DjMode = () => {
   const { 
     currentTrack, isPlaying, activeSource, playlist, forceBackgroundPlayback, 
@@ -161,7 +221,7 @@ const DjMode = () => {
     queue, removeFromQueue,
     nowPlayingOpen
   } = useMusicPlayer();
-  const { state, apply, init, reSync, getLevels, getBassLevel, unlock } = useDjAudio(audioRef, isPlaying);
+  const { state, apply, init, reSync, getLevels, getBassLevel, getFrequencyData, getLive, getBpm, getAutoOffsets, reset: resetDj, unlock } = useDjAudio(audioRef, isPlaying);
   const [activeDeck, setActiveDeck] = useState<'L' | 'R'>('L');
   const [levels, setLevels] = useState({ left: 0, right: 0 });
   const [smartBass, setSmartBass] = useState(false);
@@ -171,17 +231,29 @@ const DjMode = () => {
   const [forcing, setForcing] = useState(false);
   const [showSearch, setShowSearch] = useState(false);
   
-  const effectiveGainL = state.leftGain * (state.balance <= 0 ? 1 : 1 - state.balance);
-  const effectiveGainR = state.rightGain * (state.balance >= 0 ? 1 : 1 + state.balance);
+  // When the engine is running, show what you actually HEAR (manual + Auto DJ movement + L/R-only mode).
+  const liveFx = state.active ? getLive() : null;
+  const effectiveGainL = liveFx ? liveFx.gainL : state.leftGain * (state.balance <= 0 ? 1 : 1 - state.balance);
+  const effectiveGainR = liveFx ? liveFx.gainR : state.rightGain * (state.balance >= 0 ? 1 : 1 + state.balance);
+  const autoPan = state.active && state.auto.enabled ? getAutoOffsets().pan : 0;
+  const liveBalance = Math.max(-1, Math.min(1, state.balance + autoPan));
+  const [bpm, setBpm] = useState(120);
+  useEffect(() => {
+    if (!state.active) return;
+    const id = setInterval(() => setBpm(getBpm()), 1000);
+    return () => clearInterval(id);
+  }, [state.active, getBpm]);
 
   const rafRef = useRef<number>();
   const [beat, setBeat] = useState(false);
   const beatRef = useRef<ReturnType<typeof setInterval>>();
 
-  // Auto DJ State
-  const [autoDjActive, setAutoDjActive] = useState(false);
-  const [autoDjSpeed, setAutoDjSpeed] = useState<'normal' | 'rapid'>('normal');
-  const autoDjRef = useRef<ReturnType<typeof setInterval>>();
+  // Auto DJ is run by the engine (beat-aware, smooth, never overwrites manual values).
+  const autoDjActive = state.auto.enabled;
+  const setAutoDjActive = (on: boolean | ((prev: boolean) => boolean)) => {
+    const next = typeof on === 'function' ? on(djEngine.state.auto.enabled) : on;
+    apply({ auto: { enabled: next } });
+  };
   const latestStateRef = useRef(state);
   const searchRequestRef = useRef(0);
   
@@ -189,89 +261,6 @@ const DjMode = () => {
     latestStateRef.current = state;
   }, [state]);
 
-  useEffect(() => {
-    if (autoDjActive && state.active && isPlaying) {
-      console.log("Auto DJ: Started Modulation Loop - Speed:", autoDjSpeed);
-      const interval = autoDjSpeed === 'rapid' ? 1000 : 3000;
-      
-      autoDjRef.current = setInterval(() => {
-        const curr = latestStateRef.current;
-        // More modes for more randomness (0 to 9)
-        const mode = Math.floor(Math.random() * 10);
-        let next = { ...curr };
-        
-        console.log("Auto DJ: Modulating with mode", mode);
-
-        if (mode === 0) { // Deep Bass Focus
-          next.balance = -0.5;
-          next.leftGain = 1.2;
-          next.rightGain = 0.6;
-          next.low = 10;
-          next.mid = -4;
-          next.high = -2;
-        } else if (mode === 1) { // High Energy Right
-          next.balance = 0.8;
-          next.rightGain = 1.3;
-          next.leftGain = 0.3;
-          next.low = 6;
-          next.high = 8;
-        } else if (mode === 2) { // Minimal Vocal
-          next.low = -6;
-          next.mid = 8;
-          next.high = 4;
-          next.balance = 0;
-        } else if (mode === 3) { // Heavy Club
-          next.low = 12;
-          next.mid = -2;
-          next.high = 6;
-          next.leftGain = 1.1;
-          next.rightGain = 1.1;
-        } else if (mode === 4) { // Chill Out
-          next.low = 4;
-          next.mid = -4;
-          next.high = -6;
-          next.leftGain = 0.8;
-          next.rightGain = 0.8;
-        } else if (mode === 5) { // Rapid Pan
-          next.balance = curr.balance < 0 ? 0.9 : -0.9;
-          next.low = 8;
-        } else if (mode === 6) { // Mid Boost Solo
-          next.low = -2;
-          next.mid = 10;
-          next.high = 0;
-          next.balance = 0;
-        } else if (mode === 7) { // High Pass Filter feel
-          next.low = -12;
-          next.mid = -4;
-          next.high = 12;
-          next.leftGain = 1.2;
-          next.rightGain = 1.2;
-        } else if (mode === 8) { // Hard Left Transition
-          next.balance = -1;
-          next.leftGain = 1.2;
-          next.rightGain = 0;
-          next.low = 4;
-        } else if (mode === 9) { // Hard Right Transition
-          next.balance = 1;
-          next.rightGain = 1.2;
-          next.leftGain = 0;
-          next.low = 4;
-        }
-
-        // Auto DJ Center Boost: When the mix is centered, push both decks to 150% volume for maximum impact
-        if (Math.abs(next.balance) < 0.15) {
-          next.leftGain = 1.5;
-          next.rightGain = 1.5;
-        }
-        
-        apply(next);
-      }, interval);
-    } else {
-      if (autoDjRef.current) console.log("Auto DJ: Stopped");
-      clearInterval(autoDjRef.current);
-    }
-    return () => clearInterval(autoDjRef.current);
-  }, [autoDjActive, state.active, apply, autoDjSpeed, isPlaying]);
 
   const { user } = useAuth();
   const [userPlaylists, setUserPlaylists] = useState<Playlist[]>([]);
@@ -498,7 +487,7 @@ const DjMode = () => {
     finally { setSearching(false); }
   };
 
-  const reset = () => apply({ balance: 0, leftGain: 1, rightGain: 1, low: 0, mid: 0, high: 0, active: state.active });
+  const reset = () => resetDj();
 
   const presets = [
     { label: '🔊 Bass Boost', fn: () => apply({ ...state, low: 8, mid: 0, high: -2 }) },
@@ -864,15 +853,15 @@ const DjMode = () => {
               </div>
               <div className="relative h-3 md:h-2 bg-white/5 rounded-full overflow-hidden">
                 <div className="absolute inset-y-0 left-0 rounded-full transition-all duration-100"
-                  style={{ width: `${(effectiveGainL / 1.5) * 100}%`, background: 'linear-gradient(90deg, hsl(var(--primary)), #fff)' }} />
-                <input type="range" min={0} max={150} step={1} value={Math.round(state.leftGain * 100)}
+                  style={{ width: `${effectiveGainL * 100}%`, background: 'linear-gradient(90deg, hsl(var(--primary)), #fff)' }} />
+                <input type="range" min={0} max={100} step={1} value={Math.round(state.leftGain * 100)}
                   onChange={e => apply({ ...state, leftGain: +e.target.value / 100 })}
                   className="absolute inset-0 opacity-0 cursor-pointer w-full h-full" />
               </div>
               <div className="flex gap-2 mt-1">
                 <button onClick={() => apply({ ...state, leftGain: Math.max(0, state.leftGain - 0.1) })}
                   className="flex-1 py-2.5 md:py-1.5 rounded-xl bg-white/5 hover:bg-white/10 text-xs font-black transition-all active:scale-95">−</button>
-                <button onClick={() => apply({ ...state, leftGain: Math.min(1.5, state.leftGain + 0.1) })}
+                <button onClick={() => apply({ ...state, leftGain: Math.min(1, state.leftGain + 0.1) })}
                   className="flex-1 py-2.5 md:py-1.5 rounded-xl bg-white/5 hover:bg-white/10 text-xs font-black transition-all active:scale-95">+</button>
               </div>
             </div>
@@ -920,30 +909,26 @@ const DjMode = () => {
                   <span>Auto DJ Mode</span>
                 </div>
                 <span className="text-[8px] opacity-60">
-                  {forcing ? 'INITIALIZING...' : autoDjActive ? 'ACTIVE · MODULATING' : 'READY TO MIX'}
+                  {forcing ? 'INITIALIZING...' : autoDjActive ? `ACTIVE · ${state.auto.style.toUpperCase()} · ${bpm} BPM` : 'READY TO MIX'}
                 </span>
               </button>
 
-              {/* Speed Control */}
-              <div className="grid grid-cols-2 gap-2">
-                <button
-                  onClick={() => setAutoDjSpeed('normal')}
-                  className={cn(
-                    "py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all border",
-                    autoDjSpeed === 'normal' ? "bg-white/10 border-white/20 text-white" : "bg-transparent border-transparent text-muted-foreground hover:text-white"
-                  )}
-                >
-                  Smooth
-                </button>
-                <button
-                  onClick={() => setAutoDjSpeed('rapid')}
-                  className={cn(
-                    "py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all border",
-                    autoDjSpeed === 'rapid' ? "bg-primary/20 border-primary/40 text-primary" : "bg-transparent border-transparent text-muted-foreground hover:text-white"
-                  )}
-                >
-                  Rapid Mix
-                </button>
+              {/* Mixing style */}
+              <div className="grid grid-cols-3 gap-1.5">
+                {([['chill', 'Chill'], ['club', 'Club'], ['insane', 'Insane']] as [DjAutoStyle, string][]).map(([key, label]) => (
+                  <button
+                    key={key}
+                    onClick={() => apply({ auto: { style: key } })}
+                    className={cn(
+                      "py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all border",
+                      state.auto.style === key
+                        ? key === 'insane' ? "bg-purple-500/20 border-purple-400/50 text-purple-300" : "bg-primary/20 border-primary/40 text-primary"
+                        : "bg-transparent border-white/5 text-muted-foreground hover:text-white"
+                    )}
+                  >
+                    {label}
+                  </button>
+                ))}
               </div>
 
               {/* Smart Bass Toggle */}
@@ -966,14 +951,14 @@ const DjMode = () => {
               <div className="flex justify-between items-center">
                 <span className="text-[9px] font-black uppercase tracking-[0.4em] text-muted-foreground">Crossfader</span>
                 <span className="text-[10px] font-black text-primary">
-                  {state.balance === 0 ? 'CENTER' : state.balance < 0 ? `${Math.round(-state.balance * 100)}% L` : `${Math.round(state.balance * 100)}% R`}
+                  {Math.abs(liveBalance) < 0.01 ? 'CENTER' : liveBalance < 0 ? `${Math.round(-liveBalance * 100)}% L` : `${Math.round(liveBalance * 100)}% R`}
                 </span>
               </div>
               <div className="relative h-2 bg-white/5 rounded-full overflow-hidden">
                 <div className="absolute inset-y-0 rounded-full transition-all duration-75"
                   style={{
-                    left: `${state.balance <= 0 ? 50 + state.balance * 50 : 50}%`,
-                    right: `${state.balance >= 0 ? 50 - state.balance * 50 : 50}%`,
+                    left: `${liveBalance <= 0 ? 50 + liveBalance * 50 : 50}%`,
+                    right: `${liveBalance >= 0 ? 50 - liveBalance * 50 : 50}%`,
                     background: 'hsl(var(--primary))',
                     minWidth: 4
                   }} />
@@ -1050,17 +1035,77 @@ const DjMode = () => {
               </div>
               <div className="relative h-3 md:h-2 bg-white/5 rounded-full overflow-hidden">
                 <div className="absolute inset-y-0 left-0 rounded-full transition-all duration-100"
-                  style={{ width: `${(effectiveGainR / 1.5) * 100}%`, background: 'linear-gradient(90deg, hsl(var(--primary)), #fff)' }} />
-                <input type="range" min={0} max={150} step={1} value={Math.round(state.rightGain * 100)}
+                  style={{ width: `${effectiveGainR * 100}%`, background: 'linear-gradient(90deg, hsl(var(--primary)), #fff)' }} />
+                <input type="range" min={0} max={100} step={1} value={Math.round(state.rightGain * 100)}
                   onChange={e => apply({ ...state, rightGain: +e.target.value / 100 })}
                   className="absolute inset-0 opacity-0 cursor-pointer w-full h-full" />
               </div>
               <div className="flex gap-2 mt-1">
                 <button onClick={() => apply({ ...state, rightGain: Math.max(0, state.rightGain - 0.1) })}
                   className="flex-1 py-2.5 md:py-1.5 rounded-xl bg-white/5 hover:bg-white/10 text-xs font-black transition-all active:scale-95">−</button>
-                <button onClick={() => apply({ ...state, rightGain: Math.min(1.5, state.rightGain + 0.1) })}
+                <button onClick={() => apply({ ...state, rightGain: Math.min(1, state.rightGain + 0.1) })}
                   className="flex-1 py-2.5 md:py-1.5 rounded-xl bg-white/5 hover:bg-white/10 text-xs font-black transition-all active:scale-95">+</button>
               </div>
+            </div>
+          </div>
+        </div>
+
+        {/* ── Mixer: master, bass boost, channel mode, per-effect switches ── */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-6">
+          <div className="rounded-2xl border border-white/8 bg-white/3 backdrop-blur-xl p-5 space-y-5">
+            <div className="flex items-center justify-between">
+              <span className="text-[9px] font-black uppercase tracking-[0.5em] text-muted-foreground">Master &amp; Bass</span>
+              <span className="text-[9px] font-black text-primary/80 tabular-nums">{state.active ? `${bpm} BPM` : '—'}</span>
+            </div>
+            <Spectrum getData={getFrequencyData} active={state.active} />
+            <MixSlider label="Master Volume" value={Math.min(1, state.master)} onChange={v => apply({ master: v })} />
+            <MixSlider label="Bass Boost" value={state.bassBoost} onChange={v => apply({ bassBoost: v })}
+              hint="Smooth sub-bass lift with built-in limiter — no distortion." />
+          </div>
+
+          <div className="rounded-2xl border border-white/8 bg-white/3 backdrop-blur-xl p-5 space-y-4">
+            <span className="text-[9px] font-black uppercase tracking-[0.5em] text-muted-foreground">Channel Output</span>
+            <div className="grid grid-cols-3 gap-2">
+              {([['left', '◄ Left only'], ['stereo', 'Stereo'], ['right', 'Right only ►']] as [DjChannelMode, string][]).map(([mode, label]) => (
+                <button key={mode} onClick={() => apply({ channelMode: mode })}
+                  className={cn(
+                    'py-3 rounded-xl border text-[10px] font-black uppercase tracking-wider transition-all active:scale-95',
+                    state.channelMode === mode ? 'bg-primary text-primary-foreground border-primary shadow-[0_0_18px_hsl(var(--primary)/0.4)]' : 'bg-white/5 border-white/10 text-muted-foreground hover:text-white'
+                  )}>
+                  {label}
+                </button>
+              ))}
+            </div>
+            <p className="text-[9px] text-muted-foreground/60">Use headphones: Left only silences the right ear and vice-versa. Set each side's volume with the deck gain sliders.</p>
+            <button onClick={reset}
+              className="w-full py-3 rounded-xl border border-white/10 bg-white/5 hover:bg-primary/20 hover:text-primary text-[10px] font-black uppercase tracking-widest transition-all flex items-center justify-center gap-2 active:scale-95">
+              <RotateCcw className="w-3.5 h-3.5" /> Reset everything
+            </button>
+          </div>
+
+          <div className="rounded-2xl border border-white/8 bg-white/3 backdrop-blur-xl p-5 space-y-4">
+            <span className="text-[9px] font-black uppercase tracking-[0.5em] text-muted-foreground">Effect Switches</span>
+            <div className="flex flex-wrap gap-2">
+              <FxChip label="L/R + Balance" on={state.fx.channels} onClick={() => apply({ fx: { channels: !state.fx.channels } })} />
+              <FxChip label="3-Band EQ" on={state.fx.eq} onClick={() => apply({ fx: { eq: !state.fx.eq } })} />
+              <FxChip label="Bass Boost" on={state.fx.bass} onClick={() => apply({ fx: { bass: !state.fx.bass } })} />
+            </div>
+            <div className="pt-1">
+              <p className="text-[9px] font-black uppercase tracking-[0.4em] text-muted-foreground/70 mb-2">
+                Auto DJ moves {autoDjActive ? '· live' : '· off'}
+              </p>
+              <div className="flex flex-wrap gap-2">
+                <FxChip label="Auto-Pan" on={state.auto.pan} onClick={() => apply({ auto: { pan: !state.auto.pan } })} />
+                <FxChip label="Bass Swell" on={state.auto.bass} onClick={() => apply({ auto: { bass: !state.auto.bass } })} />
+                <FxChip label="Filter Sweep" on={state.auto.filter} onClick={() => apply({ auto: { filter: !state.auto.filter } })} />
+                <FxChip label="Pump" on={state.auto.pump} onClick={() => apply({ auto: { pump: !state.auto.pump } })} />
+              </div>
+              {autoDjActive && (
+                <button onClick={() => setAutoDjActive(false)}
+                  className="mt-3 w-full py-2.5 rounded-xl border border-primary/40 bg-primary/10 text-primary text-[10px] font-black uppercase tracking-widest active:scale-95">
+                  Take manual control
+                </button>
+              )}
             </div>
           </div>
         </div>

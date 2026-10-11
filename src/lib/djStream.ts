@@ -1,3 +1,5 @@
+import { resolveSaavnStream } from '@/lib/saavnSource';
+
 const DJ_STREAM_PROBE_TIMEOUT_MS = 6500;
 const YOUTUBE_VIDEO_ID_RE = /^[a-zA-Z0-9_-]{11}$/;
 
@@ -10,7 +12,16 @@ export const getDjStreamUrl = (videoId: string, options?: { stream?: boolean; ti
   return `${AUDIO_URL_BASE}?${params.toString()}`;
 };
 
-export async function canUseDjModeTrack(videoId: string): Promise<boolean> {
+export async function canUseDjModeTrack(
+  videoId: string,
+  track?: { title?: string; channel?: string }
+): Promise<boolean> {
+  // JioSaavn first: its CDN is CORS-open, so it can be processed in real time by the DJ engine.
+  if (track?.title) {
+    const saavn = await resolveSaavnStream({ id: videoId, title: track.title, channel: track.channel });
+    if (saavn) return true;
+  }
+
   const controller = new AbortController();
   const timeout = window.setTimeout(() => controller.abort(), DJ_STREAM_PROBE_TIMEOUT_MS);
 
@@ -35,7 +46,7 @@ export async function filterDjModeTracks<T extends { id: string }>(
 
   const checked = await Promise.all(
     uniqueTracks.map(async track => (
-      await canUseDjModeTrack(track.id) ? track : null
+      await canUseDjModeTrack(track.id, track as { title?: string; channel?: string }) ? track : null
     ))
   );
 

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useSyncExternalStore } from 'react';
-import { djEngine, type DjState } from '@/lib/djEngine';
+import { djEngine, type DjPatch } from '@/lib/djEngine';
 
-export type { DjState, DjAutoStyle, DjChannelMode } from '@/lib/djEngine';
+export type { DjState, DjPatch, DjAutoStyle, DjChannelMode } from '@/lib/djEngine';
 
 /**
  * React binding for the shared DJ engine (src/lib/djEngine.ts).
@@ -15,7 +15,7 @@ export function useDjAudio(
 ) {
   const state = useSyncExternalStore(djEngine.subscribe, () => djEngine.state, () => djEngine.state);
 
-  const apply = useCallback((next: Partial<DjState>) => djEngine.set(next), []);
+  const apply = useCallback((next: DjPatch) => djEngine.set(next), []);
 
   const unlock = useCallback(() => djEngine.unlock(), []);
 
@@ -42,6 +42,7 @@ export function useDjAudio(
   const getLive = useCallback(() => djEngine.getLive(), []);
   const getBpm = useCallback(() => djEngine.getBpm(), []);
   const getBeatPhase = useCallback(() => djEngine.getBeatPhase(), []);
+  const getAutoOffsets = useCallback(() => djEngine.getAutoOffsets(), []);
 
   // Keep the engine alive across play/pause + element swaps (browsers suspend idle AudioContexts).
   useEffect(() => {
@@ -53,6 +54,6 @@ export function useDjAudio(
 
   return {
     state, apply, init, reSync, unlock, setActive, reset,
-    getLevels, getBassLevel, getFrequencyData, getLive, getBpm, getBeatPhase,
+    getLevels, getBassLevel, getFrequencyData, getLive, getBpm, getBeatPhase, getAutoOffsets,
   };
 }
