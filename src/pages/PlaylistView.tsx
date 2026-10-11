@@ -99,7 +99,7 @@ const PlaylistView = () => {
     queue, removeFromQueue,
   } = useMusicPlayer();
 
-  const { downloads, startDownload, isDownloading } = useDownloadManager();
+  const { downloads, startDownload, startBulkDownload, isDownloading } = useDownloadManager();
   const [playlist, setPlaylist] = useState<Playlist | null>(null);
   const [playlistTracks, setPlaylistTracks] = useState<Track[]>([]);
   const [downloadedTrackIds, setDownloadedTrackIds] = useState<Set<string>>(new Set());
@@ -171,15 +171,12 @@ const PlaylistView = () => {
       return;
     }
 
-    toast.success(`Starting download for ${tracksToDownload.length} tracks to Download Page...`);
-    tracksToDownload.forEach(track => {
-      startDownload({
-        id: track.id,
-        title: track.title,
-        thumbnail: track.thumbnail,
-        artist: track.channel,
-      });
-    });
+    startBulkDownload(tracksToDownload.map(track => ({
+      id: track.id,
+      title: track.title,
+      thumbnail: track.thumbnail,
+      artist: track.channel,
+    })));
   };
 
   useEffect(() => {

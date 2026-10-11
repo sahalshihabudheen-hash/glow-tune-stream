@@ -13,12 +13,18 @@ export interface DownloadItem {
   progress: number; // 0-100
 }
 
+export type DownloadTrack = { id: string; title: string; thumbnail: string; artist?: string; duration?: number };
+
 interface DownloadManagerContextType {
   downloads: DownloadItem[];
-  startDownload: (track: { id: string; title: string; thumbnail: string; artist?: string; duration?: number }) => void;
+  startDownload: (track: DownloadTrack) => void;
+  /** Download many songs with a single prompt; processed a few at a time. */
+  startBulkDownload: (tracks: DownloadTrack[]) => void;
   clearCompleted: () => void;
   isDownloading: (trackId: string) => boolean;
 }
+
+const BATCH_CONCURRENCY = 2;
 
 const DownloadManagerContext = createContext<DownloadManagerContextType | null>(null);
 
@@ -569,13 +575,8 @@ export function DownloadManagerProvider({ children }: { children: React.ReactNod
   const { settings, updateSettings } = useTheme();
 
   const [promptOpen, setPromptOpen] = useState(false);
-  const [pendingTrack, setPendingTrack] = useState<{
-    id: string;
-    title: string;
-    thumbnail: string;
-    artist?: string;
-    duration?: number;
-  } | null>(null);
+  const [pendingTracks, setPendingTracks] = useState<DownloadTrack[]>([]);
+  const pendingTrack = pendingTracks[0] ?? null;
   const [dontAskAgain, setDontAskAgain] = useState(false);
   const queueCacheInFlight = useRef(new Set<string>());
 
@@ -606,12 +607,11 @@ export function DownloadManagerProvider({ children }: { children: React.ReactNod
   // Always fetches and validates a real audio Blob before creating the file.
   // If every resolver fails, it shows a clear error instead of saving HTML/JSON.
   const downloadToDevice = useCallback(
-    async (track: { id: string; title: string; thumbnail: string; artist?: string; duration?: number }) => {
-      addItem({ id: track.id, title: track.title, thumbnail: track.thumbnail, status: 'preparing', progress: 0 });
-      updateItem(track.id, { status: 'downloading', progress: 5 });
+    async (track: DownloadTrack, opts: { quiet?: boolean } = {}): Promise<boolean> => {
+      addItem({ id: track.id, title: track.title, thumbnail: track.thumbnail, status: 'downloading', progress: 5 });
 
       try {
-        toast.loading('Preparing verified audio file…', { id: `dl-${track.id}` });
+        if (!opts.quiet) toast.loading('Preparing verified audio file…', { id: `dl-${track.id}` });
         const result = await fetchFirstAudioBlob(track, 'download', (p) =>
           updateItem(track.id, { progress: Math.round(5 + p * 0.9) })
         );
@@ -621,14 +621,16 @@ export function DownloadManagerProvider({ children }: { children: React.ReactNod
         triggerBrowserDownload(result.blob, track.title, result.mimeType);
 
         updateItem(track.id, { status: 'done', progress: 100 });
-        toast.success(`🎵 Audio download ready: ${track.title}`);
+        if (!opts.quiet) toast.success(`🎵 Audio download ready: ${track.title}`);
         removeItem(track.id, 15_000);
+        return true;
       } catch (err: any) {
         console.error('[Download] Device download failed:', err);
         toast.dismiss(`dl-${track.id}`);
         updateItem(track.id, { status: 'error', progress: 0 });
-        toast.error(err.message || 'Could not get a valid audio file. Please try again.');
+        if (!opts.quiet) toast.error(err.message || 'Could not get a valid audio file. Please try again.');
         removeItem(track.id, 8_000);
+        return false;
       }
     },
     [addItem, updateItem, removeItem]
@@ -636,12 +638,12 @@ export function DownloadManagerProvider({ children }: { children: React.ReactNod
 
   // ── Download In-App (IndexedDB) ─────────────────────────────────────────────
   const downloadInApp = useCallback(
-    async (track: { id: string; title: string; thumbnail: string; artist?: string; duration?: number }) => {
-      addItem({ id: track.id, title: track.title, thumbnail: track.thumbnail, status: 'preparing', progress: 0 });
-      updateItem(track.id, { status: 'downloading', progress: 5 });
+    async (track: DownloadTrack, opts: { quiet?: boolean; fallbackToDevice?: boolean } = {}): Promise<boolean> => {
+      const { quiet = false, fallbackToDevice = true } = opts;
+      addItem({ id: track.id, title: track.title, thumbnail: track.thumbnail, status: 'downloading', progress: 5 });
 
       try {
-        toast.loading('Finding audio stream…', { id: `dl-app-${track.id}` });
+        if (!quiet) toast.loading('Finding audio stream…', { id: `dl-app-${track.id}` });
 
         const { blob: audioBlob } = await fetchFirstAudioBlob(track, 'stream', (p) =>
           updateItem(track.id, { progress: Math.round(10 + p * 0.8) })
@@ -649,16 +651,22 @@ export function DownloadManagerProvider({ children }: { children: React.ReactNod
         toast.dismiss(`dl-app-${track.id}`);
 
         await saveTrackOffline(track, audioBlob);
+        window.dispatchEvent(new CustomEvent('nyra:offline-cache-updated', { detail: { id: track.id } }));
         updateItem(track.id, { status: 'done', progress: 100 });
-        toast.success(`🎵 Saved for offline: ${track.title}`);
+        if (!quiet) toast.success(`🎵 Saved for offline: ${track.title}`);
         removeItem(track.id, 15_000);
+        return true;
       } catch (err: any) {
         console.error('[Download] In-app download failed:', err);
         toast.dismiss(`dl-app-${track.id}`);
-        toast.info('Offline save failed, switching to device download…');
-        await downloadToDevice(track);
+        if (fallbackToDevice) {
+          toast.info('Offline save failed, switching to device download…');
+          return downloadToDevice(track);
+        }
+        updateItem(track.id, { status: 'error', progress: 0 });
+        removeItem(track.id, 10_000);
+        return false;
       }
-
     },
     [addItem, updateItem, removeItem, downloadToDevice]
   );
@@ -702,38 +710,70 @@ export function DownloadManagerProvider({ children }: { children: React.ReactNod
     return () => window.removeEventListener('nyra:cache-queued-track', handleQueuedTrack);
   }, []);
 
-  // ── Entry point ─────────────────────────────────────────────────────────────
-  const startDownload = useCallback(
-    (track: { id: string; title: string; thumbnail: string; artist?: string; duration?: number }) => {
-      if (isDownloading(track.id)) {
-        toast.info('Already downloading this track');
-        return;
-      }
+  // ── Batch runner ────────────────────────────────────────────────────────────
+  // Every track is shown in the download list right away, then processed two at
+  // a time so a whole playlist finishes without flooding a mobile connection.
+  const runBatch = useCallback(
+    async (tracks: DownloadTrack[], option: 'device' | 'app') => {
+      const todo = tracks.filter((t) => t?.id && !isDownloading(t.id));
+      if (todo.length === 0) return;
+      todo.forEach((t) => addItem({ id: t.id, title: t.title, thumbnail: t.thumbnail, status: 'preparing', progress: 0 }));
 
-      const pref = settings.downloadPreference || 'ask';
-      if (pref === 'ask') {
-        setPendingTrack(track);
-        setDontAskAgain(false);
-        setPromptOpen(true);
-      } else if (pref === 'device') {
-        downloadToDevice(track);
-      } else {
-        downloadInApp(track);
+      const isBulk = todo.length > 1;
+      let index = 0;
+      let ok = 0;
+      const worker = async () => {
+        while (index < todo.length) {
+          const track = todo[index++];
+          const success = option === 'device'
+            ? await downloadToDevice(track, { quiet: isBulk })
+            : await downloadInApp(track, { quiet: isBulk, fallbackToDevice: !isBulk });
+          if (success) ok++;
+        }
+      };
+      await Promise.all(Array.from({ length: Math.min(BATCH_CONCURRENCY, todo.length) }, worker));
+
+      if (isBulk) {
+        const failed = todo.length - ok;
+        if (failed === 0) toast.success(`🎵 All ${ok} songs ${option === 'app' ? 'saved for offline' : 'downloaded'}`);
+        else toast.warning(`${ok} of ${todo.length} songs done — ${failed} couldn't be found. Tap them to retry.`);
       }
     },
-    [settings.downloadPreference, isDownloading, downloadToDevice, downloadInApp]
+    [addItem, isDownloading, downloadToDevice, downloadInApp]
   );
 
+  const requestDownload = useCallback(
+    (tracks: DownloadTrack[]) => {
+      const todo = tracks.filter((t) => t?.id && !isDownloading(t.id));
+      if (todo.length === 0) {
+        toast.info(tracks.length > 1 ? 'All these songs are already downloading' : 'Already downloading this track');
+        return;
+      }
+      const pref = settings.downloadPreference || 'ask';
+      if (pref === 'ask') {
+        setPendingTracks(todo);
+        setDontAskAgain(false);
+        setPromptOpen(true);
+      } else {
+        void runBatch(todo, pref === 'device' ? 'device' : 'app');
+      }
+    },
+    [settings.downloadPreference, isDownloading, runBatch]
+  );
+
+  // ── Entry points ────────────────────────────────────────────────────────────
+  const startDownload = useCallback((track: DownloadTrack) => requestDownload([track]), [requestDownload]);
+  const startBulkDownload = useCallback((tracks: DownloadTrack[]) => requestDownload(tracks), [requestDownload]);
+
   const handleSelectOption = (option: 'device' | 'app') => {
-    if (!pendingTrack) return;
+    if (pendingTracks.length === 0) return;
     if (dontAskAgain) {
       updateSettings({ downloadPreference: option });
       toast.success('Preference saved! You can change this in Settings.');
     }
-    if (option === 'device') downloadToDevice(pendingTrack);
-    else downloadInApp(pendingTrack);
+    void runBatch(pendingTracks, option);
     setPromptOpen(false);
-    setPendingTrack(null);
+    setPendingTracks([]);
   };
 
   const clearCompleted = useCallback(() => {
@@ -741,7 +781,7 @@ export function DownloadManagerProvider({ children }: { children: React.ReactNod
   }, []);
 
   return (
-    <DownloadManagerContext.Provider value={{ downloads, startDownload, clearCompleted, isDownloading }}>
+    <DownloadManagerContext.Provider value={{ downloads, startDownload, startBulkDownload, clearCompleted, isDownloading }}>
       {children}
 
       {/* Choice Prompt Dialog */}
@@ -780,8 +820,12 @@ export function DownloadManagerProvider({ children }: { children: React.ReactNod
                 referrerPolicy="no-referrer"
               />
               <div className="min-w-0">
-                <p className="text-sm font-semibold text-foreground truncate">{pendingTrack.title}</p>
-                <p className="text-xs text-muted-foreground truncate">{pendingTrack.artist || 'YouTube Stream'}</p>
+                <p className="text-sm font-semibold text-foreground truncate">
+                  {pendingTracks.length > 1 ? `${pendingTracks.length} songs` : pendingTrack.title}
+                </p>
+                <p className="text-xs text-muted-foreground truncate">
+                  {pendingTracks.length > 1 ? `${pendingTrack.title} and ${pendingTracks.length - 1} more` : pendingTrack.artist || 'YouTube Stream'}
+                </p>
               </div>
             </div>
 
