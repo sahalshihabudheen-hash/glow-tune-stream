@@ -44,7 +44,7 @@ const NavItemButton = ({ item, active, rail, onClick }: NavItemButtonProps) => {
         'relative flex items-center rounded-2xl transition-all duration-300 cursor-pointer outline-none focus-visible:ring-2 focus-visible:ring-primary/60',
         rail ? 'h-11 w-11 mx-auto justify-center' : 'h-11 w-full gap-3 px-3.5',
         active
-          ? 'bg-sidebar-foreground text-sidebar shadow-[0_8px_24px_-8px_hsl(var(--sidebar-foreground)/0.45)]'
+          ? 'bg-primary text-primary-foreground shadow-[0_8px_24px_-8px_hsl(var(--primary)/0.6)]'
           : 'text-sidebar-foreground/60 hover:bg-sidebar-foreground/10 hover:text-sidebar-foreground'
       )}
     >
@@ -411,7 +411,14 @@ const Sidebar = ({ activeTab, onTabChange }: SidebarProps) => {
         )}
       >
         {/* Logo + collapse toggle (X closes the mobile drawer) */}
-        <div className={cn('flex items-center', rail ? 'justify-center px-2 pt-4 pb-2' : 'justify-between gap-2 px-4 pt-5 pb-3')}>
+        <div className={cn('flex items-center', rail ? 'flex-col gap-2 px-2 pt-4 pb-2' : 'justify-between gap-2 px-4 pt-5 pb-3')}>
+          {rail && (
+            <img
+              src={appSettings.app_logo_url || nyraLogo}
+              alt={`${appSettings.app_name} Logo`}
+              className="w-10 h-10 rounded-xl object-cover shrink-0"
+            />
+          )}
           {!rail && (
             <div className="flex items-center gap-3 min-w-0">
               <img src={appSettings.app_logo_url || nyraLogo} alt={`${appSettings.app_name} Logo`} className="w-10 h-10 rounded-xl object-cover shrink-0" />
