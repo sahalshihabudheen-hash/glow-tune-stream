@@ -16,8 +16,13 @@ import { useAuth } from '@/hooks/useAuth';
 import { filterDjModeTracks, getLikelyDjModeTracks } from '@/lib/djStream';
 import { djEngine, type DjAutoStyle, type DjChannelMode } from '@/lib/djEngine';
 import {
-  ACCENT_GRADIENT, Chip, HFader, Label, LevelMeter, Panel, Platter, Spectrum, VFader, buzz,
+  Chip, HFader, Label, LevelMeter, Panel, Platter, Spectrum, VFader, buzz,
 } from '@/components/dj/DjPrimitives';
+
+/* Shared button looks (flat, matte, pressed = 1px down) */
+const BTN = 'rounded-[3px] border text-[11px] font-medium uppercase tracking-[0.1em] transition-colors active:translate-y-px flex items-center justify-center gap-2 disabled:opacity-60';
+const BTN_PRIMARY = `${BTN} bg-primary border-primary text-primary-foreground hover:brightness-95`;
+const BTN_PLAIN = `${BTN} bg-[#131312] border-[#2b2a25] text-[#e9e7dc] hover:border-[#3d3b33] hover:bg-[#1a1a18]`;
 
 interface Track { id: string; title: string; thumbnail: string; channel: string; }
 
@@ -51,24 +56,23 @@ const TrackRow = ({
     onClick={onPlay}
     onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onPlay(); } }}
     className={cn(
-      'relative flex items-center gap-3 p-2.5 pr-3 rounded-2xl border cursor-pointer transition-colors active:scale-[0.99]',
-      active ? 'bg-primary/10 border-primary/30' : 'bg-white/[0.03] border-white/5 hover:bg-white/[0.07]'
+      'relative flex items-center gap-3 p-2 pr-3 rounded-[3px] border cursor-pointer transition-colors',
+      active ? 'bg-[#1f1d14] border-primary/60' : 'bg-[#131312] border-[#2b2a25] hover:bg-[#1a1a18]'
     )}
   >
-    {active && <span className="absolute left-0 top-3 bottom-3 w-1 rounded-r bg-primary" />}
     <div className="relative shrink-0">
-      <img src={track.thumbnail} alt="" loading="lazy" className="w-12 h-12 rounded-xl object-cover" />
-      <span className="absolute inset-0 rounded-xl bg-black/45 flex items-center justify-center">
+      <img src={track.thumbnail} alt="" loading="lazy" className="w-12 h-12 rounded-[2px] object-cover" />
+      <span className="absolute inset-0 rounded-[2px] bg-black/50 flex items-center justify-center">
         {active && playing ? <Pause className="w-5 h-5 text-primary fill-current" /> : <Play className="w-5 h-5 text-white fill-current ml-0.5" />}
       </span>
     </div>
     <div className="flex-1 min-w-0">
-      <p className={cn('font-bold truncate text-sm', active && 'text-primary')}>{track.title}</p>
-      <p className="text-[10px] font-bold text-muted-foreground/60 uppercase tracking-widest truncate">{track.channel}</p>
+      <p className={cn('font-medium truncate text-sm', active && 'text-primary')}>{track.title}</p>
+      <p className="text-[10px] text-[#8c8a7d] uppercase tracking-[0.1em] truncate">{track.channel}</p>
     </div>
     <button
       onClick={e => { e.stopPropagation(); buzz(); onQueue(); }}
-      className="shrink-0 min-h-[40px] px-3.5 rounded-xl bg-primary/10 text-primary hover:bg-primary hover:text-primary-foreground text-[10px] font-black uppercase tracking-widest transition-all active:scale-90"
+      className={cn(BTN_PLAIN, 'shrink-0 min-h-[40px] px-3.5 hover:border-primary/60 hover:text-primary')}
     >
       Queue
     </button>
@@ -84,14 +88,12 @@ const Deck = ({
 }) => (
   <section
     className={cn(
-      'rounded-3xl border p-3 sm:p-4 flex flex-col gap-3 backdrop-blur-xl bg-gradient-to-b from-white/[0.05] to-transparent transition-[border-color,opacity] duration-300',
-      level > 0.3 ? 'border-primary/40' : 'border-white/[0.08]',
+      'rounded-md border border-[#2b2a25] bg-[#131312] p-3 sm:p-4 flex flex-col gap-3',
       muted && 'opacity-60'
     )}
-    style={{ boxShadow: `0 0 ${16 + level * 36}px hsl(var(--primary) / ${0.04 + level * 0.14})` }}
   >
     <div className="flex items-center justify-between gap-2">
-      <span className="text-[10px] font-black uppercase tracking-[0.35em] text-muted-foreground">
+      <span className="text-[10px] font-medium uppercase tracking-[0.14em] text-[#8c8a7d]">
         {side === 'L' ? '« Deck L' : 'Deck R »'}
       </span>
       <button
@@ -99,8 +101,8 @@ const Deck = ({
         aria-pressed={solo}
         title={solo ? 'Back to stereo' : `Play ${side === 'L' ? 'left' : 'right'} ear only`}
         className={cn(
-          'min-h-[32px] px-2.5 rounded-lg border text-[9px] font-black uppercase tracking-widest transition-all active:scale-95',
-          solo ? 'bg-primary text-primary-foreground border-primary' : muted ? 'border-red-400/40 text-red-300 bg-red-500/10' : 'border-white/10 text-muted-foreground bg-white/[0.04] hover:text-white'
+          'min-h-[32px] px-2.5 rounded-[3px] border text-[10px] font-medium uppercase tracking-[0.1em] transition-colors active:translate-y-px',
+          solo ? 'bg-primary text-primary-foreground border-primary' : muted ? 'border-[#d9382c]/60 text-[#d9382c] bg-transparent' : 'border-[#2b2a25] text-[#8c8a7d] hover:text-[#e9e7dc] hover:border-[#3d3b33]'
         )}
       >
         {muted ? 'Muted' : 'Solo'}
@@ -111,7 +113,7 @@ const Deck = ({
     <LevelMeter level={level} />
 
     <div>
-      <Label right={<span className={cn('text-xs font-black tabular-nums', liveGain > 0 ? 'text-primary' : 'text-red-400')}>{Math.round(liveGain * 100)}%</span>}>
+      <Label right={<span className={cn('font-mono text-xs tabular-nums', liveGain > 0 ? 'text-primary' : 'text-[#d9382c]')}>{Math.round(liveGain * 100)}%</span>}>
         Gain
       </Label>
       <HFader
@@ -122,9 +124,9 @@ const Deck = ({
       />
       <div className="grid grid-cols-2 gap-2">
         <button onClick={() => { buzz(); onGain(Math.max(0, gain - 0.1)); }} aria-label={`Lower deck ${side} gain`}
-          className="min-h-[44px] rounded-xl bg-white/[0.05] hover:bg-white/10 flex items-center justify-center transition-all active:scale-95"><Minus className="w-4 h-4" /></button>
+          className={cn(BTN_PLAIN, 'min-h-[44px]')}><Minus className="w-4 h-4" /></button>
         <button onClick={() => { buzz(); onGain(Math.min(1, gain + 0.1)); }} aria-label={`Raise deck ${side} gain`}
-          className="min-h-[44px] rounded-xl bg-white/[0.05] hover:bg-white/10 flex items-center justify-center transition-all active:scale-95"><Plus className="w-4 h-4" /></button>
+          className={cn(BTN_PLAIN, 'min-h-[44px]')}><Plus className="w-4 h-4" /></button>
       </div>
     </div>
   </section>
@@ -133,9 +135,9 @@ const Deck = ({
 /* ─── Labelled slider row ─── */
 const SliderRow = ({ label, value, onChange, hint }: { label: string; value: number; onChange: (v: number) => void; hint?: string }) => (
   <div>
-    <Label right={<span className="text-xs font-black tabular-nums text-primary">{Math.round(value * 100)}%</span>}>{label}</Label>
+    <Label right={<span className="font-mono text-xs tabular-nums text-primary">{Math.round(value * 100)}%</span>}>{label}</Label>
     <HFader ariaLabel={label} value={Math.round(value * 100)} onChange={v => onChange(v / 100)} />
-    {hint && <p className="text-[10px] text-muted-foreground/60 -mt-1">{hint}</p>}
+    {hint && <p className="text-[11px] text-[#8c8a7d]">{hint}</p>}
   </div>
 );
 
@@ -464,12 +466,12 @@ const DjMode = () => {
   };
 
   const presets = [
-    { label: '🔊 Bass Boost', fn: () => apply({ low: 8, mid: 0, high: -2 }) },
-    { label: '🎤 Vocal Pop', fn: () => apply({ low: -4, mid: 3, high: 5 }) },
-    { label: '🎧 Club Mix', fn: () => apply({ low: 6, mid: -2, high: 4 }) },
-    { label: '🌊 Chill', fn: () => apply({ low: 2, mid: -1, high: -3 }) },
-    { label: '⚡ Drop', fn: () => apply({ low: 12, mid: 0, high: 0 }) },
-    { label: '↩ Flat', fn: () => apply({ low: 0, mid: 0, high: 0 }) },
+    { label: 'Bass Boost', fn: () => apply({ low: 8, mid: 0, high: -2 }) },
+    { label: 'Vocal Pop', fn: () => apply({ low: -4, mid: 3, high: 5 }) },
+    { label: 'Club Mix', fn: () => apply({ low: 6, mid: -2, high: 4 }) },
+    { label: 'Chill', fn: () => apply({ low: 2, mid: -1, high: -3 }) },
+    { label: 'Drop', fn: () => apply({ low: 12, mid: 0, high: 0 }) },
+    { label: 'Flat', fn: () => apply({ low: 0, mid: 0, high: 0 }) },
   ];
 
   const totalLevel = (levels.left + levels.right) / 2;
@@ -482,17 +484,7 @@ const DjMode = () => {
   const tabClass = (t: Tab) => cn(tab === t ? 'block' : 'hidden', 'xl:block');
 
   return (
-    <div className="min-h-screen bg-[#050505] text-foreground overflow-x-hidden">
-      {/* Beat-reactive glow (cheap gradients instead of heavy blurs) */}
-      <div
-        className="fixed inset-0 pointer-events-none z-0"
-        style={{
-          background:
-            `radial-gradient(60% 45% at 15% 0%, hsl(var(--primary) / ${0.1 + totalLevel * 0.14}), transparent 70%),` +
-            `radial-gradient(55% 45% at 90% 100%, rgba(255,138,0,${0.07 + totalLevel * 0.12}), transparent 70%)`,
-        }}
-      />
-
+    <div className="min-h-screen bg-[#0c0c0b] text-[#e9e7dc] overflow-x-hidden">
       <Sidebar activeTab="dj" onTabChange={() => {}} />
 
       <main className={cn(
@@ -503,18 +495,17 @@ const DjMode = () => {
         {/* ── Header ── */}
         <header className="flex flex-wrap items-center gap-x-4 gap-y-3 mb-4">
           <div className={cn(
-            'w-12 h-12 md:w-14 md:h-14 rounded-2xl flex items-center justify-center border-2 transition-all duration-300 shrink-0',
-            state.active ? 'bg-primary text-primary-foreground border-primary shadow-[0_0_30px_hsl(var(--primary)/0.5)]' : 'bg-primary/10 text-primary border-primary/20'
+            'w-12 h-12 rounded-[3px] flex items-center justify-center border shrink-0',
+            state.active ? 'bg-primary text-primary-foreground border-primary' : 'bg-[#131312] text-[#8c8a7d] border-[#2b2a25]'
           )}>
-            <Headphones className="w-6 h-6 md:w-7 md:h-7" />
+            <Headphones className="w-6 h-6" />
           </div>
           <div className="flex-1 min-w-[140px]">
-            <h1 className="text-3xl md:text-5xl font-black tracking-tighter uppercase italic leading-none" style={{
-              background: 'linear-gradient(135deg, hsl(var(--primary)), #fff, #ff8a00)',
-              WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent'
-            }}>DJ Mode</h1>
-            <p className="mt-1.5 flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.3em] text-muted-foreground/70">
-              <span className={cn('w-2 h-2 rounded-full transition-all duration-150', state.active ? (beat ? 'bg-primary shadow-[0_0_12px_hsl(var(--primary))] scale-125' : 'bg-primary/40') : 'bg-white/20')} />
+            <h1 className="text-2xl md:text-4xl font-bold tracking-tight uppercase leading-none text-[#e9e7dc]">
+              DJ Mode
+            </h1>
+            <p className="mt-2 flex items-center gap-2 font-mono text-[11px] uppercase tracking-[0.08em] text-[#8c8a7d]">
+              <span className={cn('w-2 h-2', state.active ? (beat ? 'bg-primary' : 'bg-primary/30') : 'bg-[#3d3b33]')} />
               {state.active ? `Live · ${bpm} BPM` : 'Offline'}
             </p>
           </div>
@@ -522,10 +513,7 @@ const DjMode = () => {
             <button
               onClick={() => setShowSearch(s => !s)}
               aria-expanded={showSearch}
-              className={cn(
-                'min-h-[48px] px-5 rounded-2xl border font-black text-xs uppercase tracking-widest transition-all active:scale-95 flex items-center justify-center gap-2',
-                showSearch ? 'border-primary/50 bg-primary/10 text-primary' : 'border-white/10 bg-white/[0.04]'
-              )}
+              className={cn(BTN, 'min-h-[48px] px-5', showSearch ? 'border-primary/70 bg-[#1f1d14] text-primary' : 'border-[#2b2a25] bg-[#131312] hover:border-[#3d3b33]')}
             >
               {showSearch ? <X className="w-4 h-4" /> : <Search className="w-4 h-4" />}
               Tracks
@@ -533,11 +521,7 @@ const DjMode = () => {
             <button
               onClick={state.active ? reset : enable}
               disabled={forcing}
-              className={cn(
-                'min-h-[48px] px-5 rounded-2xl font-black text-xs uppercase tracking-widest transition-all active:scale-95 flex items-center justify-center gap-2 disabled:opacity-60',
-                state.active ? 'border border-white/10 bg-white/[0.04]' : 'text-primary-foreground shadow-[0_0_24px_hsl(var(--primary)/0.4)]'
-              )}
-              style={state.active ? undefined : { background: ACCENT_GRADIENT }}
+              className={cn(state.active ? BTN_PLAIN : BTN_PRIMARY, 'min-h-[48px] px-5')}
             >
               {forcing ? <Loader2 className="w-4 h-4 animate-spin" /> : state.active ? <RotateCcw className="w-4 h-4" /> : <Power className="w-4 h-4" />}
               {forcing ? 'Loading' : state.active ? 'Reset' : 'Start'}
@@ -547,25 +531,24 @@ const DjMode = () => {
 
         {/* ── Friendly getting-started banner ── */}
         {!state.active && (
-          <Panel className="mb-4 border-primary/30 bg-primary/[0.06]">
+          <Panel className="mb-4 border-l-2 border-l-primary">
             <div className="flex flex-col md:flex-row md:items-center gap-4">
               <div className="flex-1 min-w-0">
-                <p className="font-black text-base">Let&apos;s get the party started 🎧</p>
-                <ol className="mt-2 grid sm:grid-cols-3 gap-2 text-xs text-muted-foreground">
+                <p className="font-semibold text-base">Let&apos;s get the party started</p>
+                <ol className="mt-3 grid sm:grid-cols-3 gap-2 text-sm text-[#b4b1a3]">
                   {['Pick a track', 'Tap Start', 'Mix it, or tap Auto DJ'].map((s, i) => (
-                    <li key={s} className="flex items-center gap-2">
-                      <span className="w-6 h-6 shrink-0 rounded-full bg-primary/20 text-primary font-black flex items-center justify-center text-[11px]">{i + 1}</span>
+                    <li key={s} className="flex items-baseline gap-2.5">
+                      <span className="font-mono text-xs text-primary">{String(i + 1).padStart(2, '0')}</span>
                       {s}
                     </li>
                   ))}
                 </ol>
-                <p className="mt-2 text-[11px] text-muted-foreground/70">Tip: use headphones to really hear the left / right effects.</p>
+                <p className="mt-3 text-xs text-[#8c8a7d]">Tip: use headphones to really hear the left / right effects.</p>
               </div>
               <button
                 onClick={() => (currentTrack ? enable() : setShowSearch(true))}
                 disabled={forcing}
-                className="min-h-[48px] px-6 rounded-2xl text-primary-foreground font-black text-xs uppercase tracking-widest flex items-center justify-center gap-2 active:scale-95 transition-all disabled:opacity-60"
-                style={{ background: ACCENT_GRADIENT }}
+                className={cn(BTN_PRIMARY, 'min-h-[48px] px-6')}
               >
                 {currentTrack ? <><Power className="w-4 h-4" /> Start engine</> : <><Search className="w-4 h-4" /> Choose a track</>}
               </button>
@@ -584,12 +567,11 @@ const DjMode = () => {
                   onChange={e => setQuery(e.target.value)}
                   placeholder="Search tracks to load into DJ…"
                   enterKeyHint="search"
-                  className="w-full min-h-[48px] pl-10 pr-4 rounded-2xl bg-white/[0.05] border border-white/10 text-sm font-medium focus:outline-none focus:border-primary/50 transition-colors"
+                  className="w-full min-h-[48px] pl-10 pr-4 rounded-[3px] bg-[#080807] border border-[#2b2a25] text-sm focus:outline-none focus:border-primary/70 transition-colors"
                 />
               </div>
               <button type="submit" disabled={searching}
-                className="min-h-[48px] px-5 rounded-2xl text-primary-foreground font-black text-xs uppercase tracking-widest active:scale-95 transition-all disabled:opacity-50 flex items-center gap-2"
-                style={{ background: ACCENT_GRADIENT }}>
+                className={cn(BTN_PRIMARY, 'min-h-[48px] px-5')}>
                 {searching ? <Loader2 className="w-4 h-4 animate-spin" /> : <Search className="w-4 h-4" />}
                 <span className="hidden sm:inline">Search</span>
               </button>
@@ -608,34 +590,34 @@ const DjMode = () => {
 
             <div className="mb-5">
               <Label right={
-                <button onClick={fetchUserPlaylists} className="min-h-[32px] text-[10px] uppercase font-bold text-primary flex items-center gap-1">
+                <button onClick={fetchUserPlaylists} className="min-h-[32px] text-[10px] uppercase tracking-[0.1em] text-primary flex items-center gap-1">
                   <RotateCcw className={cn('w-3 h-3', loadingPlaylists && 'animate-spin')} /> Sync
                 </button>
               }>Import your playlist</Label>
               <div className="mt-3">
                 {loadingPlaylists ? (
                   <div className="flex gap-2 animate-pulse">
-                    {Array.from({ length: 3 }).map((_, i) => <div key={i} className="w-32 h-11 rounded-xl bg-white/5" />)}
+                    {Array.from({ length: 3 }).map((_, i) => <div key={i} className="w-32 h-11 rounded-[3px] bg-[#1d1c19]" />)}
                   </div>
                 ) : userPlaylists.length > 0 ? (
                   <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-none -mx-1 px-1">
                     {userPlaylists.map(p => (
                       <button key={p.id} onClick={() => loadPlaylistTracks(p.id)}
-                        className="shrink-0 min-h-[44px] px-4 rounded-xl bg-white/[0.05] border border-white/10 hover:bg-white/10 hover:border-primary/50 text-xs font-bold transition-all flex items-center gap-2 active:scale-95">
+                        className={cn(BTN_PLAIN, 'shrink-0 min-h-[44px] px-4 normal-case tracking-normal text-xs hover:border-primary/60')}>
                         <ListMusic className="w-3.5 h-3.5 text-primary" />
                         {p.name}
                       </button>
                     ))}
                   </div>
                 ) : (
-                  <p className="text-xs text-muted-foreground italic">No playlists found. Create one in the library to import it here.</p>
+                  <p className="text-xs text-[#8c8a7d]">No playlists found. Create one in the library to import it here.</p>
                 )}
               </div>
             </div>
 
             {loadedPlaylistTracks.length > 0 ? (
               <div>
-                <Label right={<button onClick={() => setLoadedPlaylistTracks([])} className="min-h-[32px] text-[10px] uppercase font-bold text-muted-foreground hover:text-white">Clear</button>}>
+                <Label right={<button onClick={() => setLoadedPlaylistTracks([])} className="min-h-[32px] text-[10px] uppercase tracking-[0.1em] text-[#8c8a7d] hover:text-[#e9e7dc]">Clear</button>}>
                   <span className="text-primary">Imported playlist</span>
                 </Label>
                 <div className="mt-3 max-h-[380px] overflow-y-auto pr-1 space-y-2 custom-scrollbar">
@@ -662,25 +644,24 @@ const DjMode = () => {
         {/* ── Now playing ── */}
         {currentTrack && (
           <div className={cn(
-            'mb-4 flex items-center gap-3 p-3 rounded-2xl border transition-colors duration-500',
-            state.active ? 'border-primary/30 bg-primary/[0.05]' : 'border-white/5 bg-white/[0.03]'
+            'mb-4 flex items-center gap-3 p-2.5 rounded-md border bg-[#131312]',
+            state.active ? 'border-primary/50' : 'border-[#2b2a25]'
           )}>
-            <img src={currentTrack.thumbnail} alt="" className="w-11 h-11 rounded-xl object-cover shrink-0" />
+            <img src={currentTrack.thumbnail} alt="" className="w-11 h-11 rounded-[2px] object-cover shrink-0" />
             <div className="flex-1 min-w-0">
-              <p className="font-black text-sm truncate">{currentTrack.title}</p>
-              <p className="text-[10px] text-muted-foreground/70 truncate uppercase tracking-widest">{currentTrack.channel}</p>
+              <p className="font-medium text-sm truncate">{currentTrack.title}</p>
+              <p className="text-[10px] text-[#8c8a7d] truncate uppercase tracking-[0.1em]">{currentTrack.channel}</p>
             </div>
             <span className={cn(
-              'hidden sm:flex items-center gap-1.5 text-[10px] font-black uppercase tracking-widest',
-              activeSource === 'background' ? 'text-primary' : 'text-red-400'
+              'hidden sm:flex items-center gap-2 font-mono text-[10px] uppercase tracking-[0.08em]',
+              activeSource === 'background' ? 'text-primary' : 'text-[#d9382c]'
             )}>
-              <span className={cn('w-2 h-2 rounded-full', activeSource === 'background' ? 'bg-primary animate-pulse' : 'bg-red-500')} />
+              <span className={cn('w-2 h-2', activeSource === 'background' ? 'bg-primary' : 'bg-[#d9382c]')} />
               {activeSource === 'background' ? 'DJ stream' : 'Not DJ'}
             </span>
             {activeSource !== 'background' && (
               <button onClick={enable} disabled={forcing}
-                className="shrink-0 min-h-[44px] px-4 rounded-xl text-primary-foreground text-[11px] font-black uppercase tracking-widest active:scale-95 transition-all flex items-center gap-2"
-                style={{ background: ACCENT_GRADIENT }}>
+                className={cn(BTN_PRIMARY, 'shrink-0 min-h-[44px] px-4')}>
                 {forcing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Zap className="w-3.5 h-3.5" />}
                 Force DJ
               </button>
@@ -702,14 +683,13 @@ const DjMode = () => {
           </div>
 
           {/* Section tabs (phones / tablets). On wide screens everything is visible at once. */}
-          <nav className="order-3 col-span-2 xl:hidden grid grid-cols-4 gap-1.5 p-1.5 rounded-2xl bg-white/[0.04] border border-white/[0.08]" aria-label="Mixer sections">
+          <nav className="order-3 col-span-2 xl:hidden grid grid-cols-4 gap-px p-px rounded-md bg-[#2b2a25] border border-[#2b2a25] overflow-hidden" aria-label="Mixer sections">
             {TABS.map(({ key, label, Icon }) => (
               <button key={key} onClick={() => { buzz(); setTab(key); }} aria-pressed={tab === key}
                 className={cn(
-                  'min-h-[48px] rounded-xl flex flex-col items-center justify-center gap-0.5 text-[10px] font-black uppercase tracking-widest transition-all active:scale-95',
-                  tab === key ? 'text-primary-foreground shadow-[0_0_18px_hsl(var(--primary)/0.35)]' : 'text-muted-foreground hover:text-white'
-                )}
-                style={tab === key ? { background: ACCENT_GRADIENT } : undefined}>
+                  'min-h-[48px] flex flex-col items-center justify-center gap-0.5 text-[10px] font-medium uppercase tracking-[0.1em] transition-colors',
+                  tab === key ? 'bg-primary text-primary-foreground' : 'bg-[#131312] text-[#8c8a7d] hover:text-[#e9e7dc]'
+                )}>
                 <Icon className="w-4 h-4" />
                 {label}
               </button>
@@ -719,7 +699,7 @@ const DjMode = () => {
           {/* ── Mix: master meter, Auto DJ, crossfader ── */}
           <div className={cn('order-4 col-span-2 xl:order-2 xl:col-span-1 flex-col gap-3', tab === 'mix' ? 'flex' : 'hidden', 'xl:flex')}>
             <Panel>
-              <Label right={<span className="text-[10px] font-black tabular-nums text-primary">{Math.round(totalLevel * 100)}%</span>}>Master level</Label>
+              <Label right={<span className="font-mono text-[11px] tabular-nums text-primary">{Math.round(totalLevel * 100)}%</span>}>Master level</Label>
               <LevelMeter level={totalLevel} segments={20} className="mt-3 h-6" />
             </Panel>
 
@@ -729,20 +709,15 @@ const DjMode = () => {
                 onClick={toggleAuto}
                 aria-pressed={autoDjActive}
                 className={cn(
-                  'w-full min-h-[84px] py-4 rounded-3xl font-black uppercase tracking-[0.2em] transition-all duration-200 flex flex-col items-center justify-center gap-1.5 border active:scale-[0.98]',
-                  autoDjActive ? 'text-primary-foreground border-transparent' : 'bg-white/[0.04] border-white/10 hover:bg-white/[0.08]'
+                  'w-full min-h-[84px] py-4 rounded-md font-semibold uppercase tracking-[0.14em] transition-colors flex flex-col items-center justify-center gap-1.5 border active:translate-y-px',
+                  autoDjActive ? 'bg-primary border-primary text-primary-foreground' : 'bg-[#131312] border-[#2b2a25] hover:border-[#3d3b33] hover:bg-[#1a1a18]'
                 )}
-                style={autoDjActive ? {
-                  background: 'linear-gradient(135deg, hsl(var(--primary)), #ff8a00)',
-                  boxShadow: `0 0 ${beat ? 44 : 24}px hsl(var(--primary) / ${beat ? 0.55 : 0.3})`,
-                  transform: beat ? 'scale(1.015)' : undefined,
-                } : undefined}
               >
                 <span className="flex items-center gap-2 text-sm">
-                  <Wand2 className={cn('w-5 h-5', autoDjActive && 'animate-spin')} style={{ animationDuration: '3s' }} />
+                  <Wand2 className="w-5 h-5" />
                   Auto DJ Mode
                 </span>
-                <span className="text-[10px] opacity-70 tracking-[0.15em]">
+                <span className="font-mono text-[10px] normal-case tracking-[0.04em] opacity-70">
                   {forcing ? 'Initializing…' : autoDjActive ? `Active · ${state.auto.style} · ${bpm} BPM` : 'Tap to let the DJ mix for you'}
                 </span>
               </button>
@@ -751,19 +726,19 @@ const DjMode = () => {
                 {STYLES.map(({ key, label, hint }) => (
                   <button key={key} onClick={() => { buzz(); apply({ auto: { style: key } }); }} aria-pressed={state.auto.style === key}
                     className={cn(
-                      'min-h-[52px] rounded-2xl border flex flex-col items-center justify-center transition-all active:scale-95',
+                      'min-h-[52px] rounded-[3px] border flex flex-col items-center justify-center transition-colors active:translate-y-px',
                       state.auto.style === key
-                        ? key === 'insane' ? 'bg-purple-500/20 border-purple-400/60 text-purple-200' : 'bg-primary/15 border-primary/50 text-primary'
-                        : 'bg-white/[0.03] border-white/[0.06] text-muted-foreground hover:text-white'
+                        ? 'bg-[#1f1d14] border-primary/70 text-primary'
+                        : 'bg-[#131312] border-[#2b2a25] text-[#8c8a7d] hover:text-[#e9e7dc] hover:border-[#3d3b33]'
                     )}>
-                    <span className="text-[11px] font-black uppercase tracking-widest">{label}</span>
-                    <span className="text-[9px] opacity-60 font-medium">{hint}</span>
+                    <span className="text-[11px] font-medium uppercase tracking-[0.1em]">{label}</span>
+                    <span className="text-[10px] opacity-70">{hint}</span>
                   </button>
                 ))}
               </div>
 
               <Chip on={smartBass} onClick={() => setSmartBass(v => !v)} className="w-full">
-                <Zap className={cn('w-3.5 h-3.5', smartBass && 'animate-pulse')} />
+                <Zap className="w-3.5 h-3.5" />
                 {smartBass ? 'Smart Bass active' : 'Enable Smart Bass'}
               </Chip>
             </div>
@@ -771,7 +746,7 @@ const DjMode = () => {
             {/* Crossfader */}
             <Panel>
               <Label right={
-                <span className="text-[11px] font-black text-primary tabular-nums">
+                <span className="font-mono text-[11px] text-primary tabular-nums">
                   {Math.abs(liveBalance) < 0.01 ? 'CENTER' : liveBalance < 0 ? `${Math.round(-liveBalance * 100)}% L` : `${Math.round(liveBalance * 100)}% R`}
                 </span>
               }>Crossfader</Label>
@@ -780,19 +755,19 @@ const DjMode = () => {
                   value={Math.round(state.balance * 100)} live={Math.round(liveBalance * 100)}
                   onChange={v => apply({ balance: v / 100 })} />
               </div>
-              <div className="flex justify-between text-[10px] font-black uppercase tracking-widest text-muted-foreground/50 -mt-1 mb-3 px-1">
+              <div className="flex justify-between font-mono text-[10px] uppercase text-[#5e5c52] mb-3 px-1">
                 <span>L</span><span>Mix</span><span>R</span>
               </div>
               <div className="grid grid-cols-3 gap-2">
                 {([['◄ L', -1], ['Center', 0], ['R ►', 1]] as [string, number][]).map(([lbl, val]) => (
                   <button key={lbl} onClick={() => { buzz(); apply({ balance: val }); }}
-                    className="min-h-[44px] rounded-xl bg-white/[0.05] hover:bg-primary/20 hover:text-primary text-[11px] font-black uppercase tracking-widest transition-all active:scale-95">
+                    className={cn(BTN_PLAIN, 'min-h-[44px] hover:border-primary/60 hover:text-primary')}>
                     {lbl}
                   </button>
                 ))}
               </div>
               {autoDjActive && state.auto.pan && (
-                <p className="mt-2 text-[10px] text-muted-foreground/60">The white diamond is where Auto DJ is moving the mix right now.</p>
+                <p className="mt-2 text-[11px] text-[#8c8a7d]">The white tick on the fader is where Auto DJ is moving the mix right now.</p>
               )}
             </Panel>
           </div>
@@ -806,24 +781,24 @@ const DjMode = () => {
               <button onClick={() => { buzz(); setUseBackgroundAudioOnly(v => !v); }} aria-pressed={useBackgroundAudioOnly}
                 title="Streams audio through the DJ engine so effects can reach it"
                 className={cn(
-                  'min-h-[32px] px-3 rounded-lg text-[9px] font-black uppercase tracking-wider border transition-all',
-                  useBackgroundAudioOnly ? 'bg-primary border-primary text-primary-foreground' : 'bg-white/5 border-white/10 text-muted-foreground'
+                  'min-h-[32px] px-3 rounded-[3px] text-[10px] font-medium uppercase tracking-[0.1em] border transition-colors',
+                  useBackgroundAudioOnly ? 'bg-primary border-primary text-primary-foreground' : 'bg-[#131312] border-[#2b2a25] text-[#8c8a7d]'
                 )}>
                 No limit {useBackgroundAudioOnly ? 'on' : 'off'}
               </button>
             }>
-              <span className="inline-flex items-center gap-2"><Music2 className="w-4 h-4 text-primary" /> 3-band EQ</span>
+              <span className="inline-flex items-center gap-2"><Music2 className="w-3.5 h-3.5 text-primary" /> 3-band EQ</span>
             </Label>
             <div className="flex justify-around items-start pt-4 pb-2">
               <VFader label="Bass" auto={eqAuto} value={eqAuto && liveFx ? liveFx.low : state.low} onChange={v => apply({ low: v })} />
               <VFader label="Mid" auto={eqAuto} value={eqAuto && liveFx ? liveFx.mid : state.mid} onChange={v => apply({ mid: v })} />
               <VFader label="High" auto={eqAuto} value={eqAuto && liveFx ? liveFx.high : state.high} onChange={v => apply({ high: v })} />
             </div>
-            <p className="text-center text-[10px] text-muted-foreground/50 mb-3">Drag a fader · double-tap to reset to 0</p>
+            <p className="text-center text-[11px] text-[#8c8a7d] mb-3">Drag a fader · double-tap to reset to 0</p>
             <div className="flex gap-2 overflow-x-auto pb-1 -mx-1 px-1 scrollbar-none">
               {presets.map(p => (
                 <button key={p.label} onClick={() => { buzz(); p.fn(); }}
-                  className="shrink-0 min-h-[44px] px-4 rounded-xl border border-white/10 bg-white/[0.04] hover:bg-primary/20 hover:border-primary/40 hover:text-primary text-[11px] font-black uppercase tracking-wider transition-all active:scale-95">
+                  className={cn(BTN_PLAIN, 'shrink-0 min-h-[44px] px-4 hover:border-primary/60 hover:text-primary')}>
                   {p.label}
                 </button>
               ))}
@@ -832,7 +807,7 @@ const DjMode = () => {
 
           {/* Sound */}
           <Panel className={cn(tabClass('sound'), 'space-y-4')}>
-            <Label right={<span className="text-[10px] font-black text-primary tabular-nums">{state.active ? `${bpm} BPM` : '—'}</span>}>Master &amp; bass</Label>
+            <Label right={<span className="font-mono text-[11px] text-primary tabular-nums">{state.active ? `${bpm} BPM` : '—'}</span>}>Master &amp; bass</Label>
             <Spectrum getData={getFrequencyData} active={state.active} />
             <SliderRow label="Master volume" value={Math.min(1, state.master)} onChange={v => apply({ master: v })} />
             <SliderRow label="Bass boost" value={state.bassBoost} onChange={v => apply({ bassBoost: v })}
@@ -843,15 +818,15 @@ const DjMode = () => {
                 {([['left', '◄ Left'], ['stereo', 'Stereo'], ['right', 'Right ►']] as [DjChannelMode, string][]).map(([mode, label]) => (
                   <button key={mode} onClick={() => { buzz(); apply({ channelMode: mode }); }} aria-pressed={state.channelMode === mode}
                     className={cn(
-                      'min-h-[48px] rounded-xl border text-[11px] font-black uppercase tracking-wider transition-all active:scale-95',
-                      state.channelMode === mode ? 'text-primary-foreground border-transparent shadow-[0_0_18px_hsl(var(--primary)/0.4)]' : 'bg-white/[0.04] border-white/10 text-muted-foreground hover:text-white'
-                    )}
-                    style={state.channelMode === mode ? { background: ACCENT_GRADIENT } : undefined}>
+                      BTN,
+                      'min-h-[48px]',
+                      state.channelMode === mode ? 'bg-primary border-primary text-primary-foreground' : 'bg-[#131312] border-[#2b2a25] text-[#8c8a7d] hover:text-[#e9e7dc] hover:border-[#3d3b33]'
+                    )}>
                     {label}
                   </button>
                 ))}
               </div>
-              <p className="mt-2 text-[10px] text-muted-foreground/60">Use headphones: Left silences the right ear and vice-versa.</p>
+              <p className="mt-2 text-[11px] text-[#8c8a7d]">Use headphones: Left silences the right ear and vice-versa.</p>
             </div>
           </Panel>
 
@@ -866,7 +841,7 @@ const DjMode = () => {
               </div>
             </div>
             <div>
-              <Label right={<span className={cn('text-[10px] font-black uppercase', autoDjActive ? 'text-primary' : 'text-muted-foreground/50')}>{autoDjActive ? 'live' : 'off'}</span>}>Auto DJ moves</Label>
+              <Label right={<span className={cn('font-mono text-[10px] uppercase', autoDjActive ? 'text-primary' : 'text-[#5e5c52]')}>{autoDjActive ? 'live' : 'off'}</span>}>Auto DJ moves</Label>
               <div className="grid grid-cols-2 gap-2 mt-3">
                 <Chip on={state.auto.pan} onClick={() => apply({ auto: { pan: !state.auto.pan } })}>Auto-pan</Chip>
                 <Chip on={state.auto.bass} onClick={() => apply({ auto: { bass: !state.auto.bass } })}>Bass swell</Chip>
@@ -875,25 +850,25 @@ const DjMode = () => {
               </div>
               {autoDjActive && (
                 <button onClick={() => setAutoDjActive(false)}
-                  className="mt-3 w-full min-h-[48px] rounded-xl border border-primary/40 bg-primary/10 text-primary text-[11px] font-black uppercase tracking-widest active:scale-95 transition-all">
+                  className={cn(BTN, 'mt-3 w-full min-h-[48px] border-primary/70 bg-[#1f1d14] text-primary')}>
                   Take manual control
                 </button>
               )}
             </div>
             <button onClick={() => { buzz(); reset(); }}
-              className="w-full min-h-[48px] rounded-xl border border-white/10 bg-white/[0.04] hover:bg-primary/20 hover:text-primary text-[11px] font-black uppercase tracking-widest transition-all flex items-center justify-center gap-2 active:scale-95">
+              className={cn(BTN_PLAIN, 'w-full min-h-[48px] hover:border-primary/60 hover:text-primary')}>
               <RotateCcw className="w-3.5 h-3.5" /> Reset everything
             </button>
           </Panel>
         </div>
 
         {/* Desktop shortcut hints */}
-        <p className="hidden xl:flex flex-wrap items-center gap-x-5 gap-y-1 mt-4 text-[10px] font-bold uppercase tracking-widest text-muted-foreground/40">
+        <p className="hidden xl:flex flex-wrap items-center gap-x-5 gap-y-1 mt-4 font-mono text-[10px] uppercase tracking-[0.06em] text-[#5e5c52]">
           <span>Shortcuts</span>
-          <span><kbd className="px-1.5 py-0.5 rounded bg-white/10 text-white/70">A</kbd> Auto DJ</span>
-          <span><kbd className="px-1.5 py-0.5 rounded bg-white/10 text-white/70">C</kbd> Center</span>
-          <span><kbd className="px-1.5 py-0.5 rounded bg-white/10 text-white/70">[</kbd> <kbd className="px-1.5 py-0.5 rounded bg-white/10 text-white/70">]</kbd> Crossfade</span>
-          <span><kbd className="px-1.5 py-0.5 rounded bg-white/10 text-white/70">B</kbd> Smart bass</span>
+          <span><kbd className="px-1.5 py-0.5 rounded-[2px] border border-[#2b2a25] text-[#b4b1a3]">A</kbd> Auto DJ</span>
+          <span><kbd className="px-1.5 py-0.5 rounded-[2px] border border-[#2b2a25] text-[#b4b1a3]">C</kbd> Center</span>
+          <span><kbd className="px-1.5 py-0.5 rounded-[2px] border border-[#2b2a25] text-[#b4b1a3]">[</kbd> <kbd className="px-1.5 py-0.5 rounded-[2px] border border-[#2b2a25] text-[#b4b1a3]">]</kbd> Crossfade</span>
+          <span><kbd className="px-1.5 py-0.5 rounded-[2px] border border-[#2b2a25] text-[#b4b1a3]">B</kbd> Smart bass</span>
         </p>
       </main>
 
