@@ -1,5 +1,5 @@
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, ArrowRight, Palette, Volume2, ListMusic, Trash2, Waves, Blend, User, Camera, KeyRound, Loader2, RotateCcw, Sliders, Shield, Sparkles, Smartphone, Home, Search, Users, Heart, Gamepad2, Settings as SettingsIcon, Menu, Download, Minus, Plus, Sun, Orbit, Info, ExternalLink, Instagram } from 'lucide-react';
+import { ArrowLeft, ArrowRight, Palette, Volume2, ListMusic, Trash2, Waves, Blend, User, Camera, KeyRound, Loader2, RotateCcw, Sliders, Shield, Sparkles, Smartphone, Home, Search, Users, Heart, Gamepad2, Settings as SettingsIcon, Menu, Download, Minus, Plus, Sun, Orbit, Info, ExternalLink, Instagram, Megaphone } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import { useTheme, themes, ThemeName, ProgressBarStyle } from '@/contexts/ThemeContext';
 import { Switch } from '@/components/ui/switch';
@@ -1410,6 +1410,34 @@ const Settings = () => {
                   {settings.showInstagramPage && (
                     <Button variant="secondary" size="sm" className="gap-2" onClick={() => navigate('/instagram')}>
                       <Instagram className="w-4 h-4" /> Open Reel Saver
+                    </Button>
+                  )}
+                </div>
+              </section>
+
+              {/* What's new page visibility */}
+              <section className="mb-10">
+                <div className="flex items-center gap-3 mb-6">
+                  <Megaphone className="w-6 h-6 text-primary" />
+                  <h2 className="text-xl md:text-2xl font-semibold text-foreground">What&apos;s New</h2>
+                </div>
+                <div className="space-y-4 bg-card rounded-xl p-4 md:p-6 border border-border">
+                  <div className="flex items-center justify-between gap-4">
+                    <div className="flex-1">
+                      <p className="font-medium text-foreground text-sm md:text-base">Show What&apos;s new page</p>
+                      <p className="text-xs md:text-sm text-muted-foreground">
+                        Read the notes for every update, any time. New updates still pop up once on your next visit. Off by default.
+                      </p>
+                    </div>
+                    <Switch
+                      checked={settings.showWhatsNew}
+                      onCheckedChange={(checked) => updateSettings({ showWhatsNew: checked })}
+                      className="data-[state=checked]:bg-primary"
+                    />
+                  </div>
+                  {settings.showWhatsNew && (
+                    <Button variant="secondary" size="sm" className="gap-2" onClick={() => navigate('/whats-new')}>
+                      <Megaphone className="w-4 h-4" /> Open What&apos;s new
                     </Button>
                   )}
                 </div>

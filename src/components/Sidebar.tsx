@@ -1,4 +1,4 @@
-import { Home, Search, ListMusic, Heart, Settings, Menu, X, Users, Shield, Gamepad2, Sparkles, AlertTriangle, Wand2, Headphones, Download, MonitorSmartphone, BarChart3, Orbit, Instagram } from 'lucide-react';
+import { Home, Search, ListMusic, Heart, Settings, Menu, X, Users, Shield, Gamepad2, Sparkles, AlertTriangle, Wand2, Headphones, Download, MonitorSmartphone, BarChart3, Orbit, Instagram, Megaphone } from 'lucide-react';
 import { useState, useEffect, useLayoutEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { cn } from '@/lib/utils';
@@ -113,6 +113,7 @@ const Sidebar = ({ activeTab, onTabChange }: SidebarProps) => {
     { id: 'ai-dj', label: 'AI DJ', icon: Sparkles, path: '/ai-dj' },
     { id: 'dj', label: 'DJ Mode', icon: Headphones, path: '/dj-mode' },
     ...(userSettings.musicUniverse ? [{ id: 'universe', label: 'Music Universe', icon: Orbit, path: '/universe' }] : []),
+    ...(userSettings.showWhatsNew ? [{ id: 'whats-new', label: "What's New", icon: Megaphone, path: '/whats-new' }] : []),
     { id: 'games', label: 'Games', icon: Gamepad2, path: '/games' },
     { id: 'settings', label: 'Settings', icon: Settings, path: '/settings' },
     ...(isAdmin ? [{ id: 'admin', label: 'Admin', icon: Shield, path: '/admin' }] : []),

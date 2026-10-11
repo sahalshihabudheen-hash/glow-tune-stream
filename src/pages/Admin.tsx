@@ -11,7 +11,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogTrigger, DialogDescription } from '@/components/ui/dialog';
 import { Switch } from '@/components/ui/switch';
 import { toast } from 'sonner';
-import { Shield, ShieldAlert, Users, LogOut, ArrowLeft, Loader2, Music, ListMusic, Clock, Gamepad2, MapPin, Smartphone, Monitor, Laptop, Tablet, Copy, KeyRound, Wrench, X, Plus, Trash2, Circle, Search, Watch, Wifi, WifiOff, Key, RefreshCw, CheckCircle, XCircle, AlertTriangle, GraduationCap, Settings2, MessageCircle, ScrollText, Download, Upload, Zap, Activity, BarChart3 } from 'lucide-react';
+import { Shield, ShieldAlert, Users, LogOut, ArrowLeft, Loader2, Music, ListMusic, Clock, Gamepad2, MapPin, Smartphone, Monitor, Laptop, Tablet, Copy, KeyRound, Wrench, X, Plus, Trash2, Circle, Search, Watch, Wifi, WifiOff, Key, RefreshCw, CheckCircle, XCircle, AlertTriangle, GraduationCap, Settings2, MessageCircle, ScrollText, Download, Upload, Zap, Activity, BarChart3, Megaphone } from 'lucide-react';
 import { Progress } from '@/components/ui/progress';
 import { useMaintenanceMode } from '@/hooks/useMaintenanceMode';
 import AdminTutorial from '@/components/AdminTutorial';
@@ -20,6 +20,7 @@ import AdminChat from '@/components/AdminChat';
 import AdminActivityLogs from '@/components/AdminActivityLogs';
 import AdminHealthMonitor from '@/components/AdminHealthMonitor';
 import MaintenanceMessageEditor from '@/components/MaintenanceMessageEditor';
+import AdminUpdates from '@/components/AdminUpdates';
 
 const COUNTRY_TO_CODE: Record<string, string> = {
   'Afghanistan': 'AF', 'Albania': 'AL', 'Algeria': 'DZ', 'Argentina': 'AR', 'Australia': 'AU',
@@ -1124,6 +1125,10 @@ const Admin = () => {
               <Settings2 className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
               <span className="hidden xs:inline">App</span>
             </TabsTrigger>
+            <TabsTrigger value="updates" className="flex items-center gap-1.5 text-xs sm:text-sm px-2 sm:px-3">
+              <Megaphone className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+              <span className="hidden xs:inline">Updates</span>
+            </TabsTrigger>
             <TabsTrigger value="apk" className="flex items-center gap-1.5 text-xs sm:text-sm px-2 sm:px-3">
               <Download className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
               <span className="hidden xs:inline">APK</span>
@@ -2185,6 +2190,11 @@ const Admin = () => {
           {/* App Settings Tab */}
           <TabsContent value="app-settings">
             <AdminAppSettings />
+          </TabsContent>
+
+          {/* Updates (What's new) Tab */}
+          <TabsContent value="updates">
+            <AdminUpdates />
           </TabsContent>
 
           {/* APK Tab */}

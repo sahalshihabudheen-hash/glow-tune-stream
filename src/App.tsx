@@ -12,6 +12,7 @@ import DynamicMusicBackground, { DynamicMusicParticles } from "@/components/Dyna
 import DownloadQueue from "@/components/DownloadQueue";
 import MaintenanceGuard from "@/components/MaintenanceGuard";
 import TutorialWrapper from "@/components/TutorialWrapper";
+import WhatsNewGate from "@/components/WhatsNewGate";
 import SmartTransitions from "@/components/SmartTransitions";
 import Index from "./pages/Index";
 import SongDetails from "./pages/SongDetails";
@@ -36,6 +37,7 @@ import Debug from "./pages/Debug";
 import Stats from "./pages/Stats";
 import DiscordPresence from "./hooks/useDiscordPresence";
 import CreatorPage from "./pages/CreatorPage";
+import WhatsNew from "./pages/WhatsNew";
 
 import NotFound from "./pages/NotFound";
 
@@ -99,6 +101,8 @@ const App = () => (
                 <Route path="/creator" element={<CreatorPage />} />
                 <Route path="/sahal-shihabudheen" element={<CreatorPage />} />
                 <Route path="/about" element={<CreatorPage />} />
+                <Route path="/whats-new" element={<WhatsNew />} />
+                <Route path="/updates" element={<WhatsNew />} />
 
                 {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
                 <Route path="*" element={<NotFound />} />
@@ -106,6 +110,7 @@ const App = () => (
               <FloatingMiniPlayer />
               <DownloadQueue />
               <TutorialWrapper />
+              <WhatsNewGate />
             </MaintenanceGuard>
             </DownloadManagerProvider>
           </MusicPlayerProvider>
