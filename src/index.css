@@ -838,3 +838,18 @@ input[type="range"]::-moz-range-thumb:active {
   transition: filter 0.1s ease-out;
 }
 
+
+
+/* Collapsible sidebar: pages keep their `md:ml-64` class; the real offset follows --sidebar-w
+   (set by Sidebar.tsx: 16rem expanded, 6rem as an icon rail). */
+@media (min-width: 768px) {
+  /* `html` prefix: Tailwind emits its responsive utilities after this file, so we need the extra specificity */
+  html .md\:ml-64 { margin-left: var(--sidebar-w, 16rem); transition: margin-left 0.3s ease; }
+  html .md\:left-64 { left: var(--sidebar-w, 16rem); }
+  html .md\:left-\[272px\] { left: calc(var(--sidebar-w, 16rem) + 1rem); }
+}
+
+@keyframes nav-bubble-pop {
+  0% { transform: scale(0.4); opacity: 0; }
+  100% { transform: scale(1); opacity: 1; }
+}

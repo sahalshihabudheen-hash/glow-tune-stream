@@ -13,7 +13,7 @@ const DownloadQueue = () => {
   if (downloads.length === 0) return null;
 
   return (
-    <div className="fixed bottom-20 md:bottom-24 right-4 z-50 w-80 max-w-[calc(100vw-2rem)] glass-premium rounded-2xl border border-border shadow-2xl overflow-hidden">
+    <div className="fixed bottom-[6rem] md:bottom-24 right-4 z-50 w-80 max-w-[calc(100vw-2rem)] glass-premium rounded-2xl border border-border shadow-2xl overflow-hidden">
       {/* Header */}
       <div
         className="flex items-center justify-between px-4 py-3 cursor-pointer hover:bg-secondary/30 transition-colors"
