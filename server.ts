@@ -7,6 +7,7 @@ import AdmZip from 'adm-zip';
 import { exec, spawn } from 'child_process';
 import { promisify } from 'util';
 import { generateDiscordOgHtml, generateOgImageSvg, OgContentData } from './src/utils/ogGenerator';
+import { registerInstagramRoutes } from './instagramDownloader';
 
 const execAsync = promisify(exec);
 
@@ -552,6 +553,10 @@ async function startServer() {
 
   // Setup loose CORS for local app consumption
   app.use(cors({ origin: '*' }));
+  app.set('trust proxy', 1);
+
+  // Instagram reel / post / story downloader (audio, video or both)
+  registerInstagramRoutes(app, ensureYtDlpInstalled);
 
   // API Route: get-audio-url (with built-in streaming/proxying and general proxyUrl capability)
   app.get('/api/get-audio-url', async (req, res) => {
@@ -868,7 +873,7 @@ async function startServer() {
     const distPath = path.join(process.cwd(), 'dist');
     app.use(express.static(distPath));
     // SPA Fallback logic for client-side routing
-    app.get('*', (req, res) => {
+    app.get('/{*splat}', (req, res) => {
       res.sendFile(path.join(distPath, 'index.html'));
     });
   }

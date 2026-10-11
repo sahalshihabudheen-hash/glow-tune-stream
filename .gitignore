@@ -13,3 +13,7 @@ glow-tune-stream-main/
 glow-tune-stream-main.zip
 *-player-script.js
 .idea/
+
+# Instagram session cookies (never commit)
+instagram-cookies.txt
+cookies.txt

@@ -30,6 +30,7 @@ import AiDj from "./pages/AiDj";
 import YouTubeArtistPage from "./pages/YouTubeArtistPage";
 import OfflineDownloads from "./pages/OfflineDownloads";
 import GetApp from "./pages/GetApp";
+import InstagramDownloader from "./pages/InstagramDownloader";
 import Debug from "./pages/Debug";
 import Stats from "./pages/Stats";
 import DiscordPresence from "./hooks/useDiscordPresence";
@@ -73,6 +74,9 @@ const App = () => (
                 <Route path="/yt-artist/:channelId" element={<YouTubeArtistPage />} />
                 <Route path="/offline" element={<OfflineDownloads />} />
                 <Route path="/get-app" element={<GetApp />} />
+                <Route path="/instagram" element={<InstagramDownloader />} />
+                <Route path="/insta" element={<InstagramDownloader />} />
+                <Route path="/reels" element={<InstagramDownloader />} />
                 <Route path="/debug" element={<Debug />} />
                 <Route path="/stats/:userId" element={<Stats />} />
                 <Route path="/stats" element={<Stats />} />
