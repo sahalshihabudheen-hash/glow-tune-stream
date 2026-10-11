@@ -9,6 +9,7 @@ import { useTheme } from '@/contexts/ThemeContext';
 import { useTabTitle } from '@/hooks/useTabTitle';
 import { getTrackOffline, isTrackDownloadedOffline } from '@/lib/offlineStore';
 import { COBALT_INSTANCES, PIPED_INSTANCES } from '@/lib/instances';
+import { resolveSaavnStream } from '@/lib/saavnSource';
 
 const getAudioFunctionBase = () => {
   if (typeof window !== 'undefined' && window.location.hostname.includes('vercel.app')) {
@@ -395,7 +396,9 @@ export function MusicPlayerProvider({ children }: { children: React.ReactNode })
       try { current.pause(); } catch {}
     }
 
-    // Transfer source, position, parameters
+    // Transfer source, position, parameters (keep CORS mode so DJ processing survives the switch)
+    if (current.crossOrigin) targetAudio.crossOrigin = current.crossOrigin;
+    else targetAudio.removeAttribute('crossOrigin');
     targetAudio.src = src;
     targetAudio.currentTime = currentTime;
     targetAudio.volume = isMuted ? 0 : volume / 100;
@@ -446,7 +449,7 @@ export function MusicPlayerProvider({ children }: { children: React.ReactNode })
     if (!audio) return false;
     const attemptId = ++audioPlayAttemptRef.current;
 
-    if (crossOriginSetting && audio === primaryAudioRef.current) {
+    if (crossOriginSetting) {
       audio.crossOrigin = crossOriginSetting;
     } else {
       audio.removeAttribute('crossOrigin');
@@ -837,6 +840,19 @@ export function MusicPlayerProvider({ children }: { children: React.ReactNode })
     });
   }, [settings.autoPlayNext, loopMode]);
 
+  // DJ Mode: prefer JioSaavn (CORS-open CDN => Web Audio can process it in real time).
+  // Only used while DJ/background-only mode is active so normal playback is untouched.
+  const trySaavnForDj = useCallback(async (track: { id: string; title?: string; channel?: string } | null | undefined): Promise<boolean> => {
+    if (!track?.title || !useBackgroundAudioOnlyRef.current) return false;
+    const resolved = await resolveSaavnStream({ id: track.id, title: track.title, channel: track.channel });
+    if (!resolved) return false;
+    for (const url of resolved.urls) {
+      const ok = await playAudioUrl(url, 'anonymous');
+      if (ok) return true;
+    }
+    return false;
+  }, [playAudioUrl]);
+
   const nextTrackResolvedUrlRef = useRef<{ id: string, url: string, crossOriginSetting: 'anonymous' | null } | null>(null);
 
   const preloadNextTrack = useCallback(async () => {
@@ -937,6 +953,15 @@ export function MusicPlayerProvider({ children }: { children: React.ReactNode })
           const localUrl = URL.createObjectURL(offlineTrack.audioBlob);
           const success = await playAudioUrl(localUrl, null);
           if (success) {
+            isResolvingStreamRef.current = false;
+            return true;
+          }
+        }
+
+        // 0.5 DJ Mode: JioSaavn first (processable by Web Audio)
+        {
+          const t = currentTrack?.id === videoId ? currentTrack : { id: videoId };
+          if (await trySaavnForDj(t as any)) {
             isResolvingStreamRef.current = false;
             return true;
           }
@@ -1093,7 +1118,7 @@ export function MusicPlayerProvider({ children }: { children: React.ReactNode })
     } else {
       toast.error('Player not ready. Please try again.');
     }
-  }, [ytApiReady, createPlayer, setPlaybackSource, playAudioUrl, currentTrack]);
+  }, [ytApiReady, createPlayer, setPlaybackSource, playAudioUrl, currentTrack, trySaavnForDj]);
 
   const forceBackgroundPlayback = useCallback(async (track = currentTrack, options?: { trackList?: Track[]; fromPlaylist?: boolean }): Promise<boolean> => {
     if (!track || !audioRef.current) {
@@ -1134,6 +1159,12 @@ export function MusicPlayerProvider({ children }: { children: React.ReactNode })
               isResolvingStreamRef.current = false;
               return true;
             }
+          }
+
+          // 0.5 DJ Mode: JioSaavn first (processable by Web Audio)
+          if (await trySaavnForDj(track)) {
+            isResolvingStreamRef.current = false;
+            return true;
           }
 
           // 1. Try local/Supabase stream proxy
@@ -1237,7 +1268,7 @@ export function MusicPlayerProvider({ children }: { children: React.ReactNode })
       toast.error(`Could not start audio: ${error?.message || 'Network error'}`);
       return false;
     }
-  }, [currentTrack, setLastPlayed, recordPlay, setPlaybackSource, ytApiReady, createPlayer, playAudioUrl]);
+  }, [currentTrack, setLastPlayed, recordPlay, setPlaybackSource, ytApiReady, createPlayer, playAudioUrl, trySaavnForDj]);
 
   useEffect(() => {
     forceBackgroundPlaybackRef.current = forceBackgroundPlayback;

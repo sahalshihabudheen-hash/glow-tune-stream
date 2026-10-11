@@ -12,7 +12,7 @@ Goal: real DJ Mode in NYRA using JioSaavn as the processable audio source.
 
 ## Plan / status
 - [x] 0. Inspect codebase, write this note
-- [ ] 1. `src/lib/saavnSource.ts` + use Saavn FIRST in DJ-mode playback (MusicPlayerContext), keep CORS on both audio elements
+- [x] 1. `src/lib/saavnSource.ts` + use Saavn FIRST in DJ-mode playback (MusicPlayerContext), keep CORS on both audio elements
 - [ ] 2. `src/lib/djEngine.ts` real Web Audio engine (L/R gain, balance, 3-band EQ, bass boost, master, analyser meters) + rewrite `useDjAudio` to use it
 - [ ] 3. Auto DJ engine: Chill / Club / Insane styles, smooth LFO-based moves (no random jumps), instant manual takeover
 - [ ] 4. UI: bass boost, master volume, per-effect ON/OFF, L-only/R-only, Auto DJ style picker in DjMode page
