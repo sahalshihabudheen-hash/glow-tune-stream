@@ -34,6 +34,10 @@ Goal: real DJ Mode in NYRA using JioSaavn as the processable audio source.
   Reset-everything. Deck gain sliders capped at 100%. Crossfader shows live (auto-moved) balance; slider keeps manual value.
 - Track search/playlist import "DJ-ready" check (`src/lib/djStream.ts`) is now JioSaavn-first (YouTube proxy probe is only a fallback).
 
+## Where to find it
+Sidebar -> "DJ Mode" (route `/dj-mode`, alias `/dj`). NOTE: the page was previously NOT routed at all; `/dj` and `/dj-mode` used to open AiDj.
+Run locally: `npm install --legacy-peer-deps && npm run dev` then open http://localhost:3000/dj-mode
+
 ## Device test checklist (do this next, with headphones, in Chrome + Android/iOS)
 1. DJ page -> Tracks -> search a song -> play. Should say "DJ Engine Ready"; hear audio normally.
 2. Left only / Right only -> sound must come from only that ear. Deck gain L=50% R=70% audible difference.

@@ -114,6 +114,7 @@ const Sidebar = ({ activeTab, onTabChange }: SidebarProps) => {
     ...(userSettings.showInstagramPage ? [{ id: 'instagram', label: 'Reel Saver', icon: Instagram, path: '/instagram' }] : []),
     { id: 'stats', label: 'Statistics', icon: BarChart3, path: '/stats' },
     { id: 'ai-dj', label: 'AI DJ', icon: Sparkles, path: '/ai-dj' },
+    { id: 'dj', label: 'DJ Mode', icon: Headphones, path: '/dj-mode' },
     ...(userSettings.musicUniverse ? [{ id: 'universe', label: 'Music Universe', icon: Orbit, path: '/universe' }] : []),
     { id: 'games', label: 'Games', icon: Gamepad2, path: '/games' },
     { id: 'settings', label: 'Settings', icon: Settings, path: '/settings' },
@@ -152,6 +153,7 @@ const Sidebar = ({ activeTab, onTabChange }: SidebarProps) => {
     if (item.path === '/games' && location.pathname === '/games') return true;
     if (item.path === '/stats' && (location.pathname === '/stats' || location.pathname === '/statistics')) return true;
     if (item.path === '/ai-dj' && location.pathname === '/ai-dj') return true;
+    if (item.path === '/dj-mode' && ['/dj-mode', '/dj'].includes(location.pathname)) return true;
     if (item.path === '/universe' && location.pathname === '/universe') return true;
     if (item.id === 'playlists' && location.pathname.startsWith('/playlist')) return true;
     if (item.id === 'artists' && (location.pathname === '/artists' || location.pathname.startsWith('/artist'))) return true;

@@ -27,6 +27,7 @@ import Favorites from "./pages/Favorites";
 import Admin from "./pages/Admin";
 import Games from "./pages/Games";
 import AiDj from "./pages/AiDj";
+import DjMode from "./pages/DjMode";
 import YouTubeArtistPage from "./pages/YouTubeArtistPage";
 import OfflineDownloads from "./pages/OfflineDownloads";
 import GetApp from "./pages/GetApp";
@@ -92,8 +93,8 @@ const App = () => (
                 <Route path="/app" element={<GetApp />} />
                 <Route path="/download-app" element={<GetApp />} />
                 <Route path="/aidj" element={<AiDj />} />
-                <Route path="/dj" element={<AiDj />} />
-                <Route path="/dj-mode" element={<AiDj />} />
+                <Route path="/dj" element={<DjMode />} />
+                <Route path="/dj-mode" element={<DjMode />} />
                 <Route path="/universe" element={<MusicUniverse />} />
                 <Route path="/creator" element={<CreatorPage />} />
                 <Route path="/sahal-shihabudheen" element={<CreatorPage />} />
