@@ -781,7 +781,7 @@ export function DownloadManagerProvider({ children }: { children: React.ReactNod
   }, []);
 
   return (
-    <DownloadManagerContext.Provider value={{ downloads, startDownload, clearCompleted, isDownloading }}>
+    <DownloadManagerContext.Provider value={{ downloads, startDownload, startBulkDownload, clearCompleted, isDownloading }}>
       {children}
 
       {/* Choice Prompt Dialog */}
@@ -820,8 +820,12 @@ export function DownloadManagerProvider({ children }: { children: React.ReactNod
                 referrerPolicy="no-referrer"
               />
               <div className="min-w-0">
-                <p className="text-sm font-semibold text-foreground truncate">{pendingTrack.title}</p>
-                <p className="text-xs text-muted-foreground truncate">{pendingTrack.artist || 'YouTube Stream'}</p>
+                <p className="text-sm font-semibold text-foreground truncate">
+                  {pendingTracks.length > 1 ? `${pendingTracks.length} songs` : pendingTrack.title}
+                </p>
+                <p className="text-xs text-muted-foreground truncate">
+                  {pendingTracks.length > 1 ? `${pendingTrack.title} and ${pendingTracks.length - 1} more` : pendingTrack.artist || 'YouTube Stream'}
+                </p>
               </div>
             </div>
 
