@@ -87,7 +87,7 @@ const VuMeter = ({ level }: { level: number }) => {
 };
 
 /* ─── EQ Fader ─── */
-const EQFader = ({ label, value, onChange }: { label: string; value: number; onChange: (v: number) => void }) => {
+const EQFader = ({ label, value, onChange, auto }: { label: string; value: number; onChange: (v: number) => void; auto?: boolean }) => {
   const percentage = ((value + 12) / 24) * 100;
   return (
     <div className="flex flex-col items-center gap-4">
@@ -139,7 +139,7 @@ const EQFader = ({ label, value, onChange }: { label: string; value: number; onC
         <span className={cn('text-[11px] font-black tabular-nums transition-colors duration-300', value > 0 ? 'text-primary' : value < 0 ? 'text-red-400' : 'text-muted-foreground')}>
           {value > 0 ? '+' : ''}{value.toFixed(1)}
         </span>
-        <span className="text-[8px] font-bold text-muted-foreground/30 uppercase tracking-tighter">dB</span>
+        <span className={cn('text-[8px] font-bold uppercase tracking-tighter', auto ? 'text-primary/80 animate-pulse' : 'text-muted-foreground/30')}>{auto ? 'auto' : 'dB'}</span>
       </div>
     </div>
   );
@@ -235,6 +235,7 @@ const DjMode = () => {
   const liveFx = state.active ? getLive() : null;
   const effectiveGainL = liveFx ? liveFx.gainL : state.leftGain * (state.balance <= 0 ? 1 : 1 - state.balance);
   const effectiveGainR = liveFx ? liveFx.gainR : state.rightGain * (state.balance >= 0 ? 1 : 1 + state.balance);
+  const eqAuto = state.active && state.auto.enabled && state.fx.eq && (state.auto.bass || state.auto.filter);
   const autoPan = state.active && state.auto.enabled ? getAutoOffsets().pan : 0;
   const liveBalance = Math.max(-1, Math.min(1, state.balance + autoPan));
   const [bpm, setBpm] = useState(120);
@@ -997,9 +998,9 @@ const DjMode = () => {
                 </button>
               </div>
               <div className="flex justify-around items-start pt-2">
-                <EQFader label="Bass" value={state.low} onChange={v => apply({ ...state, low: v })} />
-                <EQFader label="Mid" value={state.mid} onChange={v => apply({ ...state, mid: v })} />
-                <EQFader label="High" value={state.high} onChange={v => apply({ ...state, high: v })} />
+                <EQFader label="Bass" auto={eqAuto} value={eqAuto && liveFx ? liveFx.low : state.low} onChange={v => apply({ low: v })} />
+                <EQFader label="Mid" auto={eqAuto} value={eqAuto && liveFx ? liveFx.mid : state.mid} onChange={v => apply({ mid: v })} />
+                <EQFader label="High" auto={eqAuto} value={eqAuto && liveFx ? liveFx.high : state.high} onChange={v => apply({ high: v })} />
               </div>
             </div>
           </div>

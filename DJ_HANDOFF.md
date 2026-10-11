@@ -45,3 +45,8 @@ Run locally: `npm install --legacy-peer-deps && npm run dev` then open http://lo
 4. Auto DJ: try Chill (slow gentle drift), Club (wider pan + pump), Insane (fast). "Take manual control" must glide back instantly.
 5. Leave DJ page, play a normal YouTube/offline track -> must still play & downloads still work.
 If a track is silent after enabling: that element is not CORS-enabled (check `[DJ] element is not CORS-enabled` in console).
+
+## Update: Auto DJ now "plays" the EQ faders
+- Bass / Mid / High faders show LIVE values while Auto DJ runs (tiny "AUTO" tag). Each band rides on its own musical period.
+- Values reflect at the ±12 dB limits (reflect12) so a fader parked at an extreme still moves. Manual values are untouched; "Take manual control" restores them exactly.
+- Auto-pan no longer double-attenuates the quiet ear: comfort floors are chill 0.7 / club 0.45 / insane 0.1 (of full level).

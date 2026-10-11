@@ -77,13 +77,16 @@ interface StyleCfg {
 }
 
 const STYLES: Record<DjAutoStyle, StyleCfg> = {
-  chill: { panDepth: 0.35, panBeats: 32, minChannel: 0.7, bassAdd: 0.15, eqSweepDb: 2.5, pumpDepth: 0, slew: 0.35, sceneBeats: 32 },
-  club: { panDepth: 0.65, panBeats: 16, minChannel: 0.45, bassAdd: 0.3, eqSweepDb: 5, pumpDepth: 0.16, slew: 1.1, sceneBeats: 16 },
-  insane: { panDepth: 1, panBeats: 4, minChannel: 0.2, bassAdd: 0.45, eqSweepDb: 8, pumpDepth: 0.3, slew: 3.2, sceneBeats: 8 },
+  chill: { panDepth: 0.3, panBeats: 32, minChannel: 0.7, bassAdd: 0.15, eqSweepDb: 4, pumpDepth: 0, slew: 0.35, sceneBeats: 32 },
+  club: { panDepth: 0.55, panBeats: 16, minChannel: 0.45, bassAdd: 0.3, eqSweepDb: 7, pumpDepth: 0.16, slew: 1.1, sceneBeats: 16 },
+  insane: { panDepth: 0.9, panBeats: 4, minChannel: 0.1, bassAdd: 0.45, eqSweepDb: 10, pumpDepth: 0.3, slew: 3.2, sceneBeats: 8 },
 };
 
 const clamp = (v: number, a: number, b: number) => Math.min(b, Math.max(a, v));
 const dbToGain = (db: number) => Math.pow(10, db / 20);
+// Fold values that would overshoot the ±12 dB range back inside, so Auto DJ keeps the
+// fader visibly (and audibly) moving even when the user has it parked at the limit.
+const reflect12 = (v: number) => (v > 12 ? Math.max(-12, 24 - v) : v < -12 ? Math.min(12, -24 - v) : v);
 
 type Listener = () => void;
 
@@ -294,9 +297,9 @@ class DjEngine {
     return {
       gainL: gl,
       gainR: gr,
-      low: eqOn ? clamp(s.low + o.low, -12, 12) : 0,
-      mid: eqOn ? clamp(s.mid + o.mid, -12, 12) : 0,
-      high: eqOn ? clamp(s.high + o.high, -12, 12) : 0,
+      low: eqOn ? reflect12(s.low + o.low) : 0,
+      mid: eqOn ? reflect12(s.mid + o.mid) : 0,
+      high: eqOn ? reflect12(s.high + o.high) : 0,
       bass,
       master: neutral ? 1 : s.master * o.pump,
     };
@@ -508,26 +511,29 @@ class DjEngine {
       let pan = Math.sin(ph) * cfg.panDepth * sceneDepth;
       if (a.style === 'insane' && this.scene === 2) pan = Math.sign(Math.sin(ph * 2)) * 0.85 * Math.abs(Math.sin(ph * 2)) ** 0.35;
       t.pan = pan;
-      // keep both ears comfortable: floor on the quieter side
-      const floor = cfg.minChannel;
-      t.gL = pan > 0 ? Math.max(floor, 1 - pan * 0.5) : 1;
-      t.gR = pan < 0 ? Math.max(floor, 1 + pan * 0.5) : 1;
+      // Balance already lowers the far ear by |pan|, so panDepth = 1 - minChannel is the comfort floor.
+      // (No extra channel multiplier here, otherwise the quiet side would be attenuated twice.)
+      t.gL = 1;
+      t.gR = 1;
     }
 
-    // 2) bass: swell on scene phrase, extra thump on the downbeat
+    // 2) bass: swell on scene phrase, extra thump on the downbeat (boost + low-band EQ)
     if (a.bass) {
       const swell = (Math.sin((beats / (cfg.sceneBeats / 2)) * Math.PI * 2 - Math.PI / 2) + 1) / 2; // 0..1
       const thump = a.style === 'chill' ? 0 : Math.exp(-beatFrac * 6) * 0.35;
       t.bass = cfg.bassAdd * (0.35 + 0.65 * swell) * (this.scene === 1 ? 0.5 : 1) + thump * cfg.bassAdd;
-      t.low = (swell - 0.4) * cfg.eqSweepDb * 0.6;
+      // BASS fader plays: swings both ways (cut on the "breath", push on the swell)
+      t.low = (swell - 0.5) * cfg.eqSweepDb * 2.2;
     }
 
-    // 3) filter-style movement: slow high/mid sweeps (rise → release)
+    // 3) MID / HIGH faders play like a DJ riding the EQ: each on its own phrase length so the
+    //    three bands never move in lock-step (rise -> release, with an inverse mid scoop)
     if (a.filter) {
       const sweep = (Math.sin((beats / cfg.sceneBeats) * Math.PI * 2) + 1) / 2;
-      t.high = (sweep - 0.5) * cfg.eqSweepDb * 1.4;
-      t.mid = (0.5 - sweep) * cfg.eqSweepDb * 0.5;
-      if (this.scene === 3 && a.style !== 'chill') t.low -= cfg.eqSweepDb * 0.5 * sweep; // "breakdown" thinning
+      const ride = (Math.sin((beats / (cfg.sceneBeats * 0.75)) * Math.PI * 2 + 1.3) + 1) / 2;
+      t.high = (sweep - 0.5) * cfg.eqSweepDb * 2.4;
+      t.mid = (ride - 0.5) * cfg.eqSweepDb * 1.8;
+      if (this.scene === 3 && a.style !== 'chill') t.low -= cfg.eqSweepDb * 0.9 * sweep; // "breakdown" thinning
     }
 
     // 4) sidechain-style pump on the beat (club/insane)
@@ -546,9 +552,10 @@ class DjEngine {
     o.gL = slew(o.gL, t.gL, cfg.slew * 0.8);
     o.gR = slew(o.gR, t.gR, cfg.slew * 0.8);
     o.bass = slew(o.bass, t.bass, 0.9);
-    o.low = slew(o.low, t.low, 14);
-    o.mid = slew(o.mid, t.mid, 14);
-    o.high = slew(o.high, t.high, 14);
+    const eqRate = cfg.slew * 7; // dB/s: chill ≈2.5, club ≈7.7, insane ≈22
+    o.low = slew(o.low, t.low, eqRate);
+    o.mid = slew(o.mid, t.mid, eqRate);
+    o.high = slew(o.high, t.high, eqRate);
     o.pump = slew(o.pump, t.pump, 9); // fast enough to feel rhythmic, slow enough to avoid clicks
 
     this.applyParams();
