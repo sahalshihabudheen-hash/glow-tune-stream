@@ -4,8 +4,10 @@ import Sidebar from '@/components/Sidebar';
 import TrackGrid from '@/components/TrackGrid';
 import { useDjAudio } from '@/hooks/useDjAudio';
 import { useMusicPlayer } from '@/contexts/MusicPlayerContext';
-import { Slider } from '@/components/ui/slider';
-import { Headphones, Power, RotateCcw, Loader2, Search, Zap, Music2, Activity, ChevronDown, ChevronUp, ListMusic, Wand2, Play, Pause, SkipBack, SkipForward } from 'lucide-react';
+import {
+  Headphones, Power, RotateCcw, Loader2, Search, Zap, Music2, ListMusic, Wand2, Play, Pause,
+  SlidersHorizontal, Volume2, Sparkles, X, Plus, Minus,
+} from 'lucide-react';
 import MusicPlayer from '@/components/MusicPlayer';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
@@ -13,6 +15,9 @@ import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { filterDjModeTracks, getLikelyDjModeTracks } from '@/lib/djStream';
 import { djEngine, type DjAutoStyle, type DjChannelMode } from '@/lib/djEngine';
+import {
+  ACCENT_GRADIENT, Chip, HFader, Label, LevelMeter, Panel, Platter, Spectrum, VFader, buzz,
+} from '@/components/dj/DjPrimitives';
 
 interface Track { id: string; title: string; thumbnail: string; channel: string; }
 
@@ -21,196 +26,126 @@ interface Playlist {
   name: string;
 }
 
-/* ─── Spinning Vinyl ─── */
-const Vinyl = ({ spinning, level, side }: { spinning: boolean; level: number; side: 'L' | 'R' }) => (
-  <div className="relative flex items-center justify-center">
-    {/* Outer glow ring */}
-    <div
-      className="absolute rounded-full transition-all duration-100"
-      style={{
-        width: 180, height: 180,
-        boxShadow: `0 0 ${20 + level * 60}px ${level * 40}px hsl(var(--primary)/0.3)`,
-        opacity: 0.6 + level * 0.4,
-      }}
-    />
-    {/* Vinyl record */}
-    <div
-      className={cn('relative rounded-full border-4 border-white/10 shadow-2xl transition-all duration-500', spinning && 'animate-spin')}
-      style={{ 
-        width: 'min(160px, 40vw)', 
-        height: 'min(160px, 40vw)', 
-        animationDuration: '2s', 
-        background: 'radial-gradient(circle, #1a1a1a 30%, #111 50%, #0a0a0a 100%)' 
-      }}
-    >
-      {/* Grooves */}
-      {[0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9].map(scale => (
-        <div key={scale} className="absolute rounded-full border border-white/5"
-          style={{ 
-            width: `${scale * 100}%`, 
-            height: `${scale * 100}%`, 
-            top: `${(1 - scale) * 50}%`, 
-            left: `${(1 - scale) * 50}%` 
-          }} />
-      ))}
-      {/* Label */}
-      <div className="absolute inset-0 flex items-center justify-center">
-        <div className="w-[30%] h-[30%] rounded-full flex items-center justify-center border-2 border-primary/50"
-          style={{ background: 'hsl(var(--primary)/0.2)' }}>
-          <span className="text-[min(2xl,5vw)] font-black text-primary italic">{side}</span>
-        </div>
-      </div>
-      {/* Needle line */}
-      <div className="absolute top-1/2 left-1/2 w-full h-[1px] bg-primary/20 origin-left" style={{ transform: 'rotate(-30deg)' }} />
+type Tab = 'mix' | 'eq' | 'sound' | 'fx';
+
+const TABS: { key: Tab; label: string; Icon: typeof Music2 }[] = [
+  { key: 'mix', label: 'Mix', Icon: Wand2 },
+  { key: 'eq', label: 'EQ', Icon: SlidersHorizontal },
+  { key: 'sound', label: 'Sound', Icon: Volume2 },
+  { key: 'fx', label: 'FX', Icon: Sparkles },
+];
+
+const STYLES: { key: DjAutoStyle; label: string; hint: string }[] = [
+  { key: 'chill', label: 'Chill', hint: 'slow drift' },
+  { key: 'club', label: 'Club', hint: 'pan + pump' },
+  { key: 'insane', label: 'Insane', hint: 'fast & wild' },
+];
+
+/* ─── One row in a track list (whole row is tappable) ─── */
+const TrackRow = ({
+  track, active, playing, onPlay, onQueue,
+}: { track: Track; active: boolean; playing: boolean; onPlay: () => void; onQueue: () => void }) => (
+  <div
+    role="button"
+    tabIndex={0}
+    onClick={onPlay}
+    onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onPlay(); } }}
+    className={cn(
+      'relative flex items-center gap-3 p-2.5 pr-3 rounded-2xl border cursor-pointer transition-colors active:scale-[0.99]',
+      active ? 'bg-primary/10 border-primary/30' : 'bg-white/[0.03] border-white/5 hover:bg-white/[0.07]'
+    )}
+  >
+    {active && <span className="absolute left-0 top-3 bottom-3 w-1 rounded-r bg-primary" />}
+    <div className="relative shrink-0">
+      <img src={track.thumbnail} alt="" loading="lazy" className="w-12 h-12 rounded-xl object-cover" />
+      <span className="absolute inset-0 rounded-xl bg-black/45 flex items-center justify-center">
+        {active && playing ? <Pause className="w-5 h-5 text-primary fill-current" /> : <Play className="w-5 h-5 text-white fill-current ml-0.5" />}
+      </span>
     </div>
+    <div className="flex-1 min-w-0">
+      <p className={cn('font-bold truncate text-sm', active && 'text-primary')}>{track.title}</p>
+      <p className="text-[10px] font-bold text-muted-foreground/60 uppercase tracking-widest truncate">{track.channel}</p>
+    </div>
+    <button
+      onClick={e => { e.stopPropagation(); buzz(); onQueue(); }}
+      className="shrink-0 min-h-[40px] px-3.5 rounded-xl bg-primary/10 text-primary hover:bg-primary hover:text-primary-foreground text-[10px] font-black uppercase tracking-widest transition-all active:scale-90"
+    >
+      Queue
+    </button>
   </div>
 );
 
-/* ─── VU Meter ─── */
-const VuMeter = ({ level }: { level: number }) => {
-  const bars = 16;
-  return (
-    <div className="flex items-end gap-0.5 h-8">
-      {Array.from({ length: bars }).map((_, i) => {
-        const threshold = (i + 1) / bars;
-        const active = level >= threshold;
-        const color = i < 10 ? 'bg-primary' : i < 13 ? 'bg-yellow-400' : 'bg-red-500';
-        return (
-          <div key={i}
-            className={cn('flex-1 rounded-sm transition-all duration-75', active ? color : 'bg-white/5')}
-            style={{ height: `${40 + i * 4}%` }}
-          />
-        );
-      })}
+/* ─── A deck (left or right channel) ─── */
+const Deck = ({
+  side, level, gain, liveGain, onGain, spinning, art, solo, muted, onSolo,
+}: {
+  side: 'L' | 'R'; level: number; gain: number; liveGain: number; onGain: (v: number) => void;
+  spinning: boolean; art?: string; solo: boolean; muted: boolean; onSolo: () => void;
+}) => (
+  <section
+    className={cn(
+      'rounded-3xl border p-3 sm:p-4 flex flex-col gap-3 backdrop-blur-xl bg-gradient-to-b from-white/[0.05] to-transparent transition-[border-color,opacity] duration-300',
+      level > 0.3 ? 'border-primary/40' : 'border-white/[0.08]',
+      muted && 'opacity-60'
+    )}
+    style={{ boxShadow: `0 0 ${16 + level * 36}px hsl(var(--primary) / ${0.04 + level * 0.14})` }}
+  >
+    <div className="flex items-center justify-between gap-2">
+      <span className="text-[10px] font-black uppercase tracking-[0.35em] text-muted-foreground">
+        {side === 'L' ? '« Deck L' : 'Deck R »'}
+      </span>
+      <button
+        onClick={() => { buzz(); onSolo(); }}
+        aria-pressed={solo}
+        title={solo ? 'Back to stereo' : `Play ${side === 'L' ? 'left' : 'right'} ear only`}
+        className={cn(
+          'min-h-[32px] px-2.5 rounded-lg border text-[9px] font-black uppercase tracking-widest transition-all active:scale-95',
+          solo ? 'bg-primary text-primary-foreground border-primary' : muted ? 'border-red-400/40 text-red-300 bg-red-500/10' : 'border-white/10 text-muted-foreground bg-white/[0.04] hover:text-white'
+        )}
+      >
+        {muted ? 'Muted' : 'Solo'}
+      </button>
     </div>
-  );
-};
 
-/* ─── EQ Fader ─── */
-const EQFader = ({ label, value, onChange, auto }: { label: string; value: number; onChange: (v: number) => void; auto?: boolean }) => {
-  const percentage = ((value + 12) / 24) * 100;
-  return (
-    <div className="flex flex-col items-center gap-4">
-      <span className="text-[10px] font-black uppercase tracking-[0.3em] text-muted-foreground/70">{label}</span>
-      <div className="relative group flex flex-col items-center" style={{ height: 160, width: 40 }}>
-        {/* Fader Slot/Track */}
-        <div className="absolute inset-y-0 w-2 bg-black/40 rounded-full border border-white/5 shadow-inner" />
-        
-        {/* Active Fill Glow */}
-        <div 
-          className="absolute bottom-0 w-2 rounded-full transition-all duration-300"
-          style={{ 
-            height: `${percentage}%`,
-            background: 'linear-gradient(0deg, hsl(var(--primary)), #fff)',
-            boxShadow: '0 0 15px hsl(var(--primary)/0.4)'
-          }}
-        />
+    <Platter side={side} spinning={spinning} level={level} art={art} />
+    <LevelMeter level={level} />
 
-        {/* Tactical Tick Marks */}
-        <div className="absolute inset-y-0 left-0 w-1 flex flex-col justify-between py-2 opacity-20">
-          {[...Array(5)].map((_, i) => <div key={i} className="w-full h-[1px] bg-white" />)}
-        </div>
-        <div className="absolute inset-y-0 right-0 w-1 flex flex-col justify-between py-2 opacity-20">
-          {[...Array(5)].map((_, i) => <div key={i} className="w-full h-[1px] bg-white" />)}
-        </div>
-        
-        {/* Fader Knob (Tactile) */}
-        <div 
-          className="absolute left-1/2 -translate-x-1/2 w-10 h-4 rounded-[4px] bg-gradient-to-b from-[#333] to-[#111] border border-white/10 shadow-2xl flex flex-col items-center justify-center gap-0.5 group-hover:border-primary/50 transition-all duration-200 cursor-ns-resize"
-          style={{ bottom: `calc(${percentage}% - 8px)` }}
-        >
-          {/* Knob Grips */}
-          <div className="w-6 h-[1px] bg-white/20" />
-          <div className="w-6 h-[1px] bg-primary/40" />
-          <div className="w-6 h-[1px] bg-white/20" />
-        </div>
-
-        {/* Invisible range input for interaction */}
-        <input 
-          type="range" 
-          min={-12} max={12} step={0.5} 
-          value={value}
-          onChange={e => onChange(+e.target.value)}
-          className="absolute inset-0 opacity-0 cursor-ns-resize w-full h-full" 
-          style={{ WebkitAppearance: 'slider-vertical' }}
-        />
-      </div>
-      <div className="flex flex-col items-center">
-        <span className={cn('text-[11px] font-black tabular-nums transition-colors duration-300', value > 0 ? 'text-primary' : value < 0 ? 'text-red-400' : 'text-muted-foreground')}>
-          {value > 0 ? '+' : ''}{value.toFixed(1)}
-        </span>
-        <span className={cn('text-[8px] font-bold uppercase tracking-tighter', auto ? 'text-primary/80 animate-pulse' : 'text-muted-foreground/30')}>{auto ? 'auto' : 'dB'}</span>
+    <div>
+      <Label right={<span className={cn('text-xs font-black tabular-nums', liveGain > 0 ? 'text-primary' : 'text-red-400')}>{Math.round(liveGain * 100)}%</span>}>
+        Gain
+      </Label>
+      <HFader
+        ariaLabel={`Deck ${side} gain`}
+        value={Math.round(gain * 100)}
+        live={Math.round(liveGain * 100)}
+        onChange={v => onGain(v / 100)}
+      />
+      <div className="grid grid-cols-2 gap-2">
+        <button onClick={() => { buzz(); onGain(Math.max(0, gain - 0.1)); }} aria-label={`Lower deck ${side} gain`}
+          className="min-h-[44px] rounded-xl bg-white/[0.05] hover:bg-white/10 flex items-center justify-center transition-all active:scale-95"><Minus className="w-4 h-4" /></button>
+        <button onClick={() => { buzz(); onGain(Math.min(1, gain + 0.1)); }} aria-label={`Raise deck ${side} gain`}
+          className="min-h-[44px] rounded-xl bg-white/[0.05] hover:bg-white/10 flex items-center justify-center transition-all active:scale-95"><Plus className="w-4 h-4" /></button>
       </div>
     </div>
-  );
-};
+  </section>
+);
+
+/* ─── Labelled slider row ─── */
+const SliderRow = ({ label, value, onChange, hint }: { label: string; value: number; onChange: (v: number) => void; hint?: string }) => (
+  <div>
+    <Label right={<span className="text-xs font-black tabular-nums text-primary">{Math.round(value * 100)}%</span>}>{label}</Label>
+    <HFader ariaLabel={label} value={Math.round(value * 100)} onChange={v => onChange(v / 100)} />
+    {hint && <p className="text-[10px] text-muted-foreground/60 -mt-1">{hint}</p>}
+  </div>
+);
 
 /* ─── Main Component ─── */
-/* ─── Mixer slider (0–100) ─── */
-const MixSlider = ({ label, value, onChange, disabled, hint }: { label: string; value: number; onChange: (v: number) => void; disabled?: boolean; hint?: string }) => (
-  <div className={cn('space-y-2 transition-opacity', disabled && 'opacity-40')}>
-    <div className="flex justify-between items-center">
-      <span className="text-[9px] font-black uppercase tracking-[0.4em] text-muted-foreground">{label}</span>
-      <span className="text-xs font-black tabular-nums text-primary">{Math.round(value * 100)}%</span>
-    </div>
-    <div className="relative h-3 md:h-2 bg-white/5 rounded-full overflow-hidden">
-      <div className="absolute inset-y-0 left-0 rounded-full transition-all duration-100"
-        style={{ width: `${value * 100}%`, background: 'linear-gradient(90deg, hsl(var(--primary)), #a855f7)' }} />
-      <input type="range" min={0} max={100} step={1} value={Math.round(value * 100)} disabled={disabled}
-        onChange={e => onChange(+e.target.value / 100)}
-        className="absolute inset-0 opacity-0 cursor-pointer w-full h-full" />
-    </div>
-    {hint && <p className="text-[9px] text-muted-foreground/60">{hint}</p>}
-  </div>
-);
-
-/* ─── ON/OFF chip ─── */
-const FxChip = ({ label, on, onClick, disabled }: { label: string; on: boolean; onClick: () => void; disabled?: boolean }) => (
-  <button onClick={onClick} disabled={disabled} aria-pressed={on}
-    className={cn(
-      'px-3 py-2 rounded-xl border text-[10px] font-black uppercase tracking-widest transition-all active:scale-95 flex items-center gap-2 disabled:opacity-40',
-      on ? 'bg-primary/20 border-primary/50 text-primary shadow-[0_0_14px_hsl(var(--primary)/0.25)]' : 'bg-white/5 border-white/10 text-muted-foreground hover:text-white'
-    )}>
-    <span className={cn('w-1.5 h-1.5 rounded-full', on ? 'bg-primary shadow-[0_0_8px_hsl(var(--primary))]' : 'bg-white/20')} />
-    {label}
-  </button>
-);
-
-/* ─── Live spectrum (canvas, own rAF so it doesn't re-render the page) ─── */
-const Spectrum = ({ getData, active }: { getData: () => Uint8Array; active: boolean }) => {
-  const ref = useRef<HTMLCanvasElement>(null);
-  useEffect(() => {
-    const c = ref.current; if (!c) return;
-    const g = c.getContext('2d'); if (!g) return;
-    let raf = 0;
-    const draw = () => {
-      const w = c.width, h = c.height;
-      g.clearRect(0, 0, w, h);
-      const d = active ? getData() : new Uint8Array(16);
-      const n = d.length, bw = w / n;
-      const grad = g.createLinearGradient(0, h, 0, 0);
-      grad.addColorStop(0, '#3b82f6'); grad.addColorStop(1, '#a855f7');
-      g.fillStyle = grad;
-      for (let i = 0; i < n; i++) {
-        const v = Math.max(0.04, d[i] / 255);
-        const bh = v * h;
-        g.fillRect(i * bw + 2, h - bh, bw - 4, bh);
-      }
-      raf = requestAnimationFrame(draw);
-    };
-    raf = requestAnimationFrame(draw);
-    return () => cancelAnimationFrame(raf);
-  }, [getData, active]);
-  return <canvas ref={ref} width={320} height={64} className="w-full h-14 rounded-lg bg-black/30" />;
-};
-
-
 const DjMode = () => {
-  const { 
-    currentTrack, isPlaying, activeSource, playlist, forceBackgroundPlayback, 
-    handleAddToQueue, isFavorite, toggleFavorite, 
+  const {
+    currentTrack, isPlaying, activeSource, playlist, forceBackgroundPlayback,
+    handleAddToQueue, isFavorite, toggleFavorite,
     useBackgroundAudioOnly, setUseBackgroundAudioOnly,
-    showMiniPlayer, setShowMiniPlayer,
+    setShowMiniPlayer,
     handlePlayPause, handleNext, handlePrevious,
     handlePlayFromPlaylist, handlePlayFromQueue,
     handleAddToPlaylist, handleRemoveFromPlaylist,
@@ -222,15 +157,16 @@ const DjMode = () => {
     nowPlayingOpen
   } = useMusicPlayer();
   const { state, apply, init, reSync, getLevels, getBassLevel, getFrequencyData, getLive, getBpm, getAutoOffsets, reset: resetDj, unlock } = useDjAudio(audioRef, isPlaying);
-  const [activeDeck, setActiveDeck] = useState<'L' | 'R'>('L');
   const [levels, setLevels] = useState({ left: 0, right: 0 });
+  const lastLevels = useRef({ left: 0, right: 0 });
   const [smartBass, setSmartBass] = useState(false);
+  const [tab, setTab] = useState<Tab>('mix');
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<Track[]>([]);
   const [searching, setSearching] = useState(false);
   const [forcing, setForcing] = useState(false);
   const [showSearch, setShowSearch] = useState(false);
-  
+
   // When the engine is running, show what you actually HEAR (manual + Auto DJ movement + L/R-only mode).
   const liveFx = state.active ? getLive() : null;
   const effectiveGainL = liveFx ? liveFx.gainL : state.leftGain * (state.balance <= 0 ? 1 : 1 - state.balance);
@@ -257,11 +193,10 @@ const DjMode = () => {
   };
   const latestStateRef = useRef(state);
   const searchRequestRef = useRef(0);
-  
+
   useEffect(() => {
     latestStateRef.current = state;
   }, [state]);
-
 
   const { user } = useAuth();
   const [userPlaylists, setUserPlaylists] = useState<Playlist[]>([]);
@@ -278,7 +213,7 @@ const DjMode = () => {
     if (!user) return;
     setLoadingPlaylists(true);
     try {
-      const { data, error } = await supabase
+      const { data } = await supabase
         .from('playlists')
         .select('id, name')
         .eq('user_id', user.id)
@@ -299,9 +234,9 @@ const DjMode = () => {
         .select('*')
         .eq('playlist_id', playlistId)
         .order('position', { ascending: true });
-        
+
       if (error) throw error;
-      
+
       if (data) {
         const tracks: Track[] = data.map(item => ({
           id: item.track_id,
@@ -329,21 +264,25 @@ const DjMode = () => {
     }
   };
 
+  // Level meters + Smart Bass. Only re-render when a level actually moved (keeps phones smooth).
   useEffect(() => {
     const tick = () => {
       const lvls = getLevels();
-      setLevels(lvls);
+      if (Math.abs(lvls.left - lastLevels.current.left) > 0.015 || Math.abs(lvls.right - lastLevels.current.right) > 0.015) {
+        lastLevels.current = lvls;
+        setLevels(lvls);
+      }
 
       // Smart Bass Logic: Detect thumps and boost bass EQ automatically
       if (smartBass && state.active && isPlaying) {
         const bassLevel = getBassLevel();
         if (bassLevel > 0.6) { // High bass energy detected
           if (latestStateRef.current.low < 8) {
-            apply({ ...latestStateRef.current, low: 10 });
+            apply({ low: 10 });
           }
         } else if (bassLevel < 0.3) { // Bass dropped
           if (latestStateRef.current.low > 2) {
-            apply({ ...latestStateRef.current, low: 0 });
+            apply({ low: 0 });
           }
         }
       }
@@ -352,18 +291,36 @@ const DjMode = () => {
     };
     rafRef.current = requestAnimationFrame(tick);
     return () => { if (rafRef.current) cancelAnimationFrame(rafRef.current); };
-  }, [getLevels, smartBass, state.active, apply, getBassLevel]);
+  }, [getLevels, smartBass, state.active, isPlaying, apply, getBassLevel]);
 
-  // Beat pulse for BPM indicator
+  // Beat LED follows the real BPM
   useEffect(() => {
     if (isPlaying && state.active) {
-      beatRef.current = setInterval(() => { setBeat(b => !b); }, 500);
+      const ms = Math.max(150, 30000 / Math.min(200, Math.max(60, bpm)));
+      beatRef.current = setInterval(() => { setBeat(b => !b); }, ms);
     } else {
       clearInterval(beatRef.current);
       setBeat(false);
     }
     return () => clearInterval(beatRef.current);
-  }, [isPlaying, state.active]);
+  }, [isPlaying, state.active, bpm]);
+
+  // Desktop shortcuts: A auto · C center · [ ] crossfade · B smart bass
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const t = e.target as HTMLElement | null;
+      if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return;
+      if (e.metaKey || e.ctrlKey || e.altKey) return;
+      const k = e.key.toLowerCase();
+      if (k === 'a') { if (djEngine.state.active) apply({ auto: { enabled: !djEngine.state.auto.enabled } }); }
+      else if (k === 'c') apply({ balance: 0 });
+      else if (k === '[') apply({ balance: Math.max(-1, djEngine.state.balance - 0.1) });
+      else if (k === ']') apply({ balance: Math.min(1, djEngine.state.balance + 0.1) });
+      else if (k === 'b') setSmartBass(v => !v);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [apply]);
 
   const lastSyncedTrack = useRef<string | null>(null);
 
@@ -376,13 +333,13 @@ const DjMode = () => {
         if (currentTrack.id !== lastSyncedTrack.current) {
           console.log("DJ Engine: Event-Triggered Sync for track", currentTrack?.id);
           lastSyncedTrack.current = currentTrack.id;
-          
+
           // Small delay to ensure browser media pipeline has settled
           setTimeout(() => {
             try {
               const ok = reSync();
               if (ok) {
-                toast.success("DJ Engine Ready", { 
+                toast.success("DJ Engine Ready", {
                   duration: 1500,
                   position: 'top-center',
                   id: 'dj-sync-toast'
@@ -400,7 +357,7 @@ const DjMode = () => {
     const audio = audioRef.current;
     audio.addEventListener('canplay', performSync);
     audio.addEventListener('playing', performSync);
-    
+
     // Also run immediately in case it's already ready
     performSync();
 
@@ -490,640 +447,455 @@ const DjMode = () => {
 
   const reset = () => resetDj();
 
+  const toggleAuto = async () => {
+    buzz(14);
+    if (!state.active) {
+      const ok = await enable();
+      if (ok) {
+        setAutoDjActive(true);
+        toast.success('Auto DJ Mode Activated');
+      }
+    } else {
+      const next = !autoDjActive;
+      setAutoDjActive(next);
+      if (next) toast.success('Auto DJ Mode Activated');
+      else toast.info('Auto DJ Mode Disabled');
+    }
+  };
+
   const presets = [
-    { label: '🔊 Bass Boost', fn: () => apply({ ...state, low: 8, mid: 0, high: -2 }) },
-    { label: '🎤 Vocal Pop', fn: () => apply({ ...state, low: -4, mid: 3, high: 5 }) },
-    { label: '🎧 Club Mix', fn: () => apply({ ...state, low: 6, mid: -2, high: 4 }) },
-    { label: '🌊 Chill', fn: () => apply({ ...state, low: 2, mid: -1, high: -3 }) },
-    { label: '⚡ Drop', fn: () => apply({ ...state, low: 12, mid: 0, high: 0 }) },
-    { label: '↩ Reset', fn: reset },
+    { label: '🔊 Bass Boost', fn: () => apply({ low: 8, mid: 0, high: -2 }) },
+    { label: '🎤 Vocal Pop', fn: () => apply({ low: -4, mid: 3, high: 5 }) },
+    { label: '🎧 Club Mix', fn: () => apply({ low: 6, mid: -2, high: 4 }) },
+    { label: '🌊 Chill', fn: () => apply({ low: 2, mid: -1, high: -3 }) },
+    { label: '⚡ Drop', fn: () => apply({ low: 12, mid: 0, high: 0 }) },
+    { label: '↩ Flat', fn: () => apply({ low: 0, mid: 0, high: 0 }) },
   ];
 
   const totalLevel = (levels.left + levels.right) / 2;
+  const soloLeft = state.channelMode === 'left';
+  const soloRight = state.channelMode === 'right';
+  const toggleSolo = (mode: Exclude<DjChannelMode, 'stereo'>) =>
+    apply({ channelMode: state.channelMode === mode ? 'stereo' : mode });
+  const spinning = isPlaying && state.active;
+
+  const tabClass = (t: Tab) => cn(tab === t ? 'block' : 'hidden', 'xl:block');
 
   return (
-    <div className="min-h-screen bg-[#030303] text-foreground overflow-hidden">
-      {/* Animated background */}
-      <div className="fixed inset-0 pointer-events-none z-0">
-        <div className="absolute top-0 left-1/4 w-96 h-96 rounded-full blur-[160px] animate-pulse"
-          style={{ background: `hsl(var(--primary)/0.12)`, animationDuration: '3s' }} />
-        <div className="absolute bottom-0 right-1/4 w-96 h-96 rounded-full blur-[160px] animate-pulse"
-          style={{ background: `hsl(var(--primary)/0.08)`, animationDuration: '5s', animationDelay: '1.5s' }} />
-        {/* Scanlines */}
-        <div className="absolute inset-0 opacity-[0.015]"
-          style={{ backgroundImage: 'repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(255,255,255,0.1) 2px, rgba(255,255,255,0.1) 4px)' }} />
-      </div>
+    <div className="min-h-screen bg-[#050505] text-foreground overflow-x-hidden">
+      {/* Beat-reactive glow (cheap gradients instead of heavy blurs) */}
+      <div
+        className="fixed inset-0 pointer-events-none z-0"
+        style={{
+          background:
+            `radial-gradient(60% 45% at 15% 0%, hsl(var(--primary) / ${0.1 + totalLevel * 0.14}), transparent 70%),` +
+            `radial-gradient(55% 45% at 90% 100%, rgba(255,138,0,${0.07 + totalLevel * 0.12}), transparent 70%)`,
+        }}
+      />
 
       <Sidebar activeTab="dj" onTabChange={() => {}} />
 
-      <div className={cn(
-        "relative z-10 ml-0 md:ml-64 min-h-screen p-4 md:p-8 pb-32 transition-all duration-500",
-        nowPlayingOpen && "xl:pr-[380px]"
+      <main className={cn(
+        'relative z-10 ml-0 md:ml-64 min-h-screen px-3 sm:px-5 md:px-8 pt-4 md:pt-8 pb-52 md:pb-44 transition-all duration-500 max-w-[1500px]',
+        nowPlayingOpen && 'xl:pr-[380px]'
       )}>
 
         {/* ── Header ── */}
-        <div className="flex items-center gap-4 mb-8">
+        <header className="flex flex-wrap items-center gap-x-4 gap-y-3 mb-4">
           <div className={cn(
-            'w-14 h-14 rounded-2xl flex items-center justify-center border-2 transition-all duration-300',
+            'w-12 h-12 md:w-14 md:h-14 rounded-2xl flex items-center justify-center border-2 transition-all duration-300 shrink-0',
             state.active ? 'bg-primary text-primary-foreground border-primary shadow-[0_0_30px_hsl(var(--primary)/0.5)]' : 'bg-primary/10 text-primary border-primary/20'
           )}>
-            <Headphones className="w-7 h-7" />
+            <Headphones className="w-6 h-6 md:w-7 md:h-7" />
           </div>
-          <div className="flex-1 min-w-0">
-            <h1 className="text-2xl md:text-5xl font-black tracking-tighter uppercase italic truncate" style={{
-              background: 'linear-gradient(135deg, hsl(var(--primary)), #fff, hsl(var(--primary)))',
+          <div className="flex-1 min-w-[140px]">
+            <h1 className="text-3xl md:text-5xl font-black tracking-tighter uppercase italic leading-none" style={{
+              background: 'linear-gradient(135deg, hsl(var(--primary)), #fff, #ff8a00)',
               WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent'
-            }}>DJ Mode <span className="text-[10px] opacity-20 not-italic hidden sm:inline">v2.2</span></h1>
-            <p className="text-[8px] md:text-[10px] font-black uppercase tracking-[0.5em] text-muted-foreground/50 mt-1 truncate">
-              {state.active ? '● LIVE · ENGINE ACTIVE' : '○ OFFLINE · START ENGINE'}
+            }}>DJ Mode</h1>
+            <p className="mt-1.5 flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.3em] text-muted-foreground/70">
+              <span className={cn('w-2 h-2 rounded-full transition-all duration-150', state.active ? (beat ? 'bg-primary shadow-[0_0_12px_hsl(var(--primary))] scale-125' : 'bg-primary/40') : 'bg-white/20')} />
+              {state.active ? `Live · ${bpm} BPM` : 'Offline'}
             </p>
           </div>
-          {/* BPM indicator */}
-          {state.active && (
-            <div className={cn('w-3 h-3 rounded-full transition-all duration-200', beat ? 'bg-primary shadow-[0_0_15px_hsl(var(--primary))]' : 'bg-primary/30')} />
-          )}
-          <div className="flex gap-1.5 md:gap-2">
-            {state.active && (
-              <button
-                onClick={() => setAutoDjActive(a => !a)}
-                className={cn(
-                  'p-2.5 md:px-4 md:py-2 rounded-xl font-black text-[10px] md:text-xs uppercase tracking-widest transition-all flex items-center gap-2',
-                  autoDjActive 
-                    ? 'bg-primary text-primary-foreground shadow-[0_0_20px_hsl(var(--primary)/0.4)]'
-                    : 'border border-white/10 bg-white/5'
-                )}
-              >
-                <Wand2 className={cn("w-4 h-4", autoDjActive && "animate-pulse")} />
-                <span className="hidden sm:inline">Auto DJ</span>
-              </button>
-            )}
+          <div className="grid grid-cols-2 gap-2 w-full sm:w-auto">
             <button
               onClick={() => setShowSearch(s => !s)}
-              className="p-2.5 md:px-4 md:py-2 rounded-xl border border-white/10 bg-white/5 font-black text-[10px] md:text-xs uppercase tracking-widest transition-all flex items-center gap-2"
+              aria-expanded={showSearch}
+              className={cn(
+                'min-h-[48px] px-5 rounded-2xl border font-black text-xs uppercase tracking-widest transition-all active:scale-95 flex items-center justify-center gap-2',
+                showSearch ? 'border-primary/50 bg-primary/10 text-primary' : 'border-white/10 bg-white/[0.04]'
+              )}
             >
-              <Search className="w-4 h-4" />
-              <span className="hidden sm:inline">Tracks</span>
-              {showSearch ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
+              {showSearch ? <X className="w-4 h-4" /> : <Search className="w-4 h-4" />}
+              Tracks
             </button>
             <button
               onClick={state.active ? reset : enable}
               disabled={forcing}
               className={cn(
-                'p-2.5 md:px-5 md:py-2 rounded-xl font-black text-[10px] md:text-xs uppercase tracking-widest transition-all flex items-center gap-2',
-                state.active
-                  ? 'border border-white/10 bg-white/5'
-                  : 'bg-primary text-primary-foreground shadow-[0_0_20px_hsl(var(--primary)/0.4)]'
+                'min-h-[48px] px-5 rounded-2xl font-black text-xs uppercase tracking-widest transition-all active:scale-95 flex items-center justify-center gap-2 disabled:opacity-60',
+                state.active ? 'border border-white/10 bg-white/[0.04]' : 'text-primary-foreground shadow-[0_0_24px_hsl(var(--primary)/0.4)]'
               )}
+              style={state.active ? undefined : { background: ACCENT_GRADIENT }}
             >
               {forcing ? <Loader2 className="w-4 h-4 animate-spin" /> : state.active ? <RotateCcw className="w-4 h-4" /> : <Power className="w-4 h-4" />}
-              <span className="hidden sm:inline">{forcing ? 'Loading' : state.active ? 'Reset' : 'Enable'}</span>
+              {forcing ? 'Loading' : state.active ? 'Reset' : 'Start'}
             </button>
           </div>
-        </div>
+        </header>
 
-        {/* ── Search Drawer ── */}
+        {/* ── Friendly getting-started banner ── */}
+        {!state.active && (
+          <Panel className="mb-4 border-primary/30 bg-primary/[0.06]">
+            <div className="flex flex-col md:flex-row md:items-center gap-4">
+              <div className="flex-1 min-w-0">
+                <p className="font-black text-base">Let&apos;s get the party started 🎧</p>
+                <ol className="mt-2 grid sm:grid-cols-3 gap-2 text-xs text-muted-foreground">
+                  {['Pick a track', 'Tap Start', 'Mix it, or tap Auto DJ'].map((s, i) => (
+                    <li key={s} className="flex items-center gap-2">
+                      <span className="w-6 h-6 shrink-0 rounded-full bg-primary/20 text-primary font-black flex items-center justify-center text-[11px]">{i + 1}</span>
+                      {s}
+                    </li>
+                  ))}
+                </ol>
+                <p className="mt-2 text-[11px] text-muted-foreground/70">Tip: use headphones to really hear the left / right effects.</p>
+              </div>
+              <button
+                onClick={() => (currentTrack ? enable() : setShowSearch(true))}
+                disabled={forcing}
+                className="min-h-[48px] px-6 rounded-2xl text-primary-foreground font-black text-xs uppercase tracking-widest flex items-center justify-center gap-2 active:scale-95 transition-all disabled:opacity-60"
+                style={{ background: ACCENT_GRADIENT }}
+              >
+                {currentTrack ? <><Power className="w-4 h-4" /> Start engine</> : <><Search className="w-4 h-4" /> Choose a track</>}
+              </button>
+            </div>
+          </Panel>
+        )}
+
+        {/* ── Track drawer ── */}
         {showSearch && (
-          <div className="mb-8 p-6 rounded-3xl border border-white/10 bg-white/3 backdrop-blur-xl">
-            <form onSubmit={searchTracks} className="flex gap-3 mb-6">
+          <Panel className="mb-4">
+            <form onSubmit={searchTracks} className="flex gap-2 mb-4">
               <div className="relative flex-1">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                 <input
                   value={query}
                   onChange={e => setQuery(e.target.value)}
-                  placeholder="Search tracks to load into DJ..."
-                  className="w-full pl-10 pr-4 py-3 rounded-2xl bg-white/5 border border-white/10 text-sm font-medium focus:outline-none focus:border-primary/50 transition-colors"
+                  placeholder="Search tracks to load into DJ…"
+                  enterKeyHint="search"
+                  className="w-full min-h-[48px] pl-10 pr-4 rounded-2xl bg-white/[0.05] border border-white/10 text-sm font-medium focus:outline-none focus:border-primary/50 transition-colors"
                 />
               </div>
               <button type="submit" disabled={searching}
-                className="px-6 py-3 rounded-2xl bg-primary text-primary-foreground font-black text-xs uppercase tracking-widest hover:scale-105 transition-all disabled:opacity-50 flex items-center gap-2">
+                className="min-h-[48px] px-5 rounded-2xl text-primary-foreground font-black text-xs uppercase tracking-widest active:scale-95 transition-all disabled:opacity-50 flex items-center gap-2"
+                style={{ background: ACCENT_GRADIENT }}>
                 {searching ? <Loader2 className="w-4 h-4 animate-spin" /> : <Search className="w-4 h-4" />}
-                Search
+                <span className="hidden sm:inline">Search</span>
               </button>
             </form>
+
             {results.length > 0 && (
-              <div className="mb-6">
-                <p className="text-[10px] font-black uppercase tracking-[0.4em] text-muted-foreground mb-4">Search Results</p>
-                <TrackGrid tracks={results} currentTrack={currentTrack} isPlaying={isPlaying}
-                  onPlayTrack={t => playForDj(t, results)} onAddToQueue={handleAddToQueue}
-                  isLoading={false} searchPerformed isFavorite={isFavorite} onToggleFavorite={toggleFavorite} />
+              <div className="mb-5">
+                <Label>Search results</Label>
+                <div className="mt-3">
+                  <TrackGrid tracks={results} currentTrack={currentTrack} isPlaying={isPlaying}
+                    onPlayTrack={t => playForDj(t, results)} onAddToQueue={handleAddToQueue}
+                    isLoading={false} searchPerformed isFavorite={isFavorite} onToggleFavorite={toggleFavorite} />
+                </div>
               </div>
             )}
-            
-            <div className="mb-6">
-               <div className="flex items-center justify-between mb-4">
-                 <p className="text-[10px] font-black uppercase tracking-[0.4em] text-muted-foreground">Import Your Playlist</p>
-                 <button onClick={fetchUserPlaylists} className="text-[9px] uppercase font-bold text-primary hover:underline flex items-center gap-1">
-                   <RotateCcw className={cn("w-3 h-3", loadingPlaylists && "animate-spin")} />
-                   Sync
-                 </button>
-               </div>
-               
-               {loadingPlaylists ? (
-                 <div className="flex gap-2 animate-pulse">
-                   {Array.from({ length: 3 }).map((_, i) => (
-                     <div key={i} className="w-32 h-10 rounded-xl bg-white/5" />
-                   ))}
-                 </div>
-               ) : userPlaylists.length > 0 ? (
-                 <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-none">
+
+            <div className="mb-5">
+              <Label right={
+                <button onClick={fetchUserPlaylists} className="min-h-[32px] text-[10px] uppercase font-bold text-primary flex items-center gap-1">
+                  <RotateCcw className={cn('w-3 h-3', loadingPlaylists && 'animate-spin')} /> Sync
+                </button>
+              }>Import your playlist</Label>
+              <div className="mt-3">
+                {loadingPlaylists ? (
+                  <div className="flex gap-2 animate-pulse">
+                    {Array.from({ length: 3 }).map((_, i) => <div key={i} className="w-32 h-11 rounded-xl bg-white/5" />)}
+                  </div>
+                ) : userPlaylists.length > 0 ? (
+                  <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-none -mx-1 px-1">
                     {userPlaylists.map(p => (
-                       <button 
-                         key={p.id} 
-                         onClick={() => loadPlaylistTracks(p.id)}
-                         className="shrink-0 px-4 py-2 rounded-xl bg-white/5 border border-white/10 hover:bg-white/10 hover:border-primary/50 text-xs font-bold transition-all flex items-center gap-2"
-                       >
-                         <ListMusic className="w-3.5 h-3.5 text-primary" />
-                         {p.name}
-                       </button>
+                      <button key={p.id} onClick={() => loadPlaylistTracks(p.id)}
+                        className="shrink-0 min-h-[44px] px-4 rounded-xl bg-white/[0.05] border border-white/10 hover:bg-white/10 hover:border-primary/50 text-xs font-bold transition-all flex items-center gap-2 active:scale-95">
+                        <ListMusic className="w-3.5 h-3.5 text-primary" />
+                        {p.name}
+                      </button>
                     ))}
-                 </div>
-               ) : (
-                 <p className="text-[10px] text-muted-foreground italic">No playlists found. Create one in the library to import it here.</p>
-               )}
+                  </div>
+                ) : (
+                  <p className="text-xs text-muted-foreground italic">No playlists found. Create one in the library to import it here.</p>
+                )}
+              </div>
             </div>
 
-            {loadedPlaylistTracks.length > 0 && (
-              <div className="mt-6">
-                <div className="flex justify-between items-center mb-4">
-                  <p className="text-[10px] font-black uppercase tracking-[0.4em] text-primary">Imported Playlist Deck</p>
-                  <button onClick={() => setLoadedPlaylistTracks([])} className="text-[10px] uppercase font-bold text-muted-foreground hover:text-white">Clear</button>
-                </div>
-                <div className="h-[400px] overflow-y-auto pr-2 custom-scrollbar">
-                  <div className="space-y-3">
-                    {loadedPlaylistTracks.map((track, i) => (
-                      <div
-                        key={`${track.id}-${i}`}
-                        className={cn(
-                          'w-full flex items-center gap-4 p-3 rounded-2xl transition-all duration-500 group relative overflow-hidden',
-                          currentTrack?.id === track.id
-                            ? 'bg-primary/10 border border-primary/20 shadow-[0_0_30px_rgba(var(--primary),0.1)]'
-                            : 'glass-premium border border-white/5 hover:bg-white/10 hover:border-white/10'
-                        )}
-                      >
-                        {currentTrack?.id === track.id && (
-                          <div className="absolute left-0 top-0 bottom-0 w-1 bg-primary animate-pulse" />
-                        )}
-
-                        <div className="relative shrink-0 group/art">
-                          <img
-                            src={track.thumbnail}
-                            alt={track.title}
-                            className="w-12 h-12 md:w-14 md:h-14 rounded-xl object-cover shadow-lg transition-transform duration-500 group-hover/art:scale-110"
-                            loading="lazy"
-                          />
-                          <button
-                            onClick={() => playForDj(track, loadedPlaylistTracks)}
-                            className={cn(
-                              "absolute inset-0 flex items-center justify-center rounded-xl bg-black/40 backdrop-blur-[2px] transition-all",
-                              currentTrack?.id === track.id ? "opacity-100" : "opacity-0 group-hover/art:opacity-100"
-                            )}
-                          >
-                            {currentTrack?.id === track.id && isPlaying ? (
-                              <Pause className="w-5 h-5 text-primary fill-current" />
-                            ) : (
-                              <Play className="w-5 h-5 text-white fill-current ml-0.5" />
-                            )}
-                          </button>
-                        </div>
-
-                        <div className="flex-1 min-w-0">
-                          <p className={cn(
-                            'font-bold truncate text-sm md:text-base tracking-tight transition-colors',
-                            currentTrack?.id === track.id ? 'text-primary italic' : 'text-foreground'
-                          )}>
-                            {track.title}
-                          </p>
-                          <div className="flex items-center gap-2 mt-0.5">
-                            <p className="text-[10px] font-black text-muted-foreground/60 uppercase tracking-[0.2em] truncate">{track.channel}</p>
-                          </div>
-                        </div>
-
-                        <div className="flex items-center gap-2 shrink-0">
-                          <button
-                            onClick={(e) => {
-                               e.stopPropagation();
-                               handleAddToQueue(track);
-                            }}
-                            className="px-4 py-2 rounded-xl bg-primary/10 text-primary hover:bg-primary hover:text-primary-foreground font-black text-[10px] uppercase tracking-widest transition-all active:scale-90"
-                          >
-                            Queue
-                          </button>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
+            {loadedPlaylistTracks.length > 0 ? (
+              <div>
+                <Label right={<button onClick={() => setLoadedPlaylistTracks([])} className="min-h-[32px] text-[10px] uppercase font-bold text-muted-foreground hover:text-white">Clear</button>}>
+                  <span className="text-primary">Imported playlist</span>
+                </Label>
+                <div className="mt-3 max-h-[380px] overflow-y-auto pr-1 space-y-2 custom-scrollbar">
+                  {loadedPlaylistTracks.map((track, i) => (
+                    <TrackRow key={`${track.id}-${i}`} track={track} active={currentTrack?.id === track.id} playing={isPlaying}
+                      onPlay={() => playForDj(track, loadedPlaylistTracks)} onQueue={() => handleAddToQueue(track)} />
+                  ))}
                 </div>
               </div>
-            )}
-
-            {playlist.length > 0 && loadedPlaylistTracks.length === 0 && (
-              <div className="mt-6">
-                <p className="text-[10px] font-black uppercase tracking-[0.4em] text-muted-foreground mb-4">Up Next Queue Deck</p>
-                <div className="h-[400px] overflow-y-auto pr-2 custom-scrollbar">
-                  <div className="space-y-3">
-                    {playlist.map((track) => (
-                      <div
-                        key={track.id}
-                        className={cn(
-                          'w-full flex items-center gap-4 p-3 rounded-2xl transition-all duration-500 group relative overflow-hidden',
-                          currentTrack?.id === track.id
-                            ? 'bg-primary/10 border border-primary/20 shadow-[0_0_30px_rgba(var(--primary),0.1)]'
-                            : 'glass-premium border border-white/5 hover:bg-white/10 hover:border-white/10'
-                        )}
-                      >
-                        {currentTrack?.id === track.id && (
-                          <div className="absolute left-0 top-0 bottom-0 w-1 bg-primary animate-pulse" />
-                        )}
-
-                        <div className="relative shrink-0 group/art">
-                          <img
-                            src={track.thumbnail}
-                            alt={track.title}
-                            className="w-12 h-12 md:w-14 md:h-14 rounded-xl object-cover shadow-lg transition-transform duration-500 group-hover/art:scale-110"
-                            loading="lazy"
-                          />
-                          <button
-                            onClick={() => playForDj(track, playlist)}
-                            className={cn(
-                              "absolute inset-0 flex items-center justify-center rounded-xl bg-black/40 backdrop-blur-[2px] transition-all",
-                              currentTrack?.id === track.id ? "opacity-100" : "opacity-0 group-hover/art:opacity-100"
-                            )}
-                          >
-                            {currentTrack?.id === track.id && isPlaying ? (
-                              <Pause className="w-5 h-5 text-primary fill-current" />
-                            ) : (
-                              <Play className="w-5 h-5 text-white fill-current ml-0.5" />
-                            )}
-                          </button>
-                        </div>
-
-                        <div className="flex-1 min-w-0">
-                          <p className={cn(
-                            'font-bold truncate text-sm md:text-base tracking-tight transition-colors',
-                            currentTrack?.id === track.id ? 'text-primary italic' : 'text-foreground'
-                          )}>
-                            {track.title}
-                          </p>
-                          <div className="flex items-center gap-2 mt-0.5">
-                            <p className="text-[10px] font-black text-muted-foreground/60 uppercase tracking-[0.2em] truncate">{track.channel}</p>
-                          </div>
-                        </div>
-
-                        <div className="flex items-center gap-2 shrink-0">
-                          <button
-                            onClick={(e) => {
-                               e.stopPropagation();
-                               handleAddToQueue(track);
-                            }}
-                            className="px-4 py-2 rounded-xl bg-primary/10 text-primary hover:bg-primary hover:text-primary-foreground font-black text-[10px] uppercase tracking-widest transition-all active:scale-90"
-                          >
-                            Queue
-                          </button>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
+            ) : playlist.length > 0 ? (
+              <div>
+                <Label>Up next</Label>
+                <div className="mt-3 max-h-[380px] overflow-y-auto pr-1 space-y-2 custom-scrollbar">
+                  {playlist.map(track => (
+                    <TrackRow key={track.id} track={track} active={currentTrack?.id === track.id} playing={isPlaying}
+                      onPlay={() => playForDj(track, playlist)} onQueue={() => handleAddToQueue(track)} />
+                  ))}
                 </div>
               </div>
-            )}
-          </div>
+            ) : null}
+          </Panel>
         )}
 
-        {/* ── Now Playing strip ── */}
+        {/* ── Now playing ── */}
         {currentTrack && (
           <div className={cn(
-            'mb-8 flex items-center gap-4 p-4 rounded-2xl border transition-all duration-500',
-            state.active ? 'border-primary/30 bg-primary/5' : 'border-white/5 bg-white/3'
+            'mb-4 flex items-center gap-3 p-3 rounded-2xl border transition-colors duration-500',
+            state.active ? 'border-primary/30 bg-primary/[0.05]' : 'border-white/5 bg-white/[0.03]'
           )}>
-            <div className="relative shrink-0">
-              <img src={currentTrack.thumbnail} className="w-12 h-12 rounded-xl object-cover" />
-              {isPlaying && state.active && (
-                <div className="absolute -inset-1 rounded-xl border-2 border-primary animate-ping opacity-40" />
-              )}
-            </div>
+            <img src={currentTrack.thumbnail} alt="" className="w-11 h-11 rounded-xl object-cover shrink-0" />
             <div className="flex-1 min-w-0">
               <p className="font-black text-sm truncate">{currentTrack.title}</p>
-              <p className="text-xs text-muted-foreground/60 truncate uppercase tracking-widest">{currentTrack.channel}</p>
+              <p className="text-[10px] text-muted-foreground/70 truncate uppercase tracking-widest">{currentTrack.channel}</p>
             </div>
-            <div className="flex items-center gap-2">
-              <div className={cn('w-2 h-2 rounded-full', activeSource === 'background' ? 'bg-primary animate-pulse' : 'bg-red-500')} />
-              <span className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">
-                {activeSource === 'background' ? 'DJ Stream' : 'Not DJ'}
-              </span>
-            </div>
+            <span className={cn(
+              'hidden sm:flex items-center gap-1.5 text-[10px] font-black uppercase tracking-widest',
+              activeSource === 'background' ? 'text-primary' : 'text-red-400'
+            )}>
+              <span className={cn('w-2 h-2 rounded-full', activeSource === 'background' ? 'bg-primary animate-pulse' : 'bg-red-500')} />
+              {activeSource === 'background' ? 'DJ stream' : 'Not DJ'}
+            </span>
             {activeSource !== 'background' && (
               <button onClick={enable} disabled={forcing}
-                className="px-4 py-2 rounded-xl bg-primary text-primary-foreground text-xs font-black uppercase tracking-widest hover:scale-105 transition-all flex items-center gap-2">
-                {forcing ? <Loader2 className="w-3 h-3 animate-spin" /> : <Zap className="w-3 h-3" />}
+                className="shrink-0 min-h-[44px] px-4 rounded-xl text-primary-foreground text-[11px] font-black uppercase tracking-widest active:scale-95 transition-all flex items-center gap-2"
+                style={{ background: ACCENT_GRADIENT }}>
+                {forcing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Zap className="w-3.5 h-3.5" />}
                 Force DJ
               </button>
             )}
           </div>
         )}
 
-        {/* ── Main DJ Console ── */}
-        <div className="grid grid-cols-1 xl:grid-cols-[1fr_280px_1fr] gap-6 mb-6 items-stretch">
-
-          {/* Deck L */}
-          <div className={cn(
-            'relative rounded-[2rem] border overflow-hidden p-6 flex flex-col gap-5 transition-all duration-300',
-            state.active && levels.left > 0.3 ? 'border-primary/40' : 'border-white/8',
-            'bg-gradient-to-b from-white/3 to-transparent backdrop-blur-xl'
-          )}
-            style={{
-              boxShadow: state.active ? `0 0 ${20 + levels.left * 40}px hsl(var(--primary)/${0.05 + levels.left * 0.15})` : 'none'
-            }}>
-            <div className="flex items-center justify-between">
-              <span className="text-[10px] font-black uppercase tracking-[0.5em] text-muted-foreground">« Deck L</span>
-              <div className="flex items-center gap-1.5">
-                {Array.from({ length: 3 }).map((_, j) => (
-                  <div key={j} className={cn('w-1 h-1 rounded-full', j / 3 < levels.left ? 'bg-primary' : 'bg-white/10')} />
-                ))}
-              </div>
-            </div>
-            <div className="flex justify-center py-2">
-              <Vinyl spinning={isPlaying && state.active} level={levels.left} side="L" />
-            </div>
-            <VuMeter level={levels.left} />
-            <div className="space-y-2">
-              <div className="flex justify-between items-center">
-                <span className="text-[9px] font-black uppercase tracking-[0.4em] text-muted-foreground">Gain</span>
-                <span className={cn("text-xs font-black tabular-nums transition-colors", effectiveGainL > 0 ? "text-primary" : "text-red-500/50")}>
-                  {Math.round(effectiveGainL * 100)}%
-                </span>
-              </div>
-              <div className="relative h-3 md:h-2 bg-white/5 rounded-full overflow-hidden">
-                <div className="absolute inset-y-0 left-0 rounded-full transition-all duration-100"
-                  style={{ width: `${effectiveGainL * 100}%`, background: 'linear-gradient(90deg, hsl(var(--primary)), #fff)' }} />
-                <input type="range" min={0} max={100} step={1} value={Math.round(state.leftGain * 100)}
-                  onChange={e => apply({ ...state, leftGain: +e.target.value / 100 })}
-                  className="absolute inset-0 opacity-0 cursor-pointer w-full h-full" />
-              </div>
-              <div className="flex gap-2 mt-1">
-                <button onClick={() => apply({ ...state, leftGain: Math.max(0, state.leftGain - 0.1) })}
-                  className="flex-1 py-2.5 md:py-1.5 rounded-xl bg-white/5 hover:bg-white/10 text-xs font-black transition-all active:scale-95">−</button>
-                <button onClick={() => apply({ ...state, leftGain: Math.min(1, state.leftGain + 0.1) })}
-                  className="flex-1 py-2.5 md:py-1.5 rounded-xl bg-white/5 hover:bg-white/10 text-xs font-black transition-all active:scale-95">+</button>
-              </div>
-            </div>
+        {/* ── Console: both decks always visible (side by side on phones) ── */}
+        <div className="grid grid-cols-2 xl:grid-cols-[1fr_340px_1fr] gap-3 md:gap-4 items-start">
+          <div className="order-1">
+            <Deck side="L" level={levels.left} gain={state.leftGain} liveGain={effectiveGainL}
+              onGain={v => apply({ leftGain: v })} spinning={spinning} art={currentTrack?.thumbnail}
+              solo={soloLeft} muted={soloRight} onSolo={() => toggleSolo('left')} />
+          </div>
+          <div className="order-2 xl:order-3">
+            <Deck side="R" level={levels.right} gain={state.rightGain} liveGain={effectiveGainR}
+              onGain={v => apply({ rightGain: v })} spinning={spinning} art={currentTrack?.thumbnail}
+              solo={soloRight} muted={soloLeft} onSolo={() => toggleSolo('right')} />
           </div>
 
-          {/* ── Center Column: Crossfader + Master + Auto DJ ── */}
-          <div className="flex flex-col gap-4">
-            {/* Master level */}
-            <div className="rounded-2xl border border-white/8 bg-white/3 backdrop-blur-xl p-5 flex flex-col items-center gap-3">
-              <Activity className="w-5 h-5 text-primary" />
-              <span className="text-[9px] font-black uppercase tracking-[0.4em] text-muted-foreground">Master Level</span>
-              <VuMeter level={totalLevel} />
-              <div className="w-full h-1.5 rounded-full bg-white/5 overflow-hidden">
-                <div className="h-full bg-primary transition-all duration-75 rounded-full"
-                  style={{ width: `${totalLevel * 100}%` }} />
-              </div>
-            </div>
+          {/* Section tabs (phones / tablets). On wide screens everything is visible at once. */}
+          <nav className="order-3 col-span-2 xl:hidden grid grid-cols-4 gap-1.5 p-1.5 rounded-2xl bg-white/[0.04] border border-white/[0.08]" aria-label="Mixer sections">
+            {TABS.map(({ key, label, Icon }) => (
+              <button key={key} onClick={() => { buzz(); setTab(key); }} aria-pressed={tab === key}
+                className={cn(
+                  'min-h-[48px] rounded-xl flex flex-col items-center justify-center gap-0.5 text-[10px] font-black uppercase tracking-widest transition-all active:scale-95',
+                  tab === key ? 'text-primary-foreground shadow-[0_0_18px_hsl(var(--primary)/0.35)]' : 'text-muted-foreground hover:text-white'
+                )}
+                style={tab === key ? { background: ACCENT_GRADIENT } : undefined}>
+                <Icon className="w-4 h-4" />
+                {label}
+              </button>
+            ))}
+          </nav>
 
-            {/* Auto DJ Mode Toggle */}
+          {/* ── Mix: master meter, Auto DJ, crossfader ── */}
+          <div className={cn('order-4 col-span-2 xl:order-2 xl:col-span-1 flex-col gap-3', tab === 'mix' ? 'flex' : 'hidden', 'xl:flex')}>
+            <Panel>
+              <Label right={<span className="text-[10px] font-black tabular-nums text-primary">{Math.round(totalLevel * 100)}%</span>}>Master level</Label>
+              <LevelMeter level={totalLevel} segments={20} className="mt-3 h-6" />
+            </Panel>
+
+            {/* Auto DJ */}
             <div className="flex flex-col gap-2">
               <button
-                onClick={async () => {
-                  if (!state.active) {
-                    const ok = await enable();
-                    if (ok) {
-                      setAutoDjActive(true);
-                      toast.success('Auto DJ Mode Activated');
-                    }
-                  } else {
-                    const newState = !autoDjActive;
-                    setAutoDjActive(newState);
-                    if (newState) toast.success('Auto DJ Mode Activated');
-                    else toast.info('Auto DJ Mode Disabled');
-                  }
-                }}
+                onClick={toggleAuto}
+                aria-pressed={autoDjActive}
                 className={cn(
-                  'w-full py-4 rounded-2xl font-black text-xs uppercase tracking-[0.2em] transition-all flex flex-col items-center gap-2 border',
-                  autoDjActive 
-                    ? 'bg-primary text-primary-foreground border-primary shadow-[0_0_30px_hsl(var(--primary)/0.4)] scale-[1.02]'
-                    : 'bg-white/5 border-white/10 hover:bg-white/10'
+                  'w-full min-h-[84px] py-4 rounded-3xl font-black uppercase tracking-[0.2em] transition-all duration-200 flex flex-col items-center justify-center gap-1.5 border active:scale-[0.98]',
+                  autoDjActive ? 'text-primary-foreground border-transparent' : 'bg-white/[0.04] border-white/10 hover:bg-white/[0.08]'
                 )}
+                style={autoDjActive ? {
+                  background: 'linear-gradient(135deg, hsl(var(--primary)), #ff8a00)',
+                  boxShadow: `0 0 ${beat ? 44 : 24}px hsl(var(--primary) / ${beat ? 0.55 : 0.3})`,
+                  transform: beat ? 'scale(1.015)' : undefined,
+                } : undefined}
               >
-                <div className="flex items-center gap-2">
-                  <Wand2 className={cn("w-5 h-5", autoDjActive && "animate-spin")} style={{ animationDuration: '3s' }} />
-                  <span>Auto DJ Mode</span>
-                </div>
-                <span className="text-[8px] opacity-60">
-                  {forcing ? 'INITIALIZING...' : autoDjActive ? `ACTIVE · ${state.auto.style.toUpperCase()} · ${bpm} BPM` : 'READY TO MIX'}
+                <span className="flex items-center gap-2 text-sm">
+                  <Wand2 className={cn('w-5 h-5', autoDjActive && 'animate-spin')} style={{ animationDuration: '3s' }} />
+                  Auto DJ Mode
+                </span>
+                <span className="text-[10px] opacity-70 tracking-[0.15em]">
+                  {forcing ? 'Initializing…' : autoDjActive ? `Active · ${state.auto.style} · ${bpm} BPM` : 'Tap to let the DJ mix for you'}
                 </span>
               </button>
 
-              {/* Mixing style */}
-              <div className="grid grid-cols-3 gap-1.5">
-                {([['chill', 'Chill'], ['club', 'Club'], ['insane', 'Insane']] as [DjAutoStyle, string][]).map(([key, label]) => (
-                  <button
-                    key={key}
-                    onClick={() => apply({ auto: { style: key } })}
+              <div className="grid grid-cols-3 gap-2" role="group" aria-label="Auto DJ style">
+                {STYLES.map(({ key, label, hint }) => (
+                  <button key={key} onClick={() => { buzz(); apply({ auto: { style: key } }); }} aria-pressed={state.auto.style === key}
                     className={cn(
-                      "py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all border",
+                      'min-h-[52px] rounded-2xl border flex flex-col items-center justify-center transition-all active:scale-95',
                       state.auto.style === key
-                        ? key === 'insane' ? "bg-purple-500/20 border-purple-400/50 text-purple-300" : "bg-primary/20 border-primary/40 text-primary"
-                        : "bg-transparent border-white/5 text-muted-foreground hover:text-white"
-                    )}
-                  >
-                    {label}
+                        ? key === 'insane' ? 'bg-purple-500/20 border-purple-400/60 text-purple-200' : 'bg-primary/15 border-primary/50 text-primary'
+                        : 'bg-white/[0.03] border-white/[0.06] text-muted-foreground hover:text-white'
+                    )}>
+                    <span className="text-[11px] font-black uppercase tracking-widest">{label}</span>
+                    <span className="text-[9px] opacity-60 font-medium">{hint}</span>
                   </button>
                 ))}
               </div>
 
-              {/* Smart Bass Toggle */}
-              <button 
-                onClick={() => setSmartBass(v => !v)}
-                className={cn(
-                  "w-full py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all border flex items-center justify-center gap-2",
-                  smartBass 
-                    ? "bg-primary text-primary-foreground border-primary shadow-[0_0_20px_hsl(var(--primary)/0.3)]" 
-                    : "bg-white/5 border-white/10 text-muted-foreground hover:bg-white/10 hover:text-white"
-                )}
-              >
-                <Zap className={cn("w-3.5 h-3.5", smartBass && "animate-pulse")} />
-                {smartBass ? "Smart Bass Active" : "Enable Smart Bass"}
-              </button>
+              <Chip on={smartBass} onClick={() => setSmartBass(v => !v)} className="w-full">
+                <Zap className={cn('w-3.5 h-3.5', smartBass && 'animate-pulse')} />
+                {smartBass ? 'Smart Bass active' : 'Enable Smart Bass'}
+              </Chip>
             </div>
 
             {/* Crossfader */}
-            <div className="rounded-2xl border border-white/8 bg-white/3 backdrop-blur-xl p-5 space-y-3">
-              <div className="flex justify-between items-center">
-                <span className="text-[9px] font-black uppercase tracking-[0.4em] text-muted-foreground">Crossfader</span>
-                <span className="text-[10px] font-black text-primary">
+            <Panel>
+              <Label right={
+                <span className="text-[11px] font-black text-primary tabular-nums">
                   {Math.abs(liveBalance) < 0.01 ? 'CENTER' : liveBalance < 0 ? `${Math.round(-liveBalance * 100)}% L` : `${Math.round(liveBalance * 100)}% R`}
                 </span>
+              }>Crossfader</Label>
+              <div className="mt-1">
+                <HFader ariaLabel="Crossfader" center min={-100} max={100}
+                  value={Math.round(state.balance * 100)} live={Math.round(liveBalance * 100)}
+                  onChange={v => apply({ balance: v / 100 })} />
               </div>
-              <div className="relative h-2 bg-white/5 rounded-full overflow-hidden">
-                <div className="absolute inset-y-0 rounded-full transition-all duration-75"
-                  style={{
-                    left: `${liveBalance <= 0 ? 50 + liveBalance * 50 : 50}%`,
-                    right: `${liveBalance >= 0 ? 50 - liveBalance * 50 : 50}%`,
-                    background: 'hsl(var(--primary))',
-                    minWidth: 4
-                  }} />
-                <input type="range" min={-100} max={100} step={1} value={Math.round(state.balance * 100)}
-                  onChange={e => apply({ ...state, balance: +e.target.value / 100 })}
-                  className="absolute inset-0 opacity-0 cursor-pointer w-full" />
-              </div>
-              <div className="flex justify-between text-[9px] font-black uppercase tracking-widest text-muted-foreground/40">
+              <div className="flex justify-between text-[10px] font-black uppercase tracking-widest text-muted-foreground/50 -mt-1 mb-3 px-1">
                 <span>L</span><span>Mix</span><span>R</span>
               </div>
-              <div className="flex gap-1.5 pt-1">
-                {[['◄◄ L', -1], ['Center', 0], ['R ►►', 1]].map(([lbl, val]) => (
-                  <button key={String(lbl)} onClick={() => apply({ ...state, balance: +val })}
-                    className="flex-1 py-1.5 rounded-xl bg-white/5 hover:bg-primary/20 hover:text-primary text-[8px] font-black uppercase tracking-widest transition-all">
+              <div className="grid grid-cols-3 gap-2">
+                {([['◄ L', -1], ['Center', 0], ['R ►', 1]] as [string, number][]).map(([lbl, val]) => (
+                  <button key={lbl} onClick={() => { buzz(); apply({ balance: val }); }}
+                    className="min-h-[44px] rounded-xl bg-white/[0.05] hover:bg-primary/20 hover:text-primary text-[11px] font-black uppercase tracking-widest transition-all active:scale-95">
                     {lbl}
                   </button>
                 ))}
               </div>
-            </div>
-
-            {/* EQ */}
-            <div className="rounded-2xl border border-white/8 bg-white/3 backdrop-blur-xl p-5 space-y-3 flex-1">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <Music2 className="w-4 h-4 text-primary" />
-                  <span className="text-[9px] font-black uppercase tracking-[0.4em] text-muted-foreground">3-Band EQ</span>
-                </div>
-                <button 
-                  onClick={() => setUseBackgroundAudioOnly(v => !v)}
-                  className={cn(
-                    "px-2 py-1 rounded-md text-[8px] font-black uppercase tracking-tighter transition-all border",
-                    useBackgroundAudioOnly ? "bg-primary border-primary text-primary-foreground" : "bg-white/5 border-white/10 text-muted-foreground"
-                  )}
-                >
-                  {useBackgroundAudioOnly ? "No Limit ON" : "No Limit OFF"}
-                </button>
-              </div>
-              <div className="flex justify-around items-start pt-2">
-                <EQFader label="Bass" auto={eqAuto} value={eqAuto && liveFx ? liveFx.low : state.low} onChange={v => apply({ low: v })} />
-                <EQFader label="Mid" auto={eqAuto} value={eqAuto && liveFx ? liveFx.mid : state.mid} onChange={v => apply({ mid: v })} />
-                <EQFader label="High" auto={eqAuto} value={eqAuto && liveFx ? liveFx.high : state.high} onChange={v => apply({ high: v })} />
-              </div>
-            </div>
-          </div>
-
-          {/* Deck R */}
-          <div className={cn(
-            'relative rounded-[2rem] border overflow-hidden p-4 md:p-6 flex flex-col gap-4 md:gap-5 transition-all duration-300',
-            state.active && levels.right > 0.3 ? 'border-primary/40' : 'border-white/8',
-            'bg-gradient-to-b from-white/3 to-transparent backdrop-blur-xl',
-            activeDeck === 'L' && 'hidden xl:flex'
-          )}
-            style={{
-              boxShadow: state.active ? `0 0 ${20 + levels.right * 40}px hsl(var(--primary)/${0.05 + levels.right * 0.15})` : 'none'
-            }}>
-            <div className="flex items-center justify-between">
-              <span className="text-[10px] font-black uppercase tracking-[0.5em] text-muted-foreground">Deck R »</span>
-              <div className="flex items-center gap-1.5">
-                {Array.from({ length: 3 }).map((_, j) => (
-                  <div key={j} className={cn('w-1 h-1 rounded-full', j / 3 < levels.right ? 'bg-primary' : 'bg-white/10')} />
-                ))}
-              </div>
-            </div>
-            <div className="flex justify-center py-2">
-              <Vinyl spinning={isPlaying && state.active} level={levels.right} side="R" />
-            </div>
-            <VuMeter level={levels.right} />
-            <div className="space-y-2">
-              <div className="flex justify-between items-center">
-                <span className="text-[9px] font-black uppercase tracking-[0.4em] text-muted-foreground">Gain</span>
-                <span className={cn("text-xs font-black tabular-nums transition-colors", effectiveGainR > 0 ? "text-primary" : "text-red-500/50")}>
-                  {Math.round(effectiveGainR * 100)}%
-                </span>
-              </div>
-              <div className="relative h-3 md:h-2 bg-white/5 rounded-full overflow-hidden">
-                <div className="absolute inset-y-0 left-0 rounded-full transition-all duration-100"
-                  style={{ width: `${effectiveGainR * 100}%`, background: 'linear-gradient(90deg, hsl(var(--primary)), #fff)' }} />
-                <input type="range" min={0} max={100} step={1} value={Math.round(state.rightGain * 100)}
-                  onChange={e => apply({ ...state, rightGain: +e.target.value / 100 })}
-                  className="absolute inset-0 opacity-0 cursor-pointer w-full h-full" />
-              </div>
-              <div className="flex gap-2 mt-1">
-                <button onClick={() => apply({ ...state, rightGain: Math.max(0, state.rightGain - 0.1) })}
-                  className="flex-1 py-2.5 md:py-1.5 rounded-xl bg-white/5 hover:bg-white/10 text-xs font-black transition-all active:scale-95">−</button>
-                <button onClick={() => apply({ ...state, rightGain: Math.min(1, state.rightGain + 0.1) })}
-                  className="flex-1 py-2.5 md:py-1.5 rounded-xl bg-white/5 hover:bg-white/10 text-xs font-black transition-all active:scale-95">+</button>
-              </div>
-            </div>
+              {autoDjActive && state.auto.pan && (
+                <p className="mt-2 text-[10px] text-muted-foreground/60">The white diamond is where Auto DJ is moving the mix right now.</p>
+              )}
+            </Panel>
           </div>
         </div>
 
-        {/* ── Mixer: master, bass boost, channel mode, per-effect switches ── */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-6">
-          <div className="rounded-2xl border border-white/8 bg-white/3 backdrop-blur-xl p-5 space-y-5">
-            <div className="flex items-center justify-between">
-              <span className="text-[9px] font-black uppercase tracking-[0.5em] text-muted-foreground">Master &amp; Bass</span>
-              <span className="text-[9px] font-black text-primary/80 tabular-nums">{state.active ? `${bpm} BPM` : '—'}</span>
+        {/* ── EQ · Sound · FX ── */}
+        <div className="grid grid-cols-1 xl:grid-cols-3 gap-3 md:gap-4 mt-3 md:mt-4 items-start">
+          {/* EQ */}
+          <Panel className={tabClass('eq')}>
+            <Label right={
+              <button onClick={() => { buzz(); setUseBackgroundAudioOnly(v => !v); }} aria-pressed={useBackgroundAudioOnly}
+                title="Streams audio through the DJ engine so effects can reach it"
+                className={cn(
+                  'min-h-[32px] px-3 rounded-lg text-[9px] font-black uppercase tracking-wider border transition-all',
+                  useBackgroundAudioOnly ? 'bg-primary border-primary text-primary-foreground' : 'bg-white/5 border-white/10 text-muted-foreground'
+                )}>
+                No limit {useBackgroundAudioOnly ? 'on' : 'off'}
+              </button>
+            }>
+              <span className="inline-flex items-center gap-2"><Music2 className="w-4 h-4 text-primary" /> 3-band EQ</span>
+            </Label>
+            <div className="flex justify-around items-start pt-4 pb-2">
+              <VFader label="Bass" auto={eqAuto} value={eqAuto && liveFx ? liveFx.low : state.low} onChange={v => apply({ low: v })} />
+              <VFader label="Mid" auto={eqAuto} value={eqAuto && liveFx ? liveFx.mid : state.mid} onChange={v => apply({ mid: v })} />
+              <VFader label="High" auto={eqAuto} value={eqAuto && liveFx ? liveFx.high : state.high} onChange={v => apply({ high: v })} />
             </div>
-            <Spectrum getData={getFrequencyData} active={state.active} />
-            <MixSlider label="Master Volume" value={Math.min(1, state.master)} onChange={v => apply({ master: v })} />
-            <MixSlider label="Bass Boost" value={state.bassBoost} onChange={v => apply({ bassBoost: v })}
-              hint="Smooth sub-bass lift with built-in limiter — no distortion." />
-          </div>
-
-          <div className="rounded-2xl border border-white/8 bg-white/3 backdrop-blur-xl p-5 space-y-4">
-            <span className="text-[9px] font-black uppercase tracking-[0.5em] text-muted-foreground">Channel Output</span>
-            <div className="grid grid-cols-3 gap-2">
-              {([['left', '◄ Left only'], ['stereo', 'Stereo'], ['right', 'Right only ►']] as [DjChannelMode, string][]).map(([mode, label]) => (
-                <button key={mode} onClick={() => apply({ channelMode: mode })}
-                  className={cn(
-                    'py-3 rounded-xl border text-[10px] font-black uppercase tracking-wider transition-all active:scale-95',
-                    state.channelMode === mode ? 'bg-primary text-primary-foreground border-primary shadow-[0_0_18px_hsl(var(--primary)/0.4)]' : 'bg-white/5 border-white/10 text-muted-foreground hover:text-white'
-                  )}>
-                  {label}
+            <p className="text-center text-[10px] text-muted-foreground/50 mb-3">Drag a fader · double-tap to reset to 0</p>
+            <div className="flex gap-2 overflow-x-auto pb-1 -mx-1 px-1 scrollbar-none">
+              {presets.map(p => (
+                <button key={p.label} onClick={() => { buzz(); p.fn(); }}
+                  className="shrink-0 min-h-[44px] px-4 rounded-xl border border-white/10 bg-white/[0.04] hover:bg-primary/20 hover:border-primary/40 hover:text-primary text-[11px] font-black uppercase tracking-wider transition-all active:scale-95">
+                  {p.label}
                 </button>
               ))}
             </div>
-            <p className="text-[9px] text-muted-foreground/60">Use headphones: Left only silences the right ear and vice-versa. Set each side's volume with the deck gain sliders.</p>
-            <button onClick={reset}
-              className="w-full py-3 rounded-xl border border-white/10 bg-white/5 hover:bg-primary/20 hover:text-primary text-[10px] font-black uppercase tracking-widest transition-all flex items-center justify-center gap-2 active:scale-95">
-              <RotateCcw className="w-3.5 h-3.5" /> Reset everything
-            </button>
-          </div>
+          </Panel>
 
-          <div className="rounded-2xl border border-white/8 bg-white/3 backdrop-blur-xl p-5 space-y-4">
-            <span className="text-[9px] font-black uppercase tracking-[0.5em] text-muted-foreground">Effect Switches</span>
-            <div className="flex flex-wrap gap-2">
-              <FxChip label="L/R + Balance" on={state.fx.channels} onClick={() => apply({ fx: { channels: !state.fx.channels } })} />
-              <FxChip label="3-Band EQ" on={state.fx.eq} onClick={() => apply({ fx: { eq: !state.fx.eq } })} />
-              <FxChip label="Bass Boost" on={state.fx.bass} onClick={() => apply({ fx: { bass: !state.fx.bass } })} />
+          {/* Sound */}
+          <Panel className={cn(tabClass('sound'), 'space-y-4')}>
+            <Label right={<span className="text-[10px] font-black text-primary tabular-nums">{state.active ? `${bpm} BPM` : '—'}</span>}>Master &amp; bass</Label>
+            <Spectrum getData={getFrequencyData} active={state.active} />
+            <SliderRow label="Master volume" value={Math.min(1, state.master)} onChange={v => apply({ master: v })} />
+            <SliderRow label="Bass boost" value={state.bassBoost} onChange={v => apply({ bassBoost: v })}
+              hint="Smooth sub-bass lift with a built-in limiter — no distortion." />
+            <div>
+              <Label>Channel output</Label>
+              <div className="grid grid-cols-3 gap-2 mt-2" role="group" aria-label="Channel output">
+                {([['left', '◄ Left'], ['stereo', 'Stereo'], ['right', 'Right ►']] as [DjChannelMode, string][]).map(([mode, label]) => (
+                  <button key={mode} onClick={() => { buzz(); apply({ channelMode: mode }); }} aria-pressed={state.channelMode === mode}
+                    className={cn(
+                      'min-h-[48px] rounded-xl border text-[11px] font-black uppercase tracking-wider transition-all active:scale-95',
+                      state.channelMode === mode ? 'text-primary-foreground border-transparent shadow-[0_0_18px_hsl(var(--primary)/0.4)]' : 'bg-white/[0.04] border-white/10 text-muted-foreground hover:text-white'
+                    )}
+                    style={state.channelMode === mode ? { background: ACCENT_GRADIENT } : undefined}>
+                    {label}
+                  </button>
+                ))}
+              </div>
+              <p className="mt-2 text-[10px] text-muted-foreground/60">Use headphones: Left silences the right ear and vice-versa.</p>
             </div>
-            <div className="pt-1">
-              <p className="text-[9px] font-black uppercase tracking-[0.4em] text-muted-foreground/70 mb-2">
-                Auto DJ moves {autoDjActive ? '· live' : '· off'}
-              </p>
-              <div className="flex flex-wrap gap-2">
-                <FxChip label="Auto-Pan" on={state.auto.pan} onClick={() => apply({ auto: { pan: !state.auto.pan } })} />
-                <FxChip label="Bass Swell" on={state.auto.bass} onClick={() => apply({ auto: { bass: !state.auto.bass } })} />
-                <FxChip label="Filter Sweep" on={state.auto.filter} onClick={() => apply({ auto: { filter: !state.auto.filter } })} />
-                <FxChip label="Pump" on={state.auto.pump} onClick={() => apply({ auto: { pump: !state.auto.pump } })} />
+          </Panel>
+
+          {/* FX */}
+          <Panel className={cn(tabClass('fx'), 'space-y-4')}>
+            <div>
+              <Label>Effect switches</Label>
+              <div className="grid grid-cols-2 gap-2 mt-3">
+                <Chip on={state.fx.channels} onClick={() => apply({ fx: { channels: !state.fx.channels } })}>L/R + Balance</Chip>
+                <Chip on={state.fx.eq} onClick={() => apply({ fx: { eq: !state.fx.eq } })}>3-Band EQ</Chip>
+                <Chip on={state.fx.bass} onClick={() => apply({ fx: { bass: !state.fx.bass } })} className="col-span-2">Bass boost</Chip>
+              </div>
+            </div>
+            <div>
+              <Label right={<span className={cn('text-[10px] font-black uppercase', autoDjActive ? 'text-primary' : 'text-muted-foreground/50')}>{autoDjActive ? 'live' : 'off'}</span>}>Auto DJ moves</Label>
+              <div className="grid grid-cols-2 gap-2 mt-3">
+                <Chip on={state.auto.pan} onClick={() => apply({ auto: { pan: !state.auto.pan } })}>Auto-pan</Chip>
+                <Chip on={state.auto.bass} onClick={() => apply({ auto: { bass: !state.auto.bass } })}>Bass swell</Chip>
+                <Chip on={state.auto.filter} onClick={() => apply({ auto: { filter: !state.auto.filter } })}>Filter sweep</Chip>
+                <Chip on={state.auto.pump} onClick={() => apply({ auto: { pump: !state.auto.pump } })}>Pump</Chip>
               </div>
               {autoDjActive && (
                 <button onClick={() => setAutoDjActive(false)}
-                  className="mt-3 w-full py-2.5 rounded-xl border border-primary/40 bg-primary/10 text-primary text-[10px] font-black uppercase tracking-widest active:scale-95">
+                  className="mt-3 w-full min-h-[48px] rounded-xl border border-primary/40 bg-primary/10 text-primary text-[11px] font-black uppercase tracking-widest active:scale-95 transition-all">
                   Take manual control
                 </button>
               )}
             </div>
-          </div>
+            <button onClick={() => { buzz(); reset(); }}
+              className="w-full min-h-[48px] rounded-xl border border-white/10 bg-white/[0.04] hover:bg-primary/20 hover:text-primary text-[11px] font-black uppercase tracking-widest transition-all flex items-center justify-center gap-2 active:scale-95">
+              <RotateCcw className="w-3.5 h-3.5" /> Reset everything
+            </button>
+          </Panel>
         </div>
 
-        {/* ── Presets ── */}
-        <div className="rounded-2xl border border-white/8 bg-white/3 backdrop-blur-xl p-5">
-          <p className="text-[9px] font-black uppercase tracking-[0.5em] text-muted-foreground mb-4">Quick Presets</p>
-          <div className="flex flex-wrap gap-2">
-            {presets.map(p => (
-              <button key={p.label} onClick={p.fn}
-                className="px-5 py-2.5 rounded-2xl border border-white/10 bg-white/5 hover:bg-primary/20 hover:border-primary/40 hover:text-primary text-xs font-black uppercase tracking-widest transition-all active:scale-95">
-                {p.label}
-              </button>
-            ))}
-          </div>
-        </div>
-      </div>
+        {/* Desktop shortcut hints */}
+        <p className="hidden xl:flex flex-wrap items-center gap-x-5 gap-y-1 mt-4 text-[10px] font-bold uppercase tracking-widest text-muted-foreground/40">
+          <span>Shortcuts</span>
+          <span><kbd className="px-1.5 py-0.5 rounded bg-white/10 text-white/70">A</kbd> Auto DJ</span>
+          <span><kbd className="px-1.5 py-0.5 rounded bg-white/10 text-white/70">C</kbd> Center</span>
+          <span><kbd className="px-1.5 py-0.5 rounded bg-white/10 text-white/70">[</kbd> <kbd className="px-1.5 py-0.5 rounded bg-white/10 text-white/70">]</kbd> Crossfade</span>
+          <span><kbd className="px-1.5 py-0.5 rounded bg-white/10 text-white/70">B</kbd> Smart bass</span>
+        </p>
+      </main>
 
       {currentTrack && (
         <MusicPlayer
