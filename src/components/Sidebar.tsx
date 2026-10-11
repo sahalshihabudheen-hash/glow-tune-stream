@@ -1,4 +1,4 @@
-import { Home, Search, ListMusic, Heart, Settings, Menu, X, Users, Shield, Gamepad2, Sparkles, AlertTriangle, Wand2, Headphones, Play, Disc3, Download, MonitorSmartphone, BarChart3, Orbit, Instagram } from 'lucide-react';
+import { Home, Search, ListMusic, Heart, Settings, Menu, X, Users, Shield, Gamepad2, Sparkles, AlertTriangle, Wand2, Headphones, Download, MonitorSmartphone, BarChart3, Orbit, Instagram } from 'lucide-react';
 import { useState, useEffect, useLayoutEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { cn } from '@/lib/utils';
@@ -8,8 +8,6 @@ import { useAuth } from '@/hooks/useAuth';
 import { useMaintenanceMode } from '@/hooks/useMaintenanceMode';
 import { useAppSettings } from '@/hooks/useAppSettings';
 import { supabase } from '@/integrations/supabase/client';
-import { useMusicPlayer } from '@/contexts/MusicPlayerContext';
-import { famousSongs } from '@/data/famousSongs';
 import { motion, AnimatePresence } from 'motion/react';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 
@@ -86,7 +84,6 @@ const Sidebar = ({ activeTab, onTabChange }: SidebarProps) => {
   const { user } = useAuth();
   const { maintenance } = useMaintenanceMode();
   const { settings: appSettings } = useAppSettings();
-  const { handlePlayTrack, currentTrack } = useMusicPlayer();
 
   useEffect(() => {
     const checkAdmin = async () => {
@@ -161,10 +158,30 @@ const Sidebar = ({ activeTab, onTabChange }: SidebarProps) => {
     return false;
   };
 
-  // Other songs to display in the expanded bottom panel
-  const recommendedSongs = famousSongs
-    .filter(track => !currentTrack || track.id !== currentTrack.id)
-    .slice(0, 4);
+  // Mobile "More" sheet: destinations grouped by purpose. Anything not listed
+  // (new pages, custom tabs) falls into a trailing "More" group so nothing disappears.
+  const MORE_GROUPS: { title: string; ids: string[] }[] = [
+    { title: 'Browse', ids: ['home', 'search', 'artists', 'playlists', 'favorites'] },
+    { title: 'Studio', ids: ['dj', 'ai-dj', 'universe', 'games'] },
+    { title: 'Your library', ids: ['offline', 'stats', 'instagram', 'get-app'] },
+    { title: 'App', ids: ['settings', 'admin'] },
+  ];
+  const groupedMore = (() => {
+    const used = new Set<string>();
+    const groups: { title: string; items: typeof menuItems; start: number }[] = [];
+    let start = 0;
+    const push = (title: string, items: typeof menuItems) => {
+      if (!items.length) return;
+      items.forEach(i => used.add(i.id));
+      groups.push({ title, items, start });
+      start += items.length;
+    };
+    MORE_GROUPS.forEach(g =>
+      push(g.title, g.ids.map(id => menuItems.find(m => m.id === id)).filter((m): m is typeof menuItems[0] => !!m))
+    );
+    push('More', menuItems.filter(m => !used.has(m.id)));
+    return groups;
+  })();
 
   // ---- Mobile bottom bar: bubble + notch follow the active tab ----
   const barItems = (userSettings.mobileNavItems || ['home', 'playlists', 'favorites', 'settings'])
@@ -271,7 +288,7 @@ const Sidebar = ({ activeTab, onTabChange }: SidebarProps) => {
         </div>
       </nav>
 
-      {/* Mobile Expanding Bottom Sheet panel */}
+      {/* Mobile "More" bottom sheet */}
       <AnimatePresence>
         {moreExpanded && (
           <>
@@ -290,106 +307,84 @@ const Sidebar = ({ activeTab, onTabChange }: SidebarProps) => {
               animate={{ y: 0 }}
               exit={{ y: "100%" }}
               transition={{ type: "spring", damping: 28, stiffness: 280 }}
-              className="md:hidden fixed bottom-16 left-0 right-0 bg-sidebar/95 backdrop-blur-2xl border-t border-sidebar-foreground/10 rounded-t-[2.5rem] z-[150] shadow-[0_-15px_35px_rgba(0,0,0,0.6)] overflow-y-auto max-h-[75vh] scrollbar-none pb-8"
+              role="dialog"
+              aria-label="Menu"
+              className="md:hidden fixed bottom-16 left-0 right-0 bg-sidebar/95 backdrop-blur-2xl border-t border-primary/15 rounded-t-[2.5rem] z-[150] shadow-[0_-15px_35px_rgba(0,0,0,0.6)] overflow-y-auto overscroll-contain max-h-[78vh] scrollbar-none pb-5"
             >
+              {/* Soft brand glow along the top edge */}
+              <div className="pointer-events-none absolute inset-x-0 top-0 h-28 rounded-t-[2.5rem] bg-gradient-to-b from-primary/[0.12] to-transparent" />
+
               {/* Drag Indicator handle */}
-              <div 
+              <div
                 onClick={() => setMoreExpanded(false)}
-                className="w-12 h-1 rounded-full bg-muted-foreground/30 mx-auto my-3.5 cursor-pointer active:bg-muted-foreground/60 transition-colors"
+                className="relative w-12 h-1 rounded-full bg-muted-foreground/30 mx-auto mt-3.5 mb-2 cursor-pointer active:bg-muted-foreground/60 transition-colors"
               />
 
-              {/* Title / Logo Header inside drawer */}
-              <div className="px-6 py-2 flex items-center justify-between">
-                <div>
-                  <h3 className="text-sm font-bold tracking-tight uppercase text-primary">Discover & Play</h3>
-                  <p className="text-[9px] text-muted-foreground">Quick menu & premium selections</p>
+              {/* Header: brand + close */}
+              <div className="relative px-5 pt-2 pb-3 flex items-center gap-3">
+                <img
+                  src={appSettings.app_logo_url || nyraLogo}
+                  alt=""
+                  className="w-10 h-10 rounded-xl object-cover shrink-0 ring-1 ring-primary/30"
+                />
+                <div className="flex-1 min-w-0">
+                  <h3 className="text-base font-extrabold tracking-tight text-foreground leading-tight truncate">{appSettings.app_name}</h3>
+                  <p className="text-[11px] text-muted-foreground">Jump to anything</p>
                 </div>
                 <button
                   onClick={() => setMoreExpanded(false)}
-                  className="w-7 h-7 rounded-full bg-white/5 flex items-center justify-center text-muted-foreground hover:text-foreground active:scale-95"
+                  aria-label="Close menu"
+                  className="w-10 h-10 rounded-full bg-white/[0.06] flex items-center justify-center text-muted-foreground hover:text-foreground active:scale-90 transition-transform touch-manipulation"
                 >
                   <X className="w-4 h-4" />
                 </button>
               </div>
 
-              {/* Grid of Other All Buttons (excluding ones already in the bottom bar) */}
-              <div className="px-5 py-4">
-                <p className="text-[9px] font-bold text-muted-foreground uppercase tracking-widest mb-2 px-1">Channels & Controls</p>
-                <div className="grid grid-cols-4 gap-2">
-                  {menuItems.map((item) => {
-                    const Icon = item.icon;
-                    const isActive = isItemActive(item);
-                    return (
-                      <button
-                        key={item.id}
-                        onClick={() => handleNavClick(item)}
-                        className={cn(
-                          "flex flex-col items-center justify-center p-2.5 rounded-2xl border transition-all duration-300 active:scale-95 touch-manipulation cursor-pointer",
-                          isActive 
-                            ? "bg-sidebar-foreground border-transparent text-sidebar font-bold shadow-md" 
-                            : "bg-white/[0.02] border-white/5 text-muted-foreground hover:text-foreground hover:bg-white/[0.05]"
-                        )}
-                      >
-                        <div className={cn(
-                          "w-8 h-8 rounded-full flex items-center justify-center mb-1.5",
-                          isActive ? "bg-sidebar/10" : "bg-white/[0.04]"
-                        )}>
-                          <Icon className="w-4 h-4" />
-                        </div>
-                        <span className="text-[10px] text-center font-medium leading-tight truncate w-full">{item.label}</span>
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-
-              {/* Section 2: "Other Music Also There" (List of hot tracks for instant play) */}
-              <div className="px-5 py-3 border-t border-white/5">
-                <div className="flex items-center justify-between mb-2.5 px-1">
-                  <p className="text-[9px] font-bold text-muted-foreground uppercase tracking-widest">Other Hot Music</p>
-                  <span className="text-[8px] px-1.5 py-0.5 rounded bg-primary/20 text-primary uppercase font-bold tracking-wider">Tap to Play</span>
-                </div>
-                
-                <div className="space-y-2">
-                  {recommendedSongs.map((track) => (
-                    <div
-                      key={track.id}
-                      onClick={() => {
-                        handlePlayTrack(track);
-                        setMoreExpanded(false);
-                      }}
-                      className={cn(
-                        "flex items-center gap-3 p-2 rounded-xl transition-all duration-300 active:scale-[0.98] border border-white/[0.03] bg-white/[0.01] hover:bg-white/[0.04] cursor-pointer",
-                        currentTrack?.id === track.id ? "border-primary/20 bg-primary/5" : ""
-                      )}
-                    >
-                      <div className="relative w-10 h-10 rounded-lg overflow-hidden shrink-0 border border-white/5">
-                        <img src={track.thumbnail} alt="" className="w-full h-full object-cover" />
-                        {currentTrack?.id === track.id && (
-                          <div className="absolute inset-0 bg-black/40 flex items-center justify-center">
-                            <Disc3 className="w-4 h-4 text-primary animate-spin" />
-                          </div>
-                        )}
-                      </div>
-                      
-                      <div className="flex-1 min-w-0">
-                        <p className={cn(
-                          "text-xs font-semibold truncate leading-snug",
-                          currentTrack?.id === track.id ? "text-primary" : "text-foreground"
-                        )}>
-                          {track.title}
-                        </p>
-                        <p className="text-[9px] text-muted-foreground/80 truncate mt-0.5">{track.channel}</p>
-                      </div>
-
-                      <div className="w-7 h-7 rounded-full bg-primary/10 flex items-center justify-center text-primary hover:bg-primary hover:text-primary-foreground shrink-0 transition-colors">
-                        <Play className="w-3 h-3 ml-0.5" fill="currentColor" />
-                      </div>
+              {/* Grouped destinations */}
+              <div className="relative px-4 space-y-4 pb-1">
+                {groupedMore.map((group) => (
+                  <section key={group.title} aria-label={group.title}>
+                    <p className="flex items-center gap-2 text-[10px] font-bold text-muted-foreground uppercase tracking-[0.18em] mb-2 px-1">
+                      <span className="h-px w-3 bg-primary/60" />
+                      {group.title}
+                    </p>
+                    <div className="grid grid-cols-4 gap-2">
+                      {group.items.map((item, i) => {
+                        const Icon = item.icon;
+                        const isActive = isItemActive(item);
+                        return (
+                          <motion.button
+                            key={item.id}
+                            initial={{ opacity: 0, y: 10 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            transition={{ delay: 0.05 + (group.start + i) * 0.025, duration: 0.25 }}
+                            onClick={() => handleNavClick(item)}
+                            aria-current={isActive ? 'page' : undefined}
+                            className={cn(
+                              'flex flex-col items-center justify-start gap-1.5 min-h-[84px] px-1 pt-2.5 pb-2 rounded-2xl border transition-colors duration-200 active:scale-95 touch-manipulation cursor-pointer',
+                              isActive
+                                ? 'border-primary/50 bg-primary/10 text-primary shadow-[0_0_22px_-8px_hsl(var(--primary)/0.7)]'
+                                : 'border-white/[0.06] bg-white/[0.03] text-muted-foreground active:bg-white/[0.09]'
+                            )}
+                          >
+                            <span
+                              className={cn(
+                                'w-10 h-10 rounded-2xl flex items-center justify-center shrink-0 transition-colors',
+                                isActive ? 'bg-primary text-primary-foreground' : 'bg-white/[0.07] text-foreground/80'
+                              )}
+                            >
+                              <Icon className="w-5 h-5" />
+                            </span>
+                            <span className="text-[11px] font-semibold leading-tight text-center w-full break-words">
+                              {item.label}
+                            </span>
+                          </motion.button>
+                        );
+                      })}
                     </div>
-                  ))}
-                </div>
+                  </section>
+                ))}
               </div>
-
             </motion.div>
           </>
         )}
