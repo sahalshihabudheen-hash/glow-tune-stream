@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { ArrowDown, ArrowUp, Eye, Loader2, Megaphone, Plus, RotateCcw, Save, Send, Trash2 } from 'lucide-react';
+import { ArrowDown, ArrowUp, Eye, Loader2, Megaphone, Plus, RotateCcw, Save, Send, Sparkles, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -19,6 +19,8 @@ import {
 } from '@/components/ui/alert-dialog';
 import WhatsNewContent from '@/components/WhatsNewContent';
 import WhatsNewOverlay from '@/components/WhatsNewOverlay';
+import AdminUpdatesAI from '@/components/AdminUpdatesAI';
+import { supabase } from '@/integrations/supabase/client';
 import { useUpdates } from '@/hooks/useUpdates';
 import { cn } from '@/lib/utils';
 import {
@@ -46,6 +48,7 @@ const AdminUpdates = () => {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [popupPreview, setPopupPreview] = useState(false);
+  const [aiBusyKey, setAiBusyKey] = useState<string | null>(null);
   const adopted = useRef(false);
 
   // Take the stored list once it has loaded. After that the editor owns the draft.
@@ -96,6 +99,28 @@ const AdminUpdates = () => {
   const discard = () => {
     setList(saved);
     setSelectedId((cur) => (saved.some((r) => r.id === cur) ? cur : saved[0]?.id ?? null));
+  };
+
+  /** Asks the AI to rework one item. Replaces its title/text; the admin can still edit or Discard. */
+  const aiRewrite = async (type: UpdateSectionType, index: number, action: 'elaborate' | 'shorten') => {
+    if (!selected) return;
+    const item = selected.sections.find((s) => s.type === type)?.items[index];
+    if (!item || (!item.title.trim() && !item.text.trim())) return toast.error('Write something first, then let AI rework it.');
+    const key = `${type}:${index}:${action}`;
+    setAiBusyKey(key);
+    try {
+      const { data, error } = await supabase.functions.invoke('admin-updates-ai', {
+        body: { mode: 'rewrite', action, title: item.title, text: item.text },
+      });
+      if (error) throw error;
+      if (data?.error) throw new Error(data.error);
+      setItems(selected.id, type, (it) => it.map((x, j) => (j === index ? { title: data.title ?? x.title, text: data.text ?? x.text } : x)));
+      toast.success(action === 'elaborate' ? 'Elaborated' : 'Shortened');
+    } catch (err: any) {
+      toast.error(err?.message ? `AI: ${err.message}` : 'AI could not rewrite this');
+    } finally {
+      setAiBusyKey(null);
+    }
   };
 
   const handleSave = async () => {
@@ -218,6 +243,8 @@ const AdminUpdates = () => {
                     <Switch checked={selected.published} onCheckedChange={(v) => patchRelease(selected.id, { published: v })} />
                   </div>
 
+                  <AdminUpdatesAI release={selected} />
+
                   {SECTION_ORDER.map((type) => {
                     const meta = SECTION_META[type];
                     const items = selected.sections.find((s) => s.type === type)?.items ?? [];
@@ -261,6 +288,22 @@ const AdminUpdates = () => {
                               }
                             />
                             <div className="flex items-center justify-end gap-1">
+                              <Button
+                                size="sm" variant="ghost" className="mr-auto h-8 gap-1 text-primary"
+                                disabled={aiBusyKey !== null}
+                                onClick={() => aiRewrite(type, i, 'elaborate')}
+                              >
+                                {aiBusyKey === `${type}:${i}:elaborate` ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5" />}
+                                Elaborate
+                              </Button>
+                              <Button
+                                size="sm" variant="ghost" className="h-8 gap-1 text-primary"
+                                disabled={aiBusyKey !== null}
+                                onClick={() => aiRewrite(type, i, 'shorten')}
+                              >
+                                {aiBusyKey === `${type}:${i}:shorten` ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5" />}
+                                Shorten
+                              </Button>
                               <Button
                                 size="icon" variant="ghost" className="h-8 w-8" aria-label="Move up" disabled={i === 0}
                                 onClick={() =>

@@ -39,3 +39,6 @@ verify_jwt = false
 
 [functions.saavn-audio]
 verify_jwt = false
+
+[functions.admin-updates-ai]
+verify_jwt = false
