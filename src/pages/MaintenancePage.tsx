@@ -1,14 +1,35 @@
 import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Settings, Volume2, VolumeX, LogOut } from 'lucide-react';
+import { Settings, Volume2, VolumeX, LogOut, X } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
+import {
+  MaintenanceMessageConfig,
+  DEFAULT_TITLE,
+  sanitizeMessageConfig,
+  titleStyle,
+  messageStyle,
+} from '@/lib/maintenanceMessage';
 
-const MaintenancePage = () => {
+interface MaintenancePageProps {
+  /** Admin-defined message + styling. Falls back to the original text when empty. */
+  config?: MaintenanceMessageConfig;
+  /** Admin preview: no audio, no logout, shows a close button. */
+  preview?: boolean;
+  /** Small inline preview (scaled down inside the admin editor): no buttons, fills its parent. */
+  embedded?: boolean;
+  onClosePreview?: () => void;
+}
+
+const MaintenancePage = ({ config: rawConfig, preview = false, embedded = false, onClosePreview }: MaintenancePageProps) => {
+  const isPreview = preview || embedded;
+  const config = rawConfig ? sanitizeMessageConfig(rawConfig) : undefined;
+  const customMessage = config?.message.trim() ? config.message.trim() : '';
   const navigate = useNavigate();
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const [muted, setMuted] = useState(false);
 
   useEffect(() => {
+    if (isPreview) return;
     const audio = new Audio('https://files.catbox.moe/jfdd5u.wav');
     audio.loop = true;
     audio.volume = 0.5;
@@ -32,7 +53,7 @@ const MaintenancePage = () => {
       audio.src = '';
       audioRef.current = null;
     };
-  }, []);
+  }, [isPreview]);
 
   const toggleMute = () => {
     if (audioRef.current) {
@@ -41,8 +62,8 @@ const MaintenancePage = () => {
     }
   };
 
-  return (
-    <div className="min-h-screen bg-background flex flex-col items-center justify-center p-6 relative overflow-hidden">
+  const page = (
+    <div className={`${embedded ? 'h-full w-full' : 'min-h-screen'} bg-background flex flex-col items-center justify-center p-6 relative overflow-hidden`}>
       {/* Animated background */}
       <div className="absolute inset-0 overflow-hidden">
         <div className="absolute w-[500px] h-[500px] bg-primary/5 rounded-full blur-3xl -top-48 -left-48 animate-pulse" />
@@ -50,6 +71,18 @@ const MaintenancePage = () => {
       </div>
 
       {/* Top buttons */}
+      {embedded ? null : preview ? (
+        <div className="absolute top-6 right-6 flex items-center gap-3 z-10">
+          <span className="text-xs px-3 py-1.5 rounded-full bg-primary/15 text-primary font-medium">Preview</span>
+          <button
+            onClick={onClosePreview}
+            className="p-3 rounded-full bg-secondary/80 hover:bg-secondary transition-colors"
+            title="Close preview"
+          >
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+      ) : (
       <div className="absolute top-6 right-6 flex items-center gap-3 z-10">
         <button
           onClick={async () => {
@@ -72,8 +105,9 @@ const MaintenancePage = () => {
           )}
         </button>
       </div>
+      )}
 
-      <div className="relative z-10 text-center max-w-lg">
+      <div className={`relative z-10 text-center w-full ${customMessage ? 'max-w-2xl' : 'max-w-lg'}`}>
         {/* Spinning gear */}
         <div className="mx-auto w-24 h-24 mb-8 relative">
           <div className="absolute inset-0 rounded-full bg-primary/10 animate-ping" style={{ animationDuration: '3s' }} />
@@ -82,17 +116,28 @@ const MaintenancePage = () => {
           </div>
         </div>
 
-        <h1 className="text-4xl font-bold text-foreground mb-4 tracking-tight">
-          Under Maintenance
+        <h1
+          className="font-bold text-foreground mb-4 tracking-tight"
+          style={config ? titleStyle(config) : { fontSize: '36px', lineHeight: 1.15 }}
+        >
+          {config?.title.trim() || DEFAULT_TITLE}
         </h1>
-        
-        <p className="text-lg text-muted-foreground mb-2">
-          JARVIS is working faster than you think
-        </p>
-        
-        <p className="text-sm text-muted-foreground/70 mb-8">
-          We're upgrading our systems to serve you better. Please check back soon.
-        </p>
+
+        {customMessage && config ? (
+          <p className="text-muted-foreground mb-8" style={messageStyle(config)}>
+            {customMessage}
+          </p>
+        ) : (
+          <>
+            <p className="text-lg text-muted-foreground mb-2">
+              JARVIS is working faster than you think
+            </p>
+
+            <p className="text-sm text-muted-foreground/70 mb-8">
+              We're upgrading our systems to serve you better. Please check back soon.
+            </p>
+          </>
+        )}
 
         {/* Animated progress bar */}
         <div className="w-full max-w-xs mx-auto h-1.5 bg-secondary rounded-full overflow-hidden">
@@ -118,6 +163,11 @@ const MaintenancePage = () => {
       </div>
     </div>
   );
+
+  if (preview && !embedded) {
+    return <div className="fixed inset-0 z-[300] overflow-auto bg-background">{page}</div>;
+  }
+  return page;
 };
 
 export default MaintenancePage;

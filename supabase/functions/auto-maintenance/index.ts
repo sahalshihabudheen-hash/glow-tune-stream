@@ -22,7 +22,7 @@ Deno.serve(async (req) => {
       .eq("key", "maintenance_mode")
       .maybeSingle();
 
-    const currentMaintenance = settingsData?.value as { enabled: boolean; allowed_emails: string[] } | null;
+    const currentMaintenance = settingsData?.value as { enabled: boolean; allowed_emails: string[]; [k: string]: unknown } | null;
 
     // Auto-maintenance checks
     const checks = {
@@ -66,7 +66,9 @@ Deno.serve(async (req) => {
       await supabase
         .from("app_settings")
         .update({
+          // Keep every other field (e.g. the admin's custom_message) intact
           value: {
+            ...(currentMaintenance || {}),
             enabled: true,
             allowed_emails: currentMaintenance?.allowed_emails || [],
           },

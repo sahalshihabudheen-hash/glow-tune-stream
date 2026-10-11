@@ -125,10 +125,22 @@ Deno.serve(async (req) => {
       });
 
       if (autoFix && body.fix === 'error_rate') {
-        // Auto-fix: enable maintenance mode
+        // Auto-fix: enable maintenance mode (keep existing whitelist + custom message)
+        const { data: existingMaintenance } = await supabase
+          .from('app_settings')
+          .select('value')
+          .eq('key', 'maintenance_mode')
+          .maybeSingle();
+        const existingValue = (existingMaintenance?.value ?? {}) as Record<string, unknown>;
         await supabase
           .from('app_settings')
-          .update({ value: { enabled: true, allowed_emails: [] } as any })
+          .update({
+            value: {
+              ...existingValue,
+              enabled: true,
+              allowed_emails: Array.isArray(existingValue.allowed_emails) ? existingValue.allowed_emails : [],
+            } as any,
+          })
           .eq('key', 'maintenance_mode');
         checks[checks.length - 1].status = 'fixed';
         checks[checks.length - 1].fixApplied = 'Maintenance mode enabled to prevent further errors.';

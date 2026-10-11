@@ -12,7 +12,7 @@ interface MaintenanceGuardProps {
 }
 
 const MaintenanceGuard = ({ children }: MaintenanceGuardProps) => {
-  const { maintenance, loading } = useMaintenanceMode();
+  const { maintenance, loading, refetch } = useMaintenanceMode();
   const { user, loading: authLoading } = useAuth();
   const location = useLocation();
   const [isAdmin, setIsAdmin] = useState(false);
@@ -38,6 +38,14 @@ const MaintenanceGuard = ({ children }: MaintenanceGuardProps) => {
     };
     checkAdmin();
   }, [user]);
+
+  // While maintenance is on, re-check periodically so message edits (or maintenance
+  // ending) reach people who already have the page open, without a manual refresh.
+  useEffect(() => {
+    if (!maintenance.enabled) return;
+    const id = setInterval(refetch, 30_000);
+    return () => clearInterval(id);
+  }, [maintenance.enabled, refetch]);
 
   // Always allow admin route and auth route
   if (location.pathname === '/admin' || location.pathname === '/auth') {
@@ -74,7 +82,7 @@ const MaintenanceGuard = ({ children }: MaintenanceGuardProps) => {
   }
 
   // Show maintenance page
-  return <MaintenancePage />;
+  return <MaintenancePage config={maintenance.custom_message} />;
 };
 
 export default MaintenanceGuard;

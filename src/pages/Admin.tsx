@@ -19,6 +19,7 @@ import AdminAppSettings from '@/components/AdminAppSettings';
 import AdminChat from '@/components/AdminChat';
 import AdminActivityLogs from '@/components/AdminActivityLogs';
 import AdminHealthMonitor from '@/components/AdminHealthMonitor';
+import MaintenanceMessageEditor from '@/components/MaintenanceMessageEditor';
 
 const COUNTRY_TO_CODE: Record<string, string> = {
   'Afghanistan': 'AF', 'Albania': 'AL', 'Algeria': 'DZ', 'Argentina': 'AR', 'Australia': 'AU',
@@ -156,7 +157,7 @@ const Admin = () => {
   const [deleteLoading, setDeleteLoading] = useState(false);
 
   // Maintenance mode
-  const { maintenance, toggleMaintenance, updateAllowedEmails } = useMaintenanceMode();
+  const { maintenance, toggleMaintenance, updateAllowedEmails, updateCustomMessage } = useMaintenanceMode();
   const [allowedEmailInput, setAllowedEmailInput] = useState('');
   const [roleLoading, setRoleLoading] = useState<string | null>(null);
 
@@ -2122,6 +2123,11 @@ const Admin = () => {
                       ))}
                     </div>
                   )}
+                </div>
+
+                {/* Custom message shown on the maintenance screen */}
+                <div className="pt-6 border-t border-border">
+                  <MaintenanceMessageEditor value={maintenance.custom_message} onSave={updateCustomMessage} />
                 </div>
 
                 {/* Auto-Maintenance - Main admin only */}
