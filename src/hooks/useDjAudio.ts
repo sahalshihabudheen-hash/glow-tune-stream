@@ -1,34 +1,58 @@
-import { useState, useCallback } from 'react';
+import { useCallback, useEffect, useSyncExternalStore } from 'react';
+import { djEngine, type DjState } from '@/lib/djEngine';
 
-interface DjState {
-  balance: number;
-  leftGain: number;
-  rightGain: number;
-  low: number;
-  mid: number;
-  high: number;
-  active: boolean;
-}
+export type { DjState, DjAutoStyle, DjChannelMode } from '@/lib/djEngine';
 
+/**
+ * React binding for the shared DJ engine (src/lib/djEngine.ts).
+ * All components share ONE engine, so DJ page, equalizer panel and visualizers stay in sync.
+ * API is backwards-compatible with the previous stub: state / apply / init / reSync / unlock /
+ * getLevels / getBassLevel / getFrequencyData — now actually processing audio.
+ */
 export function useDjAudio(
-  _providedAudioRef?: React.MutableRefObject<HTMLAudioElement | null>,
-  _providedIsPlaying?: boolean
+  providedAudioRef?: React.MutableRefObject<HTMLAudioElement | null>,
+  providedIsPlaying?: boolean
 ) {
-  const [state, setState] = useState<DjState>({
-    balance: 0, leftGain: 1, rightGain: 1,
-    low: 0, mid: 0, high: 0, active: false,
-  });
+  const state = useSyncExternalStore(djEngine.subscribe, () => djEngine.state, () => djEngine.state);
 
-  const apply = useCallback((next: DjState) => {
-    setState({ ...next, active: false });
-  }, []);
+  const apply = useCallback((next: Partial<DjState>) => djEngine.set(next), []);
 
-  const init = useCallback(() => false, []);
-  const reSync = useCallback(() => false, []);
-  const unlock = useCallback(() => {}, []);
-  const getLevels = useCallback(() => ({ left: 0, right: 0 }), []);
-  const getBassLevel = useCallback(() => 0, []);
-  const getFrequencyData = useCallback(() => new Uint8Array(16), []);
+  const unlock = useCallback(() => djEngine.unlock(), []);
 
-  return { state, apply, init, reSync, getLevels, getBassLevel, getFrequencyData, unlock };
+  /** Power the DJ engine on and route the active <audio> element through it. */
+  const init = useCallback((): boolean => {
+    djEngine.unlock();
+    const ok = djEngine.connect(providedAudioRef?.current);
+    if (ok) djEngine.setActive(true);
+    return ok;
+  }, [providedAudioRef]);
+
+  /** Re-attach after a track/element change (no-op if already attached). */
+  const reSync = useCallback((): boolean => {
+    const ok = djEngine.connect(providedAudioRef?.current);
+    if (ok && djEngine.state.active && !djEngine.running) djEngine.unlock();
+    return ok && djEngine.state.active;
+  }, [providedAudioRef]);
+
+  const setActive = useCallback((on: boolean) => djEngine.setActive(on), []);
+  const reset = useCallback(() => djEngine.reset(), []);
+  const getLevels = useCallback(() => djEngine.getLevels(), []);
+  const getBassLevel = useCallback(() => djEngine.getBassLevel(), []);
+  const getFrequencyData = useCallback(() => djEngine.getFrequencyData(), []);
+  const getLive = useCallback(() => djEngine.getLive(), []);
+  const getBpm = useCallback(() => djEngine.getBpm(), []);
+  const getBeatPhase = useCallback(() => djEngine.getBeatPhase(), []);
+
+  // Keep the engine alive across play/pause + element swaps (browsers suspend idle AudioContexts).
+  useEffect(() => {
+    if (!djEngine.state.active) return;
+    const el = providedAudioRef?.current;
+    if (el && !djEngine.isAttached(el)) djEngine.connect(el);
+    if (providedIsPlaying && !djEngine.running) djEngine.unlock();
+  }, [providedAudioRef, providedIsPlaying]);
+
+  return {
+    state, apply, init, reSync, unlock, setActive, reset,
+    getLevels, getBassLevel, getFrequencyData, getLive, getBpm, getBeatPhase,
+  };
 }
