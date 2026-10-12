@@ -52,10 +52,18 @@ export default async function handler(req: Request) {
     const appName = "NYRA";
     const themeColor = extractThemeColor(colorHint, trackTitle + trackArtist);
 
+    // Branded 1200x630 card (artwork + title + waveform) instead of the raw video thumbnail.
+    const cardParams = new URLSearchParams({ type, title: trackTitle, artist: trackArtist, color: themeColor.replace('#', '') });
+    if (trackId) cardParams.set('id', trackId);
+    if (rawThumbnail) cardParams.set('thumbnail', rawThumbnail);
+    if (trackCount) cardParams.set('tracks', trackCount);
+    if (creator) cardParams.set('creator', creator);
+    const cardUrl = `${baseUrl}/api/og-image?${cardParams.toString()}`;
+
     const safeTitle = escapeHtml(trackTitle);
     const safeArtist = escapeHtml(trackArtist);
     const safeThumbnail = escapeHtml(trackThumbnail);
-    const imageType = trackThumbnail.toLowerCase().includes('.png') ? 'image/png' : 'image/jpeg';
+    const safeCard = escapeHtml(cardUrl);
 
     let description = `✨ ${safeArtist} · ${appName} PREMIUM • FEEL THE PULSE`;
     let redirectUrl = `${baseUrl}/?play=${encodeURIComponent(trackId)}&title=${encodeURIComponent(trackTitle)}&channel=${encodeURIComponent(trackArtist)}&thumbnail=${encodeURIComponent(trackThumbnail)}`;
@@ -90,18 +98,19 @@ export default async function handler(req: Request) {
   <meta property="og:type" content="${ogType}">
   <meta property="og:title" content="🎧 ${safeTitle}">
   <meta property="og:description" content="${description}">
-  <meta property="og:image" content="${safeThumbnail}">
-  <meta property="og:image:secure_url" content="${safeThumbnail}">
-  <meta property="og:image:type" content="${imageType}">
-  <meta property="og:image:width" content="1280">
-  <meta property="og:image:height" content="720">
+  <meta property="og:image" content="${safeCard}">
+  <meta property="og:image:secure_url" content="${safeCard}">
+  <meta property="og:image:type" content="image/png">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta property="og:image:alt" content="${safeTitle} by ${safeArtist} on ${appName}">
   <meta property="og:url" content="${escapeHtml(redirectUrl)}">
 
   <!-- Twitter / Discord Summary Large Image Card -->
   <meta name="twitter:card" content="summary_large_image">
   <meta name="twitter:title" content="🎧 ${safeTitle}">
   <meta name="twitter:description" content="${description}">
-  <meta name="twitter:image" content="${safeThumbnail}">
+  <meta name="twitter:image" content="${safeCard}">
 
   <!-- Dynamic Theme Color based on Artwork -->
   <meta name="theme-color" content="${themeColor}">
