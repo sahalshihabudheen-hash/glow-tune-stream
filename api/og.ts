@@ -65,6 +65,21 @@ function escapeHtml(str: string = ''): string {
 const decodeEntities = (s: string): string =>
   s.replace(/&amp;/g, '&').replace(/&quot;/g, '"').replace(/&#0?39;/g, "'").replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&');
 
+/** Short links (/api/og?id=VIDEOID) carry no title, so look it up on YouTube's public oEmbed endpoint. */
+async function fetchYoutubeMeta(id: string): Promise<{ title: string; artist: string; thumbnail: string } | null> {
+  try {
+    const res = await fetch(`https://www.youtube.com/oembed?url=${encodeURIComponent(`https://www.youtube.com/watch?v=${id}`)}&format=json`, {
+      signal: AbortSignal.timeout(3500),
+    });
+    if (!res.ok) return null;
+    const d = await res.json();
+    if (typeof d?.title !== 'string' || !d.title) return null;
+    return { title: d.title, artist: String(d.author_name || ''), thumbnail: `https://i.ytimg.com/vi/${id}/hqdefault.jpg` };
+  } catch {
+    return null;
+  }
+}
+
 const PRESET_COLORS = ['#ffd300', '#00f0ff', '#3b82f6', '#a855f7', '#ec4899', '#ef4444', '#10b981'];
 
 function extractThemeColor(colorHint: string | null, seed: string): string {
@@ -93,10 +108,20 @@ async function handler(req: Request) {
       rawType === 'album' ? 'album' : 'song';
 
     const trackId = url.searchParams.get('id') || url.searchParams.get('videoId') || '';
-    const trackTitle = decodeEntities(url.searchParams.get('title') || 'Great Music');
-    const trackArtist = decodeEntities(url.searchParams.get('artist') || url.searchParams.get('channel') || 'NYRA');
-    const rawThumbnail = url.searchParams.get('thumbnail') || url.searchParams.get('artwork') || '';
+    let trackTitle = decodeEntities(url.searchParams.get('title') || 'Great Music');
+    let trackArtist = decodeEntities(url.searchParams.get('artist') || url.searchParams.get('channel') || 'NYRA');
+    let rawThumbnail = url.searchParams.get('thumbnail') || url.searchParams.get('artwork') || '';
     
+    // Short link: only an id was given, so fill in the details ourselves.
+    if (type === 'song' && !url.searchParams.get('title') && /^[\w-]{11}$/.test(trackId)) {
+      const meta = await fetchYoutubeMeta(trackId);
+      if (meta) {
+        trackTitle = decodeEntities(meta.title);
+        trackArtist = decodeEntities(meta.artist) || trackArtist;
+        rawThumbnail = rawThumbnail || meta.thumbnail;
+      }
+    }
+
     // Choose best thumbnail: provided URL > YouTube HQ > App Fallback
     const trackThumbnail = rawThumbnail || (trackId && type === 'song' ? `https://i.ytimg.com/vi/${trackId}/hqdefault.jpg` : `${baseUrl}/headphones.png`);
     const trackCount = url.searchParams.get('tracks') || '';

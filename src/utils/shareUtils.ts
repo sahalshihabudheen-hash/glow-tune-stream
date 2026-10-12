@@ -28,6 +28,12 @@ export function buildShareUrl(options: ShareOptions): string {
   const artist = options.artist || options.channel || 'NYRA';
   const thumbnail = options.thumbnail || '';
   
+  // Short link for YouTube songs: the server looks up title/artist from the id, so Discord shows a tiny URL
+  // instead of a 300-character one.
+  if (type === 'song' && /^[\w-]{11}$/.test(id) && (!thumbnail || /^https:\/\/i\.ytimg\.com\//.test(thumbnail))) {
+    return `${origin}/api/og?id=${id}`;
+  }
+
   const params = new URLSearchParams();
   params.set('type', type);
   if (id) params.set('id', id);

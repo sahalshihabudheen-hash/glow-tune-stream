@@ -125,6 +125,7 @@ async function downloadCard(imgUrl: string, origin: string, dest: string): Promi
   try {
     const u = new URL(imgUrl);
     if (u.origin !== origin || u.pathname !== '/api/og-image') return false; // only our own card, never arbitrary URLs
+    u.searchParams.set('bare', '1'); // the video animates its own bars
     const r = await fetch(u, { signal: AbortSignal.timeout(8000) });
     if (!r.ok || !(r.headers.get('content-type') || '').includes('image/png')) return false;
     writeFileSync(dest, Buffer.from(await r.arrayBuffer()));
@@ -138,7 +139,7 @@ const inflight = new Map<string, Promise<string | null>>();
 
 /** Builds (or reuses) an MP4 = still card image + the song's AAC audio. Returns the file path, or null on failure. */
 function buildVideo(title: string, artist: string, imgUrl: string, origin: string): Promise<string | null> {
-  const key = createHash('sha1').update(`${title}|${artist}|${imgUrl}`).digest('hex').slice(0, 24);
+  const key = createHash('sha1').update(`v3|${title}|${artist}|${imgUrl}`).digest('hex').slice(0, 24);
   const out = join(DIR, `${key}.mp4`);
   try {
     if (existsSync(out) && Date.now() - statSync(out).mtimeMs < FILE_TTL_MS && statSync(out).size > 10_000) return Promise.resolve(out);
@@ -158,23 +159,38 @@ function buildVideo(title: string, artist: string, imgUrl: string, origin: strin
       const card = join(DIR, `${key}.png`);
       const haveCard = imgUrl ? await downloadCard(imgUrl, origin, card) : false;
 
-      const input = haveCard
-        ? ['-loop', '1', '-framerate', '5', '-i', card]
-        : ['-f', 'lavfi', '-i', 'color=c=0x07080d:s=1200x630:r=5'];
+      // 640x336 @ 12fps keeps the build fast (a few seconds) and is plenty for Discord's embed size.
+      const W = 640, H = 336, FPS = 12;
+      const hint = (() => { try { return new URL(imgUrl).searchParams.get('color') || ''; } catch { return ''; } })();
+      const barColor = /^[0-9a-fA-F]{6}$/.test(hint) ? `0x${hint}` : '0xec4899';
+      let input: string[];
+      if (haveCard) {
+        // Shrink the card once and loop the small JPEG: looping the big PNG re-decodes it every frame (5x slower).
+        const bg = join(DIR, `${key}.bg.jpg`);
+        const pre = await runFfmpeg(ffmpeg, ['-hide_banner', '-loglevel', 'error', '-y', '-i', card, '-vf', `scale=${W}:${H}:flags=lanczos`, '-q:v', '2', bg], 15000);
+        input = pre.code === 0 && existsSync(bg) ? ['-loop', '1', '-framerate', String(FPS), '-i', bg] : ['-f', 'lavfi', '-i', `color=c=0x07080d:s=${W}x${H}:r=${FPS}`];
+      } else {
+        input = ['-f', 'lavfi', '-i', `color=c=0x07080d:s=${W}x${H}:r=${FPS}`];
+      }
       const tmp = join(DIR, `${key}.tmp.mp4`);
+      // Live equalizer bars drawn over the card where its waveform sits (right column, above the play button).
+      const graph =
+        `[1:a]showfreqs=s=72x13:mode=bar:fscale=log:ascale=sqrt:win_size=2048:rate=${FPS}:colors=${barColor},` +
+        `scale=288:52:flags=neighbor,format=yuva420p,colorkey=black:0.12:0.05[bars];` +
+        `[0:v][bars]overlay=310:192:shortest=1,format=yuv420p[v]`;
       const { code, err } = await runFfmpeg(
         ffmpeg,
-        ['-hide_banner', '-loglevel', 'error', '-y', ...input, '-i', audio, '-map', '0:v:0', '-map', '1:a:0',
-         '-c:v', 'libx264', '-preset', 'ultrafast', '-tune', 'stillimage', '-pix_fmt', 'yuv420p', '-r', '5',
+        ['-hide_banner', '-loglevel', 'error', '-y', ...input, '-i', audio, '-filter_complex', graph, '-map', '[v]', '-map', '1:a:0',
+         '-c:v', 'libx264', '-preset', 'ultrafast', '-crf', '30', '-g', String(FPS * 2), '-pix_fmt', 'yuv420p', '-r', String(FPS),
          '-c:a', 'copy', '-shortest', '-movflags', '+faststart', tmp],
-        45000,
+        50000,
       );
       if (code !== 0 || !existsSync(tmp)) {
         console.error('[og-audio] ffmpeg failed', code, err);
         return null;
       }
       renameSync(tmp, out);
-      try { unlinkSync(audio); unlinkSync(card); } catch { /* ignore */ }
+      try { unlinkSync(audio); unlinkSync(card); unlinkSync(join(DIR, `${key}.bg.jpg`)); } catch { /* ignore */ }
       return out;
     } catch (e) {
       console.error('[og-audio] build failed', e);

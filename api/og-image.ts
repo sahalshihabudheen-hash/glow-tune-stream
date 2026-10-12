@@ -80,6 +80,7 @@ async function handler(req: Request) {
   const artist = decodeEntities(q('artist') || q('channel') || q('creator') || 'NYRA').slice(0, 80);
   const tracks = q('tracks');
   const id = q('id') || q('videoId');
+  const bare = q('bare') === '1'; // no waveform bars: the video builder animates them instead
   const color = pickColor(q('color'), title + artist);
   const rawThumb = q('thumbnail') || q('artwork') || (id && type === 'song' ? `https://i.ytimg.com/vi/${id}/hqdefault.jpg` : '');
 
@@ -144,7 +145,7 @@ async function handler(req: Request) {
           el(
             'div',
             { marginTop: 38, alignItems: 'flex-end', height: 96 },
-            bars.map((h, i) => el('div', { width: 9, height: h, marginRight: 7, borderRadius: 5, background: color, opacity: i % 3 === 0 ? 1 : i % 3 === 1 ? 0.7 : 0.45 }, null)),
+            (bare ? [] : bars).map((h, i) => el('div', { width: 9, height: h, marginRight: 7, borderRadius: 5, background: color, opacity: i % 3 === 0 ? 1 : i % 3 === 1 ? 0.7 : 0.45 }, null)),
           ),
           el('div', { marginTop: 36, alignItems: 'center' }, [
             playButton,
