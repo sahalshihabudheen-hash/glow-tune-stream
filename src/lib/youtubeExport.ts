@@ -47,6 +47,9 @@ export const friendlyYouTubeError = (e: unknown): string => {
         return 'That YouTube playlist is full (5,000 videos).';
       case 'unauthorized':
         return 'Your Google sign-in expired. Please try again.';
+      case 'conflict':
+      case 'ABORTED':
+        return 'YouTube was too busy to accept more songs right now. Open this window again in a minute to continue; songs already added are kept.';
       default:
         return e.message || 'YouTube returned an error.';
     }
@@ -113,29 +116,49 @@ export async function requestYouTubeToken(clientId = googleClientId()): Promise<
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
+// YouTube answers fast back-to-back playlist inserts with HTTP 409 "The operation was aborted." (status ABORTED).
+// It is temporary: waiting a moment and trying again works.
+const MAX_RETRIES = 5;
+
 async function youtubeFetch<T>(token: string, path: string, body: unknown, attempt = 0): Promise<T> {
-  const res = await fetch(`${API}${path}`, {
-    method: 'POST',
-    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
-  });
+  let res: Response;
+  try {
+    res = await fetch(`${API}${path}`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+  } catch (netErr) {
+    // Network hiccup (offline blip, blocked request): wait and retry before giving up.
+    if (attempt < MAX_RETRIES) {
+      await sleep(Math.min(1000 * 2 ** attempt, 8000));
+      return youtubeFetch<T>(token, path, body, attempt + 1);
+    }
+    throw netErr;
+  }
 
   if (res.ok) return (await res.json()) as T;
 
   let reason = res.status === 401 ? 'unauthorized' : 'unknown';
   let message = `YouTube error ${res.status}`;
+  let apiStatus = '';
   try {
     const data = await res.json();
     reason = data?.error?.errors?.[0]?.reason || data?.error?.status || reason;
     message = data?.error?.message || message;
+    apiStatus = data?.error?.status || '';
   } catch {
     /* non-JSON error body */
   }
 
   // Temporary problems: wait and retry a few times.
-  const transient = res.status >= 500 || reason === 'rateLimitExceeded' || reason === 'backendError';
-  if (transient && attempt < 3) {
-    await sleep(800 * 2 ** attempt);
+  const transient =
+    res.status >= 500 ||
+    res.status === 409 ||
+    apiStatus === 'ABORTED' ||
+    ['rateLimitExceeded', 'userRateLimitExceeded', 'backendError', 'conflict'].includes(reason);
+  if (transient && attempt < MAX_RETRIES) {
+    await sleep(Math.min(1000 * 2 ** attempt, 8000));
     return youtubeFetch<T>(token, path, body, attempt + 1);
   }
   throw new YouTubeApiError(message, reason, res.status);
@@ -232,7 +255,7 @@ export async function exportPlaylistToYouTube(opts: {
   /** Pause between songs. Tests set this to 0. */
   delayMs?: number;
 }): Promise<ExportResult> {
-  const { token, playlistKey, signal, onProgress, delayMs = 150 } = opts;
+  const { token, playlistKey, signal, onProgress, delayMs = 700 } = opts;
   const unique = Array.from(new Set(opts.videoIds.filter(isYouTubeVideoId)));
 
   let record = getExportRecord(playlistKey);
