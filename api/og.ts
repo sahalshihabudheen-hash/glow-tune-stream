@@ -172,6 +172,9 @@ async function handler(req: Request) {
       redirectUrl = `${baseUrl}/?search=${encodeURIComponent(trackTitle)}`;
     }
 
+    // Call to action under every preview: send listeners to the app's home page.
+    description += `\n🎶 Listen to more music — visit ${appName}: ${escapeHtml(baseUrl)}`;
+
     // Playable embed: Discord plays og:video when it is a real MP4. Only add it when we actually found
     // the song on JioSaavn, so songs without a match keep the normal image preview (no broken player).
     let videoTags = '';

@@ -153,6 +153,13 @@ async function handler(req: Request) {
           ]),
         ]),
       ]),
+
+      // Footer: invite people to the app (sits in the free strip under the artwork)
+      el(
+        'div',
+        { position: 'absolute', left: 72, bottom: 24, width: 1056, alignItems: 'center', color: '#8d93ad', fontSize: 25, fontWeight: 500 },
+        `Listen to more music  •  visit NYRA  •  ${url.host}`,
+      ),
     ],
   );
 
