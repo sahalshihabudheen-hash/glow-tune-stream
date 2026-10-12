@@ -81,7 +81,7 @@ serve(async (req) => {
       );
     }
 
-    let results = (result.data.items || []).map((item: any) => ({
+    let results: any[] = (result.data.items || []).map((item: any) => ({
       id: item.id.videoId,
       title: item.snippet.title,
       thumbnail: item.snippet.thumbnails?.high?.url || item.snippet.thumbnails?.default?.url,
@@ -95,14 +95,22 @@ serve(async (req) => {
       if (ids) {
         const details = await fetchYouTubeWithBackupFailover(
           keys,
-          (apiKey) => `https://www.googleapis.com/youtube/v3/videos?part=contentDetails&id=${ids}&key=${apiKey}`,
+          (apiKey) => `https://www.googleapis.com/youtube/v3/videos?part=contentDetails,statistics&id=${ids}&key=${apiKey}`,
         );
         if (details.ok) {
           const seconds = new Map<string, number>();
+          const views = new Map<string, number>();
           for (const item of details.data.items || []) {
+            const vc = Number(item.statistics?.viewCount);
+            if (Number.isFinite(vc)) views.set(item.id, vc);
             const m = /^PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?$/.exec(item.contentDetails?.duration || '');
             if (!m) continue;
             seconds.set(item.id, (+(m[1] || 0)) * 3600 + (+(m[2] || 0)) * 60 + (+(m[3] || 0)));
+          }
+          // View counts help the app rank the most popular songs first.
+          for (const r of results) {
+            const vc = views.get(r.id);
+            if (vc !== undefined) r.viewCount = vc;
           }
           const fullSongs = results.filter((r: any) => {
             const dur = seconds.get(r.id);

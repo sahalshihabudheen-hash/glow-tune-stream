@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import SplashScreen from '@/components/SplashScreen';
 import Sidebar from '@/components/Sidebar';
@@ -25,6 +25,8 @@ import MadeForYouSection from '@/components/MadeForYouSection';
 
 import SEO from '@/components/SEO';
 import { getFunctionAuthHeaders } from '@/lib/functionAuth';
+import { SearchTopResult, SearchFilterChips, type SearchFilter } from '@/components/SearchTopResult';
+import { rankResults, mergeRelated, relatedQueryFor, type RankedResults } from '@/lib/searchRanking';
 
 
 const Index = () => {
@@ -38,6 +40,9 @@ const Index = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [searchPerformed, setSearchPerformed] = useState(false);
   const [mounted, setMounted] = useState(false);
+  const [ranked, setRanked] = useState<RankedResults | null>(null);
+  const [searchFilter, setSearchFilter] = useState<SearchFilter>('all');
+  const searchSeq = useRef(0);
 
   const {
     currentTrack, isPlaying, ytPlayerRef, audioRef,
@@ -72,24 +77,44 @@ const Index = () => {
       return;
     }
 
+    const seq = ++searchSeq.current;
     setIsLoading(true);
     setSearchPerformed(true);
 
+    const searchUrl = (q: string) =>
+      `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/youtube-search?q=${encodeURIComponent(q)}`;
+
     try {
-      const response = await fetch(
-        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/youtube-search?q=${encodeURIComponent(trimmed)}`,
-        {
-          headers: await getFunctionAuthHeaders(),
-        }
-      );
+      const response = await fetch(searchUrl(trimmed), { headers: await getFunctionAuthHeaders() });
 
       if (!response.ok) throw new Error('Search failed');
       const results = await response.json();
       if (results.error) throw new Error(results.error);
+      if (seq !== searchSeq.current) return; // a newer search started
 
-      setTracks(results);
-      if (results.length > 0) {
-        toast.success(`Found ${results.length} tracks`);
+      if (settings.smartSearch) {
+        // Best match first, then other versions, then everything else.
+        const first = rankResults(results, trimmed);
+        setRanked(first);
+        setSearchFilter('all');
+        if (results.length > 0) toast.success(`Found ${results.length} tracks`);
+
+        // Related popular songs load in the background so the first results show immediately.
+        const relatedQuery = relatedQueryFor(first.top, location?.state);
+        if (relatedQuery) {
+          getFunctionAuthHeaders()
+            .then((headers) => fetch(searchUrl(relatedQuery), { headers }))
+            .then((r) => (r.ok ? r.json() : []))
+            .then((related) => {
+              if (seq !== searchSeq.current || !Array.isArray(related)) return;
+              setRanked((prev) => (prev ? mergeRelated(prev, related, trimmed) : prev));
+            })
+            .catch(() => { /* related songs are a bonus, ignore failures */ });
+        }
+      } else {
+        setRanked(null);
+        setTracks(results);
+        if (results.length > 0) toast.success(`Found ${results.length} tracks`);
       }
     } catch (error) {
       console.error('Search error:', error);
@@ -97,9 +122,26 @@ const Index = () => {
         toast.error('Failed to search. Please try again.');
       }
     } finally {
-      setIsLoading(false);
+      if (seq === searchSeq.current) setIsLoading(false);
     }
-  }, [isSahalSearch, setTracks]);
+  }, [isSahalSearch, setTracks, settings.smartSearch, location?.state]);
+
+  // What the grid shows for the active filter. The top result has its own card above the grid.
+  const gridTracks = useMemo(() => {
+    if (!ranked) return null;
+    const versions = ranked.matches.slice(1);
+    if (searchFilter === 'match') return versions;
+    if (searchFilter === 'more') return ranked.others;
+    return [...versions, ...ranked.others];
+  }, [ranked, searchFilter]);
+
+  const showTop = !!ranked?.top && searchFilter !== 'more';
+
+  // Keep the player's next/previous list in the same order as what is on screen.
+  useEffect(() => {
+    if (!searchPerformed || !ranked || !gridTracks) return;
+    setTracks([...(showTop && ranked.top ? [ranked.top] : []), ...gridTracks]);
+  }, [ranked, gridTracks, showTop, searchPerformed, setTracks]);
 
   const handleSearch = () => {
     performSearch(searchQuery);
@@ -163,7 +205,10 @@ const Index = () => {
           onSearchChange={setSearchQuery}
           onSearch={handleSearch}
           onClearSearch={() => {
+            searchSeq.current++;
             setSearchPerformed(false);
+            setRanked(null);
+            setSearchFilter('all');
             setTracks(famousSongs);
           }}
         />
@@ -306,7 +351,7 @@ const Index = () => {
                   <div className="h-px flex-1 bg-gradient-to-r from-transparent via-primary/20 to-transparent" />
                 </div>
                 <p className="text-center text-xs font-bold text-muted-foreground uppercase tracking-[0.5em]">
-                  Discovered {tracks.length} tracks for "<span className="text-primary">{searchQuery}</span>"
+                  Discovered {ranked ? (showTop ? 1 : 0) + (gridTracks?.length ?? 0) : tracks.length} tracks for "<span className="text-primary">{searchQuery}</span>"
                 </p>
               </div>
             )}
@@ -323,9 +368,38 @@ const Index = () => {
               </div>
             )}
 
-            {(!isSahalSearch(searchQuery) || tracks.length > 0) && (
+            {searchPerformed && !isLoading && ranked && ranked.top && (
+              <>
+                {showTop && (
+                  <SearchTopResult
+                    track={ranked.top}
+                    isCurrent={currentTrack?.id === ranked.top.id}
+                    isPlaying={isPlaying}
+                    onPlay={handlePlayTrack}
+                  />
+                )}
+                <SearchFilterChips
+                  query={searchQuery}
+                  value={searchFilter}
+                  onChange={setSearchFilter}
+                  counts={{
+                    all: ranked.matches.length + ranked.others.length,
+                    match: ranked.matches.length,
+                    more: ranked.others.length,
+                  }}
+                />
+              </>
+            )}
+
+            {searchPerformed && !isLoading && ranked && ranked.top && gridTracks && gridTracks.length === 0 && (
+              <p className="py-10 text-center text-sm text-muted-foreground">
+                {searchFilter === 'more' ? 'Looking for more songs…' : 'No other versions found. Try “More songs”.'}
+              </p>
+            )}
+
+            {(!isSahalSearch(searchQuery) || tracks.length > 0) && !(ranked?.top && gridTracks && gridTracks.length === 0) && (
               <TrackGrid
-                tracks={tracks}
+                tracks={gridTracks ?? tracks}
                 currentTrack={currentTrack}
                 isPlaying={isPlaying}
                 onPlayTrack={handlePlayTrack}

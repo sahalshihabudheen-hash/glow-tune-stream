@@ -67,6 +67,7 @@ export type ProgressBarStyle = 'classic' | 'wavy' | 'dots' | 'thin' | 'rounded';
 interface AppSettings {
   soundwaveEnabled: boolean;
   autoPlayNext: boolean;
+  smartSearch: boolean; // Spotify-style search: best match first, then related songs (on by default)
   miniPlayerMode: boolean;
   autoMiniPlayer: boolean;
   soundwaveShape: SoundwaveShape;
@@ -166,6 +167,7 @@ export const ThemeProvider = ({ children }: { children: ReactNode }) => {
     const defaults = {
       soundwaveEnabled: true,
       autoPlayNext: true,
+      smartSearch: true,
       miniPlayerMode: false,
       autoMiniPlayer: true,
       soundwaveShape: 'bars' as SoundwaveShape,

@@ -900,6 +900,20 @@ const Settings = () => {
               <div className="border-t border-border pt-4">
                 <div className="flex items-center justify-between gap-4">
                   <div className="flex-1">
+                    <p className="font-medium text-foreground text-sm md:text-base">Smart Search</p>
+                    <p className="text-xs md:text-sm text-muted-foreground">Show the song you searched for first, then other versions and popular songs. Adds filters to results.</p>
+                  </div>
+                  <Switch
+                    checked={settings.smartSearch}
+                    onCheckedChange={(checked) => updateSettings({ smartSearch: checked })}
+                    className="data-[state=checked]:bg-primary"
+                  />
+                </div>
+              </div>
+
+              <div className="border-t border-border pt-4">
+                <div className="flex items-center justify-between gap-4">
+                  <div className="flex-1">
                     <p className="font-medium text-foreground text-sm md:text-base">Auto-Play Next</p>
                     <p className="text-xs md:text-sm text-muted-foreground">Automatically play next track when current ends</p>
                   </div>
