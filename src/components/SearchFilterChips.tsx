@@ -4,18 +4,19 @@ export type SearchFilter = 'all' | 'match' | 'more';
 
 interface ChipsProps {
   query: string;
+  moreLabel?: string;
   value: SearchFilter;
   onChange: (f: SearchFilter) => void;
   counts: { all: number; match: number; more: number };
 }
 
 /** Filter chips: everything, only the searched song (and its versions), or only the related songs. */
-export const SearchFilterChips = ({ query, value, onChange, counts }: ChipsProps) => {
+export const SearchFilterChips = ({ query, moreLabel = 'More songs', value, onChange, counts }: ChipsProps) => {
   const short = query.length > 18 ? `${query.slice(0, 18)}…` : query;
   const chips: { id: SearchFilter; label: string; count: number }[] = [
     { id: 'all', label: 'All', count: counts.all },
     { id: 'match', label: `Only “${short}”`, count: counts.match },
-    { id: 'more', label: 'More songs', count: counts.more },
+    { id: 'more', label: moreLabel, count: counts.more },
   ];
   return (
     <div className="mb-6 flex flex-wrap gap-2" role="tablist" aria-label="Filter search results">

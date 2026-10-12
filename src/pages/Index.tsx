@@ -26,7 +26,8 @@ import MadeForYouSection from '@/components/MadeForYouSection';
 import SEO from '@/components/SEO';
 import { getFunctionAuthHeaders } from '@/lib/functionAuth';
 import { SearchFilterChips, type SearchFilter } from '@/components/SearchFilterChips';
-import { rankResults, mergeRelated, relatedQueryFor, matchedSongName, type RankedResults } from '@/lib/searchRanking';
+import { rankResults, mergeRelated, planRelated, matchedSongName, type RankedResults } from '@/lib/searchRanking';
+import { SearchSections } from '@/components/SearchSections';
 
 
 // How many versions of the searched song to show in "All" before the popular songs.
@@ -102,18 +103,22 @@ const Index = () => {
         setSearchFilter('all');
         if (results.length > 0) toast.success(`Found ${results.length} tracks`);
 
-        // Related popular songs load in the background so the first results show immediately.
-        const relatedQuery = relatedQueryFor(first.top, location?.state);
-        {
-          getFunctionAuthHeaders()
-            .then((headers) => fetch(searchUrl(relatedQuery), { headers }))
-            .then((r) => (r.ok ? r.json() : []))
-            .then((related) => {
-              if (seq !== searchSeq.current || !Array.isArray(related)) return;
-              setRanked((prev) => (prev ? mergeRelated(prev, related) : prev));
-            })
-            .catch(() => { /* related songs are a bonus, ignore failures */ });
-        }
+        // "More like this" loads in the background so the first results show immediately.
+        // It follows the song's theme (phonk, lofi, ...) and artist, not the person's home state.
+        const plan = planRelated(trimmed, first.top, location?.state);
+        setRanked((prev) => (prev ? { ...prev, theme: plan.theme } : prev));
+        Promise.all(
+          plan.queries.map((q) =>
+            getFunctionAuthHeaders()
+              .then((headers) => fetch(searchUrl(q), { headers }))
+              .then((r) => (r.ok ? r.json() : []))
+              .catch(() => []),
+          ),
+        ).then((lists) => {
+          if (seq !== searchSeq.current) return;
+          const related = lists.filter(Array.isArray).flat();
+          setRanked((prev) => (prev ? mergeRelated(prev, related, { theme: plan.theme, allowJunk: plan.allowJunk }) : prev));
+        });
       } else {
         setRanked(null);
         setTracks(results);
@@ -374,6 +379,7 @@ const Index = () => {
             {searchPerformed && !isLoading && ranked && ranked.top && (
               <SearchFilterChips
                 query={matchedSongName(ranked.top, searchQuery) || searchQuery}
+                moreLabel={ranked.theme ? `More ${ranked.theme}` : 'More songs'}
                 value={searchFilter}
                 onChange={setSearchFilter}
                 counts={{
@@ -390,7 +396,22 @@ const Index = () => {
               </p>
             )}
 
-            {(!isSahalSearch(searchQuery) || tracks.length > 0) && !(ranked?.top && gridTracks && gridTracks.length === 0) && (
+            {searchPerformed && !isLoading && ranked?.top && searchFilter === 'all' && (
+              <SearchSections
+                ranked={ranked}
+                maxVersions={MAX_VERSIONS_IN_ALL}
+                currentTrack={currentTrack}
+                isPlaying={isPlaying}
+                onPlayTrack={handlePlayTrack}
+                onAddToQueue={handleAddToQueue}
+                isFavorite={isFavorite}
+                onToggleFavorite={toggleFavorite}
+              />
+            )}
+
+            {(!isSahalSearch(searchQuery) || tracks.length > 0) &&
+              !(ranked?.top && gridTracks && gridTracks.length === 0) &&
+              !(searchPerformed && !isLoading && ranked?.top && searchFilter === 'all') && (
               <TrackGrid
                 tracks={gridTracks ?? tracks}
                 currentTrack={currentTrack}

@@ -26,6 +26,8 @@ export interface RankedResults<T extends RankableTrack = RankableTrack> {
   matches: T[];
   /** Related / popular songs that do not match the query itself. */
   others: T[];
+  /** Theme of the searched song (e.g. "Phonk", "Malayalam") used to title the "more like this" section. */
+  theme?: string | null;
 }
 
 /** Minimum score for a result to count as "the song you searched for". */
@@ -187,10 +189,15 @@ export function rankResults<T extends RankableTrack>(results: T[], query: string
 }
 
 /** Keeps one upload per song, drops compilations and remixes, most-viewed first. */
-export function cleanPopular<T extends RankableTrack>(tracks: T[], exclude: Set<string>, limit = 15): T[] {
+export function cleanPopular<T extends RankableTrack>(
+  tracks: T[],
+  exclude: Set<string>,
+  limit = 15,
+  allowJunk = false,
+): T[] {
   const seenSongs = new Set<string>();
   return tracks
-    .filter((t) => t && t.id && !exclude.has(t.id) && !JUNK.test(t.title) && !COMPILATION.test(t.title))
+    .filter((t) => t && t.id && !exclude.has(t.id) && (allowJunk || !JUNK.test(t.title)) && !COMPILATION.test(t.title))
     .map((t, i) => ({ t, i }))
     .sort((a, b) => (b.t.viewCount || 0) - (a.t.viewCount || 0) || a.i - b.i)
     .map((x) => x.t)
@@ -203,11 +210,19 @@ export function cleanPopular<T extends RankableTrack>(tracks: T[], exclude: Set<
     .slice(0, limit);
 }
 
-/** Adds the "popular songs" that follow the searched song. */
-export function mergeRelated<T extends RankableTrack>(ranked: RankedResults<T>, related: T[]): RankedResults<T> {
+/**
+ * Adds the "more like this" songs that follow the searched song.
+ * When the theme is a genre (phonk, lofi, ...), slowed / remix / dj uploads are exactly what that genre is made of,
+ * so they are allowed through.
+ */
+export function mergeRelated<T extends RankableTrack>(
+  ranked: RankedResults<T>,
+  related: T[],
+  opts: { theme?: string | null; allowJunk?: boolean } = {},
+): RankedResults<T> {
   const shown = new Set([...ranked.matches, ...ranked.others].map((t) => t.id));
-  const popular = cleanPopular(related, shown);
-  return { ...ranked, others: [...ranked.others, ...popular] };
+  const popular = cleanPopular(related, shown, 20, !!opts.allowJunk);
+  return { ...ranked, others: [...ranked.others, ...popular], theme: opts.theme ?? ranked.theme ?? null };
 }
 
 const LANGUAGE_WORDS: [RegExp, string][] = [
@@ -243,11 +258,83 @@ export function detectLanguage(top: RankableTrack | null, state?: string | null)
   return STATE_LANGUAGE[normalize(state || '')] ?? null;
 }
 
-/** Search used to find the popular songs shown after the searched song. */
-export function relatedQueryFor(top: RankableTrack | null, state?: string | null): string {
-  const lang = detectLanguage(top, state);
-  if (lang) return `${lang} hit songs official video song`;
-  // Language unknown: a label channel's hits are a decent stand-in; otherwise plain trending songs.
-  if (top?.channel && OFFICIAL_CHANNEL.test(top.channel)) return `${top.channel} hit songs official video song`;
-  return 'trending hit songs official video song';
+/**
+ * Genres / themes we can recognise from what was typed or from the top result.
+ * First match wins, so the more specific ones come first.
+ * `search` is what we ask YouTube for to get more songs of that theme.
+ */
+const THEMES: { re: RegExp; label: string; search: string }[] = [
+  { re: /phonk|jump\s*style|jumpstyle|drift\b|brazilian\s*funk|funk\s*br|montagem|sayfalse|kordhell|ghostemane/i, label: 'Phonk', search: 'phonk songs' },
+  { re: /hardstyle|hard\s*dance|rawstyle|gabber/i, label: 'Hardstyle', search: 'hardstyle songs' },
+  { re: /lo-?fi|chill\s*beats/i, label: 'Lo-fi', search: 'lofi songs' },
+  { re: /drill\b/i, label: 'Drill', search: 'drill songs' },
+  { re: /\btrap\b/i, label: 'Trap', search: 'trap songs' },
+  { re: /techno|\bhouse\s*music|\bedm\b|electro|dubstep|future\s*bass|\bdnb\b|drum\s*(and|&|n)\s*bass/i, label: 'EDM', search: 'edm songs' },
+  { re: /hip[\s-]?hop|\brap\b|rapper|\bcypher\b/i, label: 'Hip-hop', search: 'hip hop songs' },
+  { re: /k-?pop|bts\b|blackpink/i, label: 'K-pop', search: 'kpop songs' },
+  { re: /anime|opening\s*\d|\bamv\b|vocaloid/i, label: 'Anime', search: 'anime songs' },
+  { re: /nasheed/i, label: 'Nasheed', search: 'nasheed' },
+  { re: /qawwali|sufi|ghazal/i, label: 'Sufi', search: 'sufi songs' },
+  { re: /devotional|bhajan|bhakti|ayyappa|ganapathi|krishna\s*song/i, label: 'Devotional', search: 'devotional songs' },
+  { re: /rock\s*(song|band|music)|metal\b|heavy\s*metal|punk\b/i, label: 'Rock', search: 'rock songs' },
+  { re: /slowed\s*(\+|and|&|n)?\s*reverb|\bslowed\b/i, label: 'Slowed + reverb', search: 'slowed reverb songs' },
+];
+
+/** Genre / theme of the searched song, read from the typed query first, then from the top result. */
+export function detectTheme(query: string, top: RankableTrack | null): { label: string; search: string } | null {
+  const fromQuery = THEMES.find((t) => t.re.test(query || ''));
+  if (fromQuery) return fromQuery;
+  const text = `${top?.title || ''} ${top?.channel || ''}`;
+  return THEMES.find((t) => t.re.test(text)) ?? null;
+}
+
+/** "Sayfalse - Topic" -> "Sayfalse". Only auto-generated artist channels are trusted as an artist name. */
+export function artistFromChannel(channel?: string | null): string | null {
+  const m = /^(.+?)\s*(?:-\s*Topic|VEVO)$/i.exec((channel || '').trim());
+  const name = m?.[1]?.trim();
+  return name && name.length > 1 ? name : null;
+}
+
+export interface RelatedPlan {
+  /** Searches to run for "more like this". */
+  queries: string[];
+  /** Heading for the section, e.g. "Phonk" or "Malayalam". */
+  theme: string | null;
+  /** True when the theme is a genre, so slowed / remix uploads are welcome. */
+  allowJunk: boolean;
+}
+
+/**
+ * What to search for after the searched song, in order of how well it keeps the same vibe:
+ *   1. the genre / theme (phonk, lofi, ...)
+ *   2. the same artist
+ *   3. the language of the song (only when the song itself shows one)
+ *   4. the label's hits, else the person's state language as a last resort, else trending
+ */
+export function planRelated(query: string, top: RankableTrack | null, state?: string | null): RelatedPlan {
+  const theme = detectTheme(query, top);
+  const artist = artistFromChannel(top?.channel);
+  const queries: string[] = [];
+
+  if (theme) {
+    queries.push(theme.search);
+    if (artist) queries.push(`${artist} songs`);
+    return { queries, theme: theme.label, allowJunk: true };
+  }
+  if (artist) queries.push(`${artist} songs`);
+
+  const ownLanguage = detectLanguage(top, null);
+  if (ownLanguage) {
+    queries.push(`${ownLanguage} hit songs official video song`);
+    return { queries, theme: ownLanguage, allowJunk: false };
+  }
+  if (top?.channel && OFFICIAL_CHANNEL.test(top.channel) && !artist) {
+    queries.push(`${top.channel} hit songs official video song`);
+  }
+  if (queries.length === 0) {
+    const stateLanguage = detectLanguage(null, state);
+    queries.push(stateLanguage ? `${stateLanguage} hit songs official video song` : 'trending hit songs official video song');
+    return { queries, theme: stateLanguage, allowJunk: false };
+  }
+  return { queries, theme: artist, allowJunk: false };
 }
