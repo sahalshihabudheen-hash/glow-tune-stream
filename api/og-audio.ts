@@ -77,6 +77,32 @@ async function handler(req: Request) {
   const title = url.searchParams.get('title') || '';
   const artist = url.searchParams.get('artist') || url.searchParams.get('channel') || '';
 
+  if (url.searchParams.get('debug')) {
+    // Diagnostics: open /api/og-audio?title=...&artist=...&debug=1 to see where the audio chain breaks.
+    const report: Record<string, unknown> = { title, artist };
+    try {
+      const p = new URLSearchParams({ title });
+      if (artist) p.set('artist', artist);
+      const r = await fetch(`${supabaseUrl()}/functions/v1/saavn-audio?${p}`, { signal: AbortSignal.timeout(9000) });
+      const body = await r.text();
+      report.saavnFunction = { status: r.status, contentType: r.headers.get('content-type'), body: body.slice(0, 300).replace(/https:\/\/[^"\s]+/g, (u) => new URL(u).host + '/…') };
+    } catch (e) {
+      report.saavnFunction = { error: String(e) };
+    }
+    const m = await resolveSaavn(title, artist);
+    report.matched = !!m;
+    report.upstream = [];
+    for (const src of m?.urls || []) {
+      try {
+        const r = await fetch(src, { headers: { 'User-Agent': UA, Referer: 'https://www.jiosaavn.com/', Range: 'bytes=0-1' }, redirect: 'follow' });
+        (report.upstream as unknown[]).push({ host: new URL(src).host, status: r.status, type: r.headers.get('content-type'), length: r.headers.get('content-length'), range: r.headers.get('content-range') });
+      } catch (e) {
+        (report.upstream as unknown[]).push({ host: new URL(src).host, error: String(e) });
+      }
+    }
+    return new Response(JSON.stringify(report, null, 2), { headers: { ...CORS, 'Content-Type': 'application/json' } });
+  }
+
   const match = await resolveSaavn(title, artist);
   if (!match) return new Response('No audio found for this song', { status: 404, headers: CORS });
 
@@ -85,7 +111,7 @@ async function handler(req: Request) {
     try {
       const upstream = await fetch(src, {
         method: req.method,
-        headers: { 'User-Agent': UA, Accept: '*/*', ...(range ? { Range: range } : {}) },
+        headers: { 'User-Agent': UA, Accept: '*/*', Referer: 'https://www.jiosaavn.com/', ...(range ? { Range: range } : {}) },
         redirect: 'follow',
       });
       if (!upstream.ok && upstream.status !== 206) continue;

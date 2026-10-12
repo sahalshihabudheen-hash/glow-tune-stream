@@ -6,6 +6,9 @@ import { Resvg } from '@resvg/resvg-js';
  * Query: type, title, artist, thumbnail, color, tracks, creator
  */
 
+const decodeEntities = (s: string): string =>
+  s.replace(/&amp;/g, '&').replace(/&quot;/g, '"').replace(/&#0?39;/g, "'").replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&');
+
 const PRESET_COLORS = ['#ffd300', '#00f0ff', '#3b82f6', '#a855f7', '#ec4899', '#ef4444', '#10b981'];
 
 const pickColor = (hint: string, seed: string): string => {
@@ -73,8 +76,8 @@ async function handler(req: Request) {
 
   const rawType = q('type').toLowerCase();
   const type = ['playlist', 'artist', 'album'].includes(rawType) ? rawType : 'song';
-  const title = (q('title') || 'Great Music').slice(0, 120);
-  const artist = (q('artist') || q('channel') || q('creator') || 'NYRA').slice(0, 80);
+  const title = decodeEntities(q('title') || 'Great Music').slice(0, 120);
+  const artist = decodeEntities(q('artist') || q('channel') || q('creator') || 'NYRA').slice(0, 80);
   const tracks = q('tracks');
   const id = q('id') || q('videoId');
   const color = pickColor(q('color'), title + artist);

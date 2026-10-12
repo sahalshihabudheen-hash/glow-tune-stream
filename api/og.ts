@@ -62,6 +62,9 @@ function escapeHtml(str: string = ''): string {
     .replace(/'/g, '&#39;');
 }
 
+const decodeEntities = (s: string): string =>
+  s.replace(/&amp;/g, '&').replace(/&quot;/g, '"').replace(/&#0?39;/g, "'").replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&');
+
 const PRESET_COLORS = ['#ffd300', '#00f0ff', '#3b82f6', '#a855f7', '#ec4899', '#ef4444', '#10b981'];
 
 function extractThemeColor(colorHint: string | null, seed: string): string {
@@ -90,8 +93,8 @@ async function handler(req: Request) {
       rawType === 'album' ? 'album' : 'song';
 
     const trackId = url.searchParams.get('id') || url.searchParams.get('videoId') || '';
-    const trackTitle = url.searchParams.get('title') || 'Great Music';
-    const trackArtist = url.searchParams.get('artist') || url.searchParams.get('channel') || 'NYRA';
+    const trackTitle = decodeEntities(url.searchParams.get('title') || 'Great Music');
+    const trackArtist = decodeEntities(url.searchParams.get('artist') || url.searchParams.get('channel') || 'NYRA');
     const rawThumbnail = url.searchParams.get('thumbnail') || url.searchParams.get('artwork') || '';
     
     // Choose best thumbnail: provided URL > YouTube HQ > App Fallback
