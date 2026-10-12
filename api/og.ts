@@ -69,7 +69,7 @@ const decodeEntities = (s: string): string =>
 async function fetchYoutubeMeta(id: string): Promise<{ title: string; artist: string; thumbnail: string } | null> {
   try {
     const res = await fetch(`https://www.youtube.com/oembed?url=${encodeURIComponent(`https://www.youtube.com/watch?v=${id}`)}&format=json`, {
-      signal: AbortSignal.timeout(2000),
+      signal: AbortSignal.timeout(1200), // Discord's crawler gives up after a few seconds, so keep every lookup short
     });
     if (!res.ok) return null;
     const d = await res.json();
@@ -113,12 +113,15 @@ async function handler(req: Request) {
     let rawThumbnail = url.searchParams.get('thumbnail') || url.searchParams.get('artwork') || '';
     
     // Short link: only an id was given, so fill in the details ourselves.
+    let metaLookupFailed = false;
     if (type === 'song' && !url.searchParams.get('title') && /^[\w-]{11}$/.test(trackId)) {
       const meta = await fetchYoutubeMeta(trackId);
       if (meta) {
         trackTitle = decodeEntities(meta.title);
         trackArtist = decodeEntities(meta.artist) || trackArtist;
         rawThumbnail = rawThumbnail || meta.thumbnail;
+      } else {
+        metaLookupFailed = true;
       }
     }
 
@@ -167,13 +170,15 @@ async function handler(req: Request) {
     let videoTags = '';
     let twitterCard = 'summary_large_image';
     let cacheControl = 'public, max-age=3600, s-maxage=86400';
+    // A failed title lookup produced a generic card: never let the CDN keep that for a day.
+    if (metaLookupFailed) cacheControl = 'public, max-age=30, s-maxage=30';
     if (type === 'song' && trackTitle !== 'Great Music') {
       // Discord's crawler gives up fast, so never wait long here. If the lookup is slow, assume the song exists
       // (most do) instead of dropping the player, and don't let that guess sit in the CDN for a day.
       const lookup = resolveSaavn(trackTitle, trackArtist, 4500);
       const raced = await Promise.race([
         lookup.then((m) => ({ done: true, m })),
-        new Promise<{ done: boolean; m: SaavnMatch | null }>((r) => setTimeout(() => r({ done: false, m: null }), 2200)),
+        new Promise<{ done: boolean; m: SaavnMatch | null }>((r) => setTimeout(() => r({ done: false, m: null }), 900)),
       ]);
       const hasAudio = raced.done ? !!raced.m : true;
       if (!raced.done) cacheControl = 'public, max-age=60, s-maxage=60';
