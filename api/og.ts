@@ -67,14 +67,21 @@ const decodeEntities = (s: string): string =>
 
 /** Short links (/api/og?id=VIDEOID) carry no title, so look it up on YouTube's public oEmbed endpoint. */
 async function fetchYoutubeMeta(id: string): Promise<{ title: string; artist: string; thumbnail: string } | null> {
-  try {
-    const res = await fetch(`https://www.youtube.com/oembed?url=${encodeURIComponent(`https://www.youtube.com/watch?v=${id}`)}&format=json`, {
-      signal: AbortSignal.timeout(1200), // Discord's crawler gives up after a few seconds, so keep every lookup short
-    });
-    if (!res.ok) return null;
+  const watchUrl = encodeURIComponent(`https://www.youtube.com/watch?v=${id}`);
+  // YouTube's oEmbed is flaky from serverless IPs, so ask it and noembed.com at the same time and take the first
+  // good answer. Discord's crawler gives up after a few seconds, so the whole lookup stays under 2s.
+  const ask = async (endpoint: string) => {
+    const res = await fetch(endpoint, { signal: AbortSignal.timeout(2000) });
+    if (!res.ok) throw new Error(`oembed ${res.status}`);
     const d = await res.json();
-    if (typeof d?.title !== 'string' || !d.title) return null;
-    return { title: d.title, artist: String(d.author_name || ''), thumbnail: `https://i.ytimg.com/vi/${id}/hqdefault.jpg` };
+    if (typeof d?.title !== 'string' || !d.title) throw new Error('no title');
+    return { title: d.title as string, artist: String(d.author_name || ''), thumbnail: `https://i.ytimg.com/vi/${id}/hqdefault.jpg` };
+  };
+  try {
+    return await Promise.any([
+      ask(`https://www.youtube.com/oembed?url=${watchUrl}&format=json`),
+      ask(`https://noembed.com/embed?url=${watchUrl}`),
+    ]);
   } catch {
     return null;
   }
@@ -184,7 +191,16 @@ async function handler(req: Request) {
       if (!raced.done) cacheControl = 'public, max-age=60, s-maxage=60';
       if (hasAudio) {
         const audioParams = new URLSearchParams({ title: trackTitle, artist: trackArtist, img: cardUrl });
-        const audioUrl = escapeHtml(`${baseUrl}/api/og-audio?${audioParams.toString()}`);
+        const audioHref = `${baseUrl}/api/og-audio?${audioParams.toString()}`;
+        const audioUrl = escapeHtml(audioHref);
+        // Building the MP4 takes several seconds, far longer than Discord waits. Start building it now so it is ready
+        // when Discord (or the first listener) asks. With ?warm=1 (sent by the app the moment a link is copied) we
+        // hold this request open until the build is done, which keeps the function alive for the whole build.
+        const prebuild = fetch(audioHref, { method: 'HEAD', signal: AbortSignal.timeout(45000) }).catch(() => null);
+        if (url.searchParams.get('warm') === '1') {
+          await prebuild;
+          return new Response(null, { status: 204, headers: { 'cache-control': 'no-store' } });
+        }
         ogType = 'video.other';
         twitterCard = 'player';
         videoTags = `

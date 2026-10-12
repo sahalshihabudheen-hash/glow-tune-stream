@@ -52,8 +52,9 @@ export function buildShareUrl(options: ShareOptions): string {
  */
 export async function executeShare(options: ShareOptions): Promise<boolean> {
   const shareUrl = buildShareUrl(options);
-  // Warm the preview in the background so Discord's (impatient) crawler finds it ready.
-  try { void fetch(shareUrl, { mode: 'no-cors' }).catch(() => {}); } catch { /* ignore */ }
+  // Warm the preview in the background so Discord's (impatient) crawler finds it ready. warm=1 also makes the server
+  // build the playable MP4 now (it takes several seconds), instead of when Discord asks and gives up waiting.
+  try { void fetch(`${shareUrl}${shareUrl.includes('?') ? '&' : '?'}warm=1`, { mode: 'no-cors' }).catch(() => {}); } catch { /* ignore */ }
   const toastMsg = options.toastMessage || (
     options.type === 'playlist' ? 'Playlist link copied!' :
     options.type === 'artist' ? 'Artist link copied!' :
