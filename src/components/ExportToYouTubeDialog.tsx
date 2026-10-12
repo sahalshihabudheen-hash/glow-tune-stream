@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { ExternalLink, Globe, Link2, Loader2, Lock, Youtube } from 'lucide-react';
+import { ImagePlus, ExternalLink, Globe, Link2, Loader2, Lock, X, Youtube } from 'lucide-react';
 import { toast } from 'sonner';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
@@ -12,6 +12,7 @@ import {
   getExportRecord,
   googleClientId,
   isYouTubeVideoId,
+  prepareCoverImage,
   requestYouTubeToken,
   youtubePlaylistUrl,
   type ExportProgress,
@@ -46,6 +47,9 @@ const ExportToYouTubeDialog = ({ open, onOpenChange, playlistKey, playlistName, 
   const [result, setResult] = useState<ExportResult | null>(null);
   const [record, setRecord] = useState<ExportRecord | null>(null);
   const abortRef = useRef<AbortController | null>(null);
+  const fileRef = useRef<HTMLInputElement | null>(null);
+  const [cover, setCover] = useState<Blob | null>(null);
+  const [coverPreview, setCoverPreview] = useState<string | null>(null);
   const configured = !!googleClientId();
 
   // Reset every time the dialog opens, and pick up an earlier upload of this playlist.
@@ -56,7 +60,29 @@ const ExportToYouTubeDialog = ({ open, onOpenChange, playlistKey, playlistName, 
     setResult(null);
     setProgress({ done: 0, total: 0, skipped: 0 });
     setRecord(getExportRecord(playlistKey));
+    setCover(null);
   }, [open, playlistKey, playlistName]);
+
+  // Preview URL for the chosen cover; freed when it changes.
+  useEffect(() => {
+    if (!cover) {
+      setCoverPreview(null);
+      return;
+    }
+    const url = URL.createObjectURL(cover);
+    setCoverPreview(url);
+    return () => URL.revokeObjectURL(url);
+  }, [cover]);
+
+  const pickCover = async (file?: File) => {
+    if (!file) return;
+    try {
+      setCover(await prepareCoverImage(file));
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Couldn't use that picture.");
+    }
+    if (fileRef.current) fileRef.current.value = '';
+  };
 
   const { videoIds, notYouTube } = useMemo(() => {
     const ids = Array.from(new Set(tracks.map((t) => t.id).filter(isYouTubeVideoId)));
@@ -97,6 +123,7 @@ const ExportToYouTubeDialog = ({ open, onOpenChange, playlistKey, playlistName, 
       description: [playlistDescription, 'Created with NYRA'].filter(Boolean).join('\n\n'),
       privacy,
       videoIds,
+      cover,
       onProgress: setProgress,
       signal: controller.signal,
     });
@@ -149,6 +176,7 @@ const ExportToYouTubeDialog = ({ open, onOpenChange, playlistKey, playlistName, 
                 {result.skipped > 0 && `, ${result.skipped} skipped (unavailable on YouTube)`}.
               </p>
               {!!result.stopped && <p className="mt-2 text-foreground">{friendlyYouTubeError(result.stopped)}</p>}
+              {!!result.coverError && <p className="mt-2 text-muted-foreground">Cover picture not set: {result.coverError}</p>}
               {(!!result.stopped || result.cancelled) && result.playlistId && (
                 <p className="mt-2 text-muted-foreground">Open this window again later to add the remaining songs to the same YouTube playlist.</p>
               )}
@@ -199,6 +227,35 @@ const ExportToYouTubeDialog = ({ open, onOpenChange, playlistKey, playlistName, 
               </label>
               <Input id="yt-title" value={title} maxLength={150} onChange={(e) => setTitle(e.target.value)} disabled={uploadedBefore} />
             </div>
+
+            {!record?.coverSet && (
+              <div className="space-y-2">
+                <span className="text-sm font-medium">Cover picture (optional)</span>
+                <input
+                  ref={fileRef}
+                  type="file"
+                  accept="image/png,image/jpeg,image/webp"
+                  className="hidden"
+                  onChange={(e) => pickCover(e.target.files?.[0])}
+                />
+                {coverPreview ? (
+                  <div className="flex items-center gap-3">
+                    <img src={coverPreview} alt="Playlist cover preview" className="h-16 w-16 rounded-lg border border-border object-cover" />
+                    <Button type="button" variant="outline" size="sm" className="gap-1" onClick={() => setCover(null)}>
+                      <X className="h-4 w-4" /> Remove
+                    </Button>
+                    <Button type="button" variant="ghost" size="sm" onClick={() => fileRef.current?.click()}>
+                      Change
+                    </Button>
+                  </div>
+                ) : (
+                  <Button type="button" variant="outline" className="w-full gap-2" onClick={() => fileRef.current?.click()}>
+                    <ImagePlus className="h-4 w-4" /> Choose a picture
+                  </Button>
+                )}
+                <p className="text-[11px] leading-tight text-muted-foreground">It's cropped to a square automatically, like on YouTube.</p>
+              </div>
+            )}
 
             {!uploadedBefore && (
               <fieldset className="space-y-2">

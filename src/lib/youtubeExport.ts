@@ -184,6 +184,67 @@ export async function addVideoToYouTubePlaylist(token: string, playlistId: strin
   });
 }
 
+// ---------------------------------------------------------------- Custom playlist cover
+
+const COVER_MAX_BYTES = 1_800_000; // YouTube's limit is around 2 MB
+const COVER_SIZE = 1024;
+
+/** Crops any picture to a centred square and saves it as a JPEG under ~1.8 MB (YouTube wants 1:1, JPEG/PNG). */
+export async function prepareCoverImage(file: File): Promise<Blob> {
+  if (!/^image\/(jpeg|png|webp|gif)$/.test(file.type)) throw new Error('Please choose a JPG or PNG picture.');
+  const bitmap = await createImageBitmap(file);
+  const side = Math.min(bitmap.width, bitmap.height);
+  const out = Math.min(COVER_SIZE, side);
+  const canvas = document.createElement('canvas');
+  canvas.width = out;
+  canvas.height = out;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) throw new Error("Couldn't read that picture.");
+  ctx.drawImage(bitmap, (bitmap.width - side) / 2, (bitmap.height - side) / 2, side, side, 0, 0, out, out);
+  bitmap.close?.();
+
+  for (const quality of [0.92, 0.85, 0.75, 0.6]) {
+    const blob = await new Promise<Blob | null>((r) => canvas.toBlob(r, 'image/jpeg', quality));
+    if (blob && blob.size <= COVER_MAX_BYTES) return blob;
+  }
+  throw new Error('That picture is too large. Try a smaller one.');
+}
+
+/** Sets the custom cover of a YouTube playlist (playlistImages.insert, multipart upload). */
+export async function setYouTubePlaylistCover(token: string, playlistId: string, image: Blob): Promise<void> {
+  const boundary = `nyra${Math.random().toString(36).slice(2)}`;
+  const meta = JSON.stringify({ snippet: { playlistId, type: 'hero' } });
+  const body = new Blob([
+    `--${boundary}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n${meta}\r\n`,
+    `--${boundary}\r\nContent-Type: ${image.type || 'image/jpeg'}\r\n\r\n`,
+    image,
+    `\r\n--${boundary}--`,
+  ]);
+
+  for (let attempt = 0; ; attempt++) {
+    const res = await fetch('https://www.googleapis.com/upload/youtube/v3/playlistImages?part=snippet&uploadType=multipart', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': `multipart/related; boundary=${boundary}` },
+      body,
+    });
+    if (res.ok) return;
+    let reason = 'unknown';
+    let message = `YouTube error ${res.status}`;
+    try {
+      const data = await res.json();
+      reason = data?.error?.errors?.[0]?.reason || data?.error?.status || reason;
+      message = data?.error?.message || message;
+    } catch {
+      /* non-JSON error body */
+    }
+    if ((res.status >= 500 || res.status === 409) && attempt < 3) {
+      await sleep(1000 * 2 ** attempt);
+      continue;
+    }
+    throw new YouTubeApiError(message, reason, res.status);
+  }
+}
+
 // ---------------------------------------------------------------- Remembering what was uploaded
 
 export interface ExportRecord {
@@ -191,6 +252,8 @@ export interface ExportRecord {
   addedIds: string[];
   /** Videos YouTube refused (private, removed, blocked). Remembered so they are not retried every time. */
   skippedIds?: string[];
+  /** True once the custom cover has been set, so it isn't uploaded again when continuing. */
+  coverSet?: boolean;
 }
 
 export const getExportRecord = (playlistKey: string): ExportRecord | null => {
@@ -237,6 +300,8 @@ export interface ExportResult {
   /** Set when the upload stopped early (quota, expired login, ...). Songs added so far are kept. */
   stopped?: unknown;
   cancelled?: boolean;
+  /** The songs went in fine but YouTube refused the cover picture. */
+  coverError?: string;
 }
 
 /**
@@ -250,6 +315,8 @@ export async function exportPlaylistToYouTube(opts: {
   description: string;
   privacy: YouTubePrivacy;
   videoIds: string[];
+  /** Optional custom cover (already square, from prepareCoverImage). */
+  cover?: Blob | null;
   onProgress?: (p: ExportProgress) => void;
   signal?: AbortSignal;
   /** Pause between songs. Tests set this to 0. */
@@ -266,6 +333,7 @@ export async function exportPlaylistToYouTube(opts: {
   let added = 0;
   let skipped = 0;
   let restarted = false;
+  let coverError: string | undefined;
   let total = todo.length;
   const continuingEarlierUpload = !!record;
   onProgress?.({ done: 0, total, skipped });
@@ -280,14 +348,27 @@ export async function exportPlaylistToYouTube(opts: {
     saveExportRecord(playlistKey, record);
   };
 
+  // The cover is a nice-to-have: if YouTube refuses it, the songs still go in.
+  const applyCover = async () => {
+    if (!opts.cover || record?.coverSet) return;
+    try {
+      await setYouTubePlaylistCover(token, playlistId, opts.cover);
+      record!.coverSet = true;
+      saveExportRecord(playlistKey, record!);
+    } catch (e) {
+      coverError = friendlyYouTubeError(e);
+    }
+  };
+
   try {
     if (!playlistId) {
       if (todo.length === 0) throw new Error('There are no YouTube songs in this playlist to upload.');
       await newPlaylist();
     }
+    await applyCover();
 
     for (let i = 0; i < todo.length; i++) {
-      if (signal?.aborted) return { playlistId, url: youtubePlaylistUrl(playlistId), added, skipped, cancelled: true };
+      if (signal?.aborted) return { playlistId, url: youtubePlaylistUrl(playlistId), added, skipped, cancelled: true, coverError };
       const videoId = todo[i];
 
       try {
@@ -301,6 +382,7 @@ export async function exportPlaylistToYouTube(opts: {
           todo = unique;
           total = todo.length;
           await newPlaylist();
+          await applyCover();
           onProgress?.({ done: 0, total, skipped });
           i = -1;
           continue;
@@ -326,7 +408,7 @@ export async function exportPlaylistToYouTube(opts: {
             continue;
           }
         }
-        return { playlistId, url: youtubePlaylistUrl(playlistId), added, skipped, stopped: e };
+        return { playlistId, url: youtubePlaylistUrl(playlistId), added, skipped, stopped: e, coverError };
       }
 
       added++;
@@ -336,8 +418,8 @@ export async function exportPlaylistToYouTube(opts: {
       if (delayMs > 0 && i < todo.length - 1) await sleep(delayMs);
     }
   } catch (e) {
-    return { playlistId, url: playlistId ? youtubePlaylistUrl(playlistId) : '', added, skipped, stopped: e };
+    return { playlistId, url: playlistId ? youtubePlaylistUrl(playlistId) : '', added, skipped, stopped: e, coverError };
   }
 
-  return { playlistId, url: youtubePlaylistUrl(playlistId), added, skipped };
+  return { playlistId, url: youtubePlaylistUrl(playlistId), added, skipped, coverError };
 }
