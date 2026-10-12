@@ -25,9 +25,12 @@ import MadeForYouSection from '@/components/MadeForYouSection';
 
 import SEO from '@/components/SEO';
 import { getFunctionAuthHeaders } from '@/lib/functionAuth';
-import { SearchTopResult, SearchFilterChips, type SearchFilter } from '@/components/SearchTopResult';
-import { rankResults, mergeRelated, relatedQueryFor, type RankedResults } from '@/lib/searchRanking';
+import { SearchFilterChips, type SearchFilter } from '@/components/SearchFilterChips';
+import { rankResults, mergeRelated, relatedQueryFor, matchedSongName, type RankedResults } from '@/lib/searchRanking';
 
+
+// How many versions of the searched song to show in "All" before the popular songs.
+const MAX_VERSIONS_IN_ALL = 4;
 
 const Index = () => {
   const navigate = useNavigate();
@@ -101,13 +104,13 @@ const Index = () => {
 
         // Related popular songs load in the background so the first results show immediately.
         const relatedQuery = relatedQueryFor(first.top, location?.state);
-        if (relatedQuery) {
+        {
           getFunctionAuthHeaders()
             .then((headers) => fetch(searchUrl(relatedQuery), { headers }))
             .then((r) => (r.ok ? r.json() : []))
             .then((related) => {
               if (seq !== searchSeq.current || !Array.isArray(related)) return;
-              setRanked((prev) => (prev ? mergeRelated(prev, related, trimmed) : prev));
+              setRanked((prev) => (prev ? mergeRelated(prev, related) : prev));
             })
             .catch(() => { /* related songs are a bonus, ignore failures */ });
         }
@@ -126,22 +129,22 @@ const Index = () => {
     }
   }, [isSahalSearch, setTracks, settings.smartSearch, location?.state]);
 
-  // What the grid shows for the active filter. The top result has its own card above the grid.
+  // What the grid shows for the active filter. The searched song is simply the first card.
+  //   All          -> the song, a few other versions of it, then popular songs
+  //   Only "song"  -> every version of the searched song
+  //   More songs   -> only the other popular songs
   const gridTracks = useMemo(() => {
     if (!ranked) return null;
-    const versions = ranked.matches.slice(1);
-    if (searchFilter === 'match') return versions;
+    if (searchFilter === 'match') return ranked.matches;
     if (searchFilter === 'more') return ranked.others;
-    return [...versions, ...ranked.others];
+    return [...ranked.matches.slice(0, MAX_VERSIONS_IN_ALL), ...ranked.others];
   }, [ranked, searchFilter]);
-
-  const showTop = !!ranked?.top && searchFilter !== 'more';
 
   // Keep the player's next/previous list in the same order as what is on screen.
   useEffect(() => {
     if (!searchPerformed || !ranked || !gridTracks) return;
-    setTracks([...(showTop && ranked.top ? [ranked.top] : []), ...gridTracks]);
-  }, [ranked, gridTracks, showTop, searchPerformed, setTracks]);
+    setTracks(gridTracks);
+  }, [ranked, gridTracks, searchPerformed, setTracks]);
 
   const handleSearch = () => {
     performSearch(searchQuery);
@@ -351,7 +354,7 @@ const Index = () => {
                   <div className="h-px flex-1 bg-gradient-to-r from-transparent via-primary/20 to-transparent" />
                 </div>
                 <p className="text-center text-xs font-bold text-muted-foreground uppercase tracking-[0.5em]">
-                  Discovered {ranked ? (showTop ? 1 : 0) + (gridTracks?.length ?? 0) : tracks.length} tracks for "<span className="text-primary">{searchQuery}</span>"
+                  Discovered {ranked ? gridTracks?.length ?? 0 : tracks.length} tracks for "<span className="text-primary">{searchQuery}</span>"
                 </p>
               </div>
             )}
@@ -369,26 +372,16 @@ const Index = () => {
             )}
 
             {searchPerformed && !isLoading && ranked && ranked.top && (
-              <>
-                {showTop && (
-                  <SearchTopResult
-                    track={ranked.top}
-                    isCurrent={currentTrack?.id === ranked.top.id}
-                    isPlaying={isPlaying}
-                    onPlay={handlePlayTrack}
-                  />
-                )}
-                <SearchFilterChips
-                  query={searchQuery}
-                  value={searchFilter}
-                  onChange={setSearchFilter}
-                  counts={{
-                    all: ranked.matches.length + ranked.others.length,
-                    match: ranked.matches.length,
-                    more: ranked.others.length,
-                  }}
-                />
-              </>
+              <SearchFilterChips
+                query={matchedSongName(ranked.top, searchQuery) || searchQuery}
+                value={searchFilter}
+                onChange={setSearchFilter}
+                counts={{
+                  all: Math.min(ranked.matches.length, MAX_VERSIONS_IN_ALL) + ranked.others.length,
+                  match: ranked.matches.length,
+                  more: ranked.others.length,
+                }}
+              />
             )}
 
             {searchPerformed && !isLoading && ranked && ranked.top && gridTracks && gridTracks.length === 0 && (

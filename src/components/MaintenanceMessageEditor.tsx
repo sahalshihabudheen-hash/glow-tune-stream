@@ -148,7 +148,7 @@ const MaintenanceMessageEditor = ({ value, onSave }: Props) => {
     <Card className="border-border">
       <CardHeader className="pb-4">
         <div className="flex items-center gap-3">
-          <MessageSquareText className="w-5 h-5 text-primary" />
+          <MessageSquareText className="w-5 h-5 shrink-0 text-primary" />
           <div>
             <CardTitle className="text-base">Custom Maintenance Message</CardTitle>
             <CardDescription>
@@ -161,7 +161,7 @@ const MaintenanceMessageEditor = ({ value, onSave }: Props) => {
       <CardContent>
         <div className="grid gap-6 xl:grid-cols-2">
           {/* ---- Editor ---- */}
-          <div className="space-y-5">
+          <div className="min-w-0 space-y-5">
             <div className="space-y-2">
               <div className="flex items-center justify-between">
                 <label className="text-sm font-medium" htmlFor="mm-title">Title</label>
@@ -294,7 +294,7 @@ const MaintenanceMessageEditor = ({ value, onSave }: Props) => {
           </div>
 
           {/* ---- Live preview ---- */}
-          <div className="space-y-3">
+          <div className="min-w-0 space-y-3">
             <div className="flex items-center justify-between gap-2">
               <p className="text-sm font-medium">Live preview</p>
               <div className="flex items-center gap-2">

@@ -142,6 +142,8 @@ const Admin = () => {
   
   // Admin login state
   const [isAdminLoggedIn, setIsAdminLoggedIn] = useState(false);
+  const [adminTab, setAdminTab] = useState('users');
+  const tabListRef = useRef<HTMLDivElement>(null);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loginLoading, setLoginLoading] = useState(false);
@@ -385,6 +387,13 @@ const Admin = () => {
       fetchAllData();
     }
   }, [isAdminLoggedIn]);
+
+  // On phones the tab strip scrolls sideways, so keep the selected tab in view.
+  useEffect(() => {
+    tabListRef.current
+      ?.querySelector<HTMLElement>('[data-state="active"]')
+      ?.scrollIntoView({ inline: 'center', block: 'nearest', behavior: 'smooth' });
+  }, [adminTab]);
 
   const fetchAllData = async () => {
     setLoading(true);
@@ -1051,9 +1060,9 @@ const Admin = () => {
 
   // Admin dashboard
   return (
-    <div className="min-h-screen bg-background">
+    <div className="admin-root min-h-screen overflow-x-hidden bg-background">
       {/* Header */}
-      <header className="border-b border-border bg-card">
+      <header className="sticky top-0 z-30 border-b border-border bg-card/95 backdrop-blur pt-[env(safe-area-inset-top)]">
         <div className="container mx-auto px-3 sm:px-4 py-3 sm:py-4 flex items-center justify-between gap-2">
           <div className="flex items-center gap-2 sm:gap-3 min-w-0">
             <div className="w-8 h-8 sm:w-10 sm:h-10 bg-primary/10 rounded-full flex items-center justify-center flex-shrink-0">
@@ -1083,64 +1092,64 @@ const Admin = () => {
 
       {/* Content */}
       <main className="container mx-auto px-2 sm:px-4 py-4 sm:py-8">
-        <Tabs defaultValue="users" className="space-y-4 sm:space-y-6">
-          <TabsList className="flex w-full overflow-x-auto no-scrollbar">
-            <TabsTrigger value="users" className="flex items-center gap-1.5 text-xs sm:text-sm px-2 sm:px-3">
-              <Users className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
-              <span className="hidden xs:inline">Users</span>
+        <Tabs value={adminTab} onValueChange={setAdminTab} className="space-y-4 sm:space-y-6">
+          <TabsList ref={tabListRef} className="flex h-auto w-full max-w-full justify-start gap-1 overflow-x-auto p-1 no-scrollbar snap-x snap-proximity">
+            <TabsTrigger value="users" className="min-h-[40px] shrink-0 snap-start gap-1.5 px-3 text-xs sm:text-sm">
+              <Users className="w-4 h-4 shrink-0" />
+              <span>Users</span>
             </TabsTrigger>
-            <TabsTrigger value="activity" className="flex items-center gap-1.5 text-xs sm:text-sm px-2 sm:px-3">
-              <Music className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
-              <span className="hidden xs:inline">Activity</span>
+            <TabsTrigger value="activity" className="min-h-[40px] shrink-0 snap-start gap-1.5 px-3 text-xs sm:text-sm">
+              <Music className="w-4 h-4 shrink-0" />
+              <span>Activity</span>
             </TabsTrigger>
-            <TabsTrigger value="playlists" className="flex items-center gap-1.5 text-xs sm:text-sm px-2 sm:px-3">
-              <ListMusic className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
-              <span className="hidden xs:inline">Playlists</span>
+            <TabsTrigger value="playlists" className="min-h-[40px] shrink-0 snap-start gap-1.5 px-3 text-xs sm:text-sm">
+              <ListMusic className="w-4 h-4 shrink-0" />
+              <span>Playlists</span>
             </TabsTrigger>
-            <TabsTrigger value="games" className="flex items-center gap-1.5 text-xs sm:text-sm px-2 sm:px-3">
-              <Gamepad2 className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
-              <span className="hidden xs:inline">Games</span>
+            <TabsTrigger value="games" className="min-h-[40px] shrink-0 snap-start gap-1.5 px-3 text-xs sm:text-sm">
+              <Gamepad2 className="w-4 h-4 shrink-0" />
+              <span>Games</span>
               {activeGamersCount > 0 && (
                 <span className="ml-1 px-1 py-0.5 text-[10px] bg-green-500 text-white rounded-full">
                   {activeGamersCount}
                 </span>
               )}
             </TabsTrigger>
-            <TabsTrigger value="api-keys" className="flex items-center gap-1.5 text-xs sm:text-sm px-2 sm:px-3">
-              <Key className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
-              <span className="hidden xs:inline">Keys</span>
+            <TabsTrigger value="api-keys" className="min-h-[40px] shrink-0 snap-start gap-1.5 px-3 text-xs sm:text-sm">
+              <Key className="w-4 h-4 shrink-0" />
+              <span>Keys</span>
             </TabsTrigger>
-            <TabsTrigger value="maintenance" className="flex items-center gap-1.5 text-xs sm:text-sm px-2 sm:px-3">
-              <Wrench className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
-              <span className="hidden xs:inline">Maint.</span>
+            <TabsTrigger value="maintenance" className="min-h-[40px] shrink-0 snap-start gap-1.5 px-3 text-xs sm:text-sm">
+              <Wrench className="w-4 h-4 shrink-0" />
+              <span>Maint.</span>
               {maintenance.enabled && (
                 <span className="ml-1 w-2 h-2 rounded-full bg-destructive animate-pulse" />
               )}
             </TabsTrigger>
-            <TabsTrigger value="chat" className="flex items-center gap-1.5 text-xs sm:text-sm px-2 sm:px-3">
-              <MessageCircle className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
-              <span className="hidden xs:inline">Chat</span>
+            <TabsTrigger value="chat" className="min-h-[40px] shrink-0 snap-start gap-1.5 px-3 text-xs sm:text-sm">
+              <MessageCircle className="w-4 h-4 shrink-0" />
+              <span>Chat</span>
             </TabsTrigger>
-            <TabsTrigger value="app-settings" className="flex items-center gap-1.5 text-xs sm:text-sm px-2 sm:px-3">
-              <Settings2 className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
-              <span className="hidden xs:inline">App</span>
+            <TabsTrigger value="app-settings" className="min-h-[40px] shrink-0 snap-start gap-1.5 px-3 text-xs sm:text-sm">
+              <Settings2 className="w-4 h-4 shrink-0" />
+              <span>App</span>
             </TabsTrigger>
-            <TabsTrigger value="updates" className="flex items-center gap-1.5 text-xs sm:text-sm px-2 sm:px-3">
-              <Megaphone className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
-              <span className="hidden xs:inline">Updates</span>
+            <TabsTrigger value="updates" className="min-h-[40px] shrink-0 snap-start gap-1.5 px-3 text-xs sm:text-sm">
+              <Megaphone className="w-4 h-4 shrink-0" />
+              <span>Updates</span>
             </TabsTrigger>
-            <TabsTrigger value="apk" className="flex items-center gap-1.5 text-xs sm:text-sm px-2 sm:px-3">
-              <Download className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
-              <span className="hidden xs:inline">APK</span>
+            <TabsTrigger value="apk" className="min-h-[40px] shrink-0 snap-start gap-1.5 px-3 text-xs sm:text-sm">
+              <Download className="w-4 h-4 shrink-0" />
+              <span>APK</span>
             </TabsTrigger>
-            <TabsTrigger value="health" className="flex items-center gap-1.5 text-xs sm:text-sm px-2 sm:px-3">
-              <Activity className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
-              <span className="hidden xs:inline">Health</span>
+            <TabsTrigger value="health" className="min-h-[40px] shrink-0 snap-start gap-1.5 px-3 text-xs sm:text-sm">
+              <Activity className="w-4 h-4 shrink-0" />
+              <span>Health</span>
             </TabsTrigger>
             {isAdminLoggedIn && (
-              <TabsTrigger value="logs" className="flex items-center gap-1.5 text-xs sm:text-sm px-2 sm:px-3">
-                <ScrollText className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
-                <span className="hidden xs:inline">Logs</span>
+              <TabsTrigger value="logs" className="min-h-[40px] shrink-0 snap-start gap-1.5 px-3 text-xs sm:text-sm">
+                <ScrollText className="w-4 h-4 shrink-0" />
+                <span>Logs</span>
               </TabsTrigger>
             )}
           </TabsList>

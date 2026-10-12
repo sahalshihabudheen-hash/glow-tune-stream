@@ -83,7 +83,7 @@ const TrackCard = ({ track, isCurrent, isPlaying, onPlay, onAddToQueue, isFavori
           "absolute inset-0 bg-gradient-to-t from-black/90 via-black/20 to-transparent transition-opacity duration-500 flex flex-col justify-end p-4 pointer-events-none",
           "opacity-100"
         )}>
-          <div className="flex items-center gap-2 pointer-events-auto">
+          <div className="flex items-center gap-1.5 sm:gap-2 pointer-events-auto [&>button]:shrink-0">
             <button
               onClick={handlePlayNow}
               className={cn(
@@ -123,14 +123,14 @@ const TrackCard = ({ track, isCurrent, isPlaying, onPlay, onAddToQueue, isFavori
 
             <button 
               onClick={handleDownload}
-              className="w-9 h-9 rounded-full bg-white/20 backdrop-blur-sm text-white flex items-center justify-center hover:bg-white/30 transition-all active:scale-95 shadow-lg"
+              className="w-9 h-9 rounded-full bg-white/20 backdrop-blur-sm text-white max-md:hidden flex items-center justify-center hover:bg-white/30 transition-all active:scale-95 shadow-lg"
               title="Download"
             >
               {downloading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
             </button>
             <button 
               onClick={handleShare}
-              className="w-9 h-9 rounded-full bg-white/20 backdrop-blur-sm text-white flex items-center justify-center hover:bg-white/30 transition-all active:scale-95 shadow-lg"
+              className="w-9 h-9 rounded-full bg-white/20 backdrop-blur-sm text-white max-md:hidden flex items-center justify-center hover:bg-white/30 transition-all active:scale-95 shadow-lg"
               title="Share"
             >
               <Share2 className="w-4 h-4" />
@@ -140,7 +140,7 @@ const TrackCard = ({ track, isCurrent, isPlaying, onPlay, onAddToQueue, isFavori
 
 
         {/* Top Actions Group (Secondary) - always visible on mobile, hover on desktop */}
-        <div className="absolute top-3 right-3 flex flex-col gap-2 z-10 opacity-100 md:opacity-0 md:translate-x-4 md:group-hover:opacity-100 md:group-hover:translate-x-0 transition-all duration-500">
+        <div className="absolute top-3 right-3 flex flex-col max-md:flex-row max-md:gap-1.5 gap-2 z-10 opacity-100 md:opacity-0 md:translate-x-4 md:group-hover:opacity-100 md:group-hover:translate-x-0 transition-all duration-500">
           <button onClick={handleDownload} aria-label="Download" className="w-8 h-8 rounded-lg bg-black/50 backdrop-blur-md border border-white/10 text-white flex items-center justify-center hover:bg-primary hover:text-primary-foreground transition-all active:scale-90 shadow-lg">
             {downloading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />}
           </button>

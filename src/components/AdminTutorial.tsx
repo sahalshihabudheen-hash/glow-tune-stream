@@ -432,9 +432,10 @@ const AdminTutorial = ({ onComplete }: AdminTutorialProps) => {
     switch (step.cardPosition) {
       case 'bottom-right': return 'bottom-6 right-3 sm:bottom-8 sm:right-8';
       case 'bottom-left': return 'bottom-6 left-3 sm:bottom-8 sm:left-8';
-      case 'top-center': return 'top-20 left-1/2 -translate-x-1/2';
+      case 'top-center': return 'top-20 inset-x-0 mx-auto';
       case 'top-right': return 'top-20 right-3 sm:right-8';
-      default: return 'top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2';
+      // No transforms for centering: the entrance animation sets its own transform and would override them.
+      default: return 'inset-0 m-auto h-fit';
     }
   };
 

@@ -853,3 +853,9 @@ input[type="range"]::-moz-range-thumb:active {
   0% { transform: scale(0.4); opacity: 0; }
   100% { transform: scale(1); opacity: 1; }
 }
+
+/* Admin dashboard: icons next to titles were squashed to a few pixels on narrow phones
+   because flex rows shrank them. Keep icons at their intended size. */
+.admin-root svg {
+  flex-shrink: 0;
+}

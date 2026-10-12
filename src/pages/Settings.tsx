@@ -901,7 +901,7 @@ const Settings = () => {
                 <div className="flex items-center justify-between gap-4">
                   <div className="flex-1">
                     <p className="font-medium text-foreground text-sm md:text-base">Smart Search</p>
-                    <p className="text-xs md:text-sm text-muted-foreground">Show the song you searched for first, then other versions and popular songs. Adds filters to results.</p>
+                    <p className="text-xs md:text-sm text-muted-foreground">Searching a song shows that song first, then other popular songs. Adds filters to the results. Turn off for plain search results.</p>
                   </div>
                   <Switch
                     checked={settings.smartSearch}
