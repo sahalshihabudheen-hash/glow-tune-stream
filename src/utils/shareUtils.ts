@@ -51,27 +51,15 @@ export function buildShareUrl(options: ShareOptions): string {
   return `${origin}/api/og?${params.toString()}`;
 }
 
-/**
- * Executes copy to clipboard and presents a premium toast notification.
- */
-export async function executeShare(options: ShareOptions): Promise<boolean> {
-  const shareUrl = buildShareUrl(options);
-  // Warm the preview in the background so Discord's (impatient) crawler finds it ready. warm=1 also makes the server
-  // build the playable MP4 now (it takes several seconds), instead of when Discord asks and gives up waiting.
-  try { void fetch(`${shareUrl}${shareUrl.includes('?') ? '&' : '?'}warm=1`, { mode: 'no-cors' }).catch(() => {}); } catch { /* ignore */ }
-  const toastMsg = options.toastMessage || (
-    options.type === 'playlist' ? 'Playlist link copied!' :
-    options.type === 'artist' ? 'Artist link copied!' :
-    options.type === 'album' ? 'Album link copied!' :
-    'Share link copied!'
-  );
+const WARM_TIMEOUT_MS = 35000; // the server needs a few seconds to build the playable preview; never wait longer than this
 
+const shareIcon = () => React.createElement(Share2, { className: 'w-4 h-4 text-primary' });
+
+/** Plain clipboard copy (needs a recent click in some browsers, so it can fail when called late). */
+async function copyText(text: string): Promise<boolean> {
   try {
     if (typeof navigator !== 'undefined' && navigator.clipboard && navigator.clipboard.writeText) {
-      await navigator.clipboard.writeText(shareUrl);
-      toast.success(toastMsg, {
-        icon: React.createElement(Share2, { className: 'w-4 h-4 text-primary' }),
-      });
+      await navigator.clipboard.writeText(text);
       return true;
     }
   } catch (err) {
@@ -81,21 +69,101 @@ export async function executeShare(options: ShareOptions): Promise<boolean> {
   // Fallback for environments where clipboard writeText fails
   try {
     const textArea = document.createElement('textarea');
-    textArea.value = shareUrl;
+    textArea.value = text;
     textArea.style.position = 'fixed';
     textArea.style.opacity = '0';
     document.body.appendChild(textArea);
     textArea.select();
-    document.execCommand('copy');
+    const ok = document.execCommand('copy');
     document.body.removeChild(textArea);
-    toast.success(toastMsg, {
-      icon: React.createElement(Share2, { className: 'w-4 h-4 text-primary' }),
-    });
-    return true;
+    return ok;
   } catch {
-    toast.error('Could not copy link to clipboard');
     return false;
   }
+}
+
+/**
+ * Shares a link. For songs the link is only handed over once the server has finished preparing the playable
+ * preview (a few seconds), with a progress toast meanwhile; everything else is copied straight away.
+ */
+export async function executeShare(options: ShareOptions): Promise<boolean> {
+  const shareUrl = buildShareUrl(options);
+  const type = options.type || 'song';
+
+  if (type !== 'song') {
+    // Warm the preview in the background so Discord's (impatient) crawler finds it ready.
+    try { void fetch(shareUrl, { mode: 'no-cors' }).catch(() => {}); } catch { /* ignore */ }
+    const toastMsg = options.toastMessage || (
+      type === 'playlist' ? 'Playlist link copied!' :
+      type === 'artist' ? 'Artist link copied!' :
+      'Album link copied!'
+    );
+    const ok = await copyText(shareUrl);
+    if (ok) toast.success(toastMsg, { icon: shareIcon() });
+    else toast.error('Could not copy link to clipboard');
+    return ok;
+  }
+
+  const toastId = toast.loading('Generating link…');
+  const stages: Array<[number, string]> = [
+    [1500, 'Refining details…'],
+    [5000, 'Preparing the player…'],
+    [12000, 'Almost ready…'],
+  ];
+  const timers = stages.map(([ms, msg]) => setTimeout(() => toast.loading(msg, { id: toastId }), ms));
+
+  // warm=1 makes the server build the playable preview now and answer only when it is done. It never rejects:
+  // if it fails or times out we still hand over the link (the preview just falls back to the plain card).
+  const ready: Promise<void> = new Promise((resolve) => {
+    const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
+    const timer = setTimeout(() => { controller?.abort(); resolve(); }, WARM_TIMEOUT_MS);
+    try {
+      fetch(`${shareUrl}${shareUrl.includes('?') ? '&' : '?'}warm=1`, { mode: 'no-cors', signal: controller?.signal })
+        .then(() => undefined, () => undefined)
+        .then(() => { clearTimeout(timer); resolve(); });
+    } catch {
+      clearTimeout(timer);
+      resolve();
+    }
+  });
+
+  let copied = false;
+  try {
+    // Hand the clipboard a promise: the copy then completes the moment the link is ready, and still counts as
+    // part of the original click (browsers block plain clipboard writes made several seconds after a click).
+    if (typeof ClipboardItem !== 'undefined' && typeof navigator !== 'undefined' && navigator.clipboard?.write) {
+      const blob = ready.then(() => new Blob([shareUrl], { type: 'text/plain' }));
+      await navigator.clipboard.write([new ClipboardItem({ 'text/plain': blob })]);
+      copied = true;
+    }
+  } catch (err) {
+    console.warn('[Share] Deferred clipboard write failed:', err);
+  }
+  if (!copied) {
+    await ready;
+    copied = await copyText(shareUrl);
+  }
+  timers.forEach(clearTimeout);
+
+  if (copied) {
+    toast.success(options.toastMessage || 'Link ready — paste it anywhere!', { id: toastId, icon: shareIcon() });
+  } else {
+    // The browser refused a late copy: let the person click once more (a fresh click is always allowed).
+    toast.error('Link is ready', {
+      id: toastId,
+      description: 'Your browser blocked the automatic copy.',
+      action: {
+        label: 'Copy link',
+        onClick: () => {
+          void copyText(shareUrl).then((ok) => {
+            if (ok) toast.success('Link copied!', { icon: shareIcon() });
+            else toast.error('Could not copy link to clipboard');
+          });
+        },
+      },
+    });
+  }
+  return copied;
 }
 
 /**
