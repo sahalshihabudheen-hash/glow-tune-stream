@@ -28,9 +28,12 @@ export function buildShareUrl(options: ShareOptions): string {
   const artist = options.artist || options.channel || 'NYRA';
   const thumbnail = options.thumbnail || '';
   
-  // Short link for YouTube songs: the server looks up title/artist from the id, so Discord shows a tiny URL
-  // instead of a 300-character one.
-  if (type === 'song' && /^[\w-]{11}$/.test(id) && (!thumbnail || /^https:\/\/i\.ytimg\.com\//.test(thumbnail))) {
+  const isYoutubeSong = type === 'song' && /^[\w-]{11}$/.test(id) && (!thumbnail || /^https:\/\/i\.ytimg\.com\//.test(thumbnail));
+  const hasRealTitle = !!options.title && options.title !== 'Great Music';
+
+  // Fallback short link (no title known): the server has to look title/artist up from the id, and that lookup
+  // is unreliable from serverless IPs, so only use it when we truly have nothing else.
+  if (isYoutubeSong && !hasRealTitle) {
     return `${origin}/api/og?id=${id}`;
   }
 
@@ -39,7 +42,8 @@ export function buildShareUrl(options: ShareOptions): string {
   if (id) params.set('id', id);
   if (title) params.set('title', title);
   if (artist) params.set('artist', artist);
-  if (thumbnail) params.set('thumbnail', thumbnail);
+  // The server derives YouTube thumbnails from the id, so leave them out to keep the link shorter.
+  if (thumbnail && !isYoutubeSong) params.set('thumbnail', thumbnail);
   if (options.trackCount !== undefined) params.set('tracks', String(options.trackCount));
   if (options.creator) params.set('creator', options.creator);
   if (options.color) params.set('color', options.color.replace('#', ''));
