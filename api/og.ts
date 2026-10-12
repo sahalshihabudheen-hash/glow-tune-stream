@@ -1,9 +1,5 @@
 import { resolveSaavn } from './_saavn';
 
-export const config = {
-  runtime: 'edge',
-};
-
 function escapeHtml(str: string = ''): string {
   return String(str)
     .replace(/&/g, '&amp;')
@@ -29,7 +25,7 @@ function extractThemeColor(colorHint: string | null, seed: string): string {
   return PRESET_COLORS[Math.abs(hash) % PRESET_COLORS.length];
 }
 
-export default async function handler(req: Request) {
+async function handler(req: Request) {
   try {
     const url = new URL(req.url);
     const baseUrl = url.origin;
@@ -177,3 +173,6 @@ export default async function handler(req: Request) {
     });
   }
 }
+
+// Node.js runtime web handler (the Edge runtime rejects these modules at deploy time).
+export default { fetch: handler };

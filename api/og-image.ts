@@ -1,8 +1,5 @@
-import { ImageResponse } from '@vercel/og';
-
-export const config = {
-  runtime: 'edge',
-};
+import satori from 'satori';
+import { Resvg } from '@resvg/resvg-js';
 
 /**
  * Branded share card (1200x630) used as the Discord / social preview image.
@@ -49,6 +46,14 @@ const bestThumbnail = async (thumb: string): Promise<string> => {
 
 const loadFont = async (origin: string, file: string): Promise<ArrayBuffer | null> => {
   try {
+    const { readFile } = await import('node:fs/promises');
+    const { join } = await import('node:path');
+    const buf = await readFile(join(process.cwd(), 'public', 'fonts', file));
+    return buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength) as ArrayBuffer;
+  } catch {
+    /* not bundled: fall back to the deployed site */
+  }
+  try {
     const res = await fetch(`${origin}/fonts/${file}`);
     return res.ok ? await res.arrayBuffer() : null;
   } catch {
@@ -62,7 +67,7 @@ const el = (type: string, style: Record<string, unknown>, children?: unknown, ex
   props: { style: { display: 'flex', ...style }, children, ...extra },
 });
 
-export default async function handler(req: Request) {
+async function handler(req: Request) {
   const url = new URL(req.url);
   const q = (k: string) => url.searchParams.get(k) || '';
 
@@ -98,7 +103,6 @@ export default async function handler(req: Request) {
       overflow: 'hidden',
       background: '#12131c',
       border: `3px solid ${color}88`,
-      boxShadow: `0 0 90px ${color}66, 0 30px 60px rgba(0,0,0,0.65)`,
       alignItems: 'center',
       justifyContent: 'center',
     },
@@ -109,17 +113,8 @@ export default async function handler(req: Request) {
 
   const playButton = el(
     'div',
-    { width: 72, height: 72, borderRadius: 36, background: color, alignItems: 'center', justifyContent: 'center', boxShadow: `0 0 40px ${color}99` },
-    {
-      type: 'svg',
-      props: {
-        width: 34,
-        height: 34,
-        viewBox: '0 0 24 24',
-        style: { marginLeft: 5 },
-        children: { type: 'path', props: { d: 'M7 4.5v15a1 1 0 0 0 1.5.86l12.5-7.5a1 1 0 0 0 0-1.72L8.5 3.64A1 1 0 0 0 7 4.5z', fill: '#07080d' } },
-      },
-    },
+    { width: 72, height: 72, borderRadius: 36, background: color, alignItems: 'center', justifyContent: 'center' },
+    el('div', { width: 0, height: 0, marginLeft: 8, borderLeft: '26px solid #07080d', borderTop: '16px solid transparent', borderBottom: '16px solid transparent' }, null),
   );
 
   const tree = el(
@@ -134,7 +129,7 @@ export default async function handler(req: Request) {
       el('div', { position: 'absolute', top: -160, left: -160, width: 760, height: 760, backgroundImage: `radial-gradient(circle, ${color}55 0%, rgba(0,0,0,0) 68%)` }, null),
       el('div', { position: 'absolute', top: 0, left: 0, width: 1200, height: 8, backgroundImage: `linear-gradient(90deg, ${color}, rgba(0,0,0,0))` }, null),
 
-      el('div', { width: 1200, height: 630, padding: '0 72px', alignItems: 'center' }, [
+      el('div', { position: 'relative', width: 1200, height: 630, padding: '0 72px', alignItems: 'center' }, [
         artBox,
         el('div', { flexDirection: 'column', marginLeft: 64, flex: 1, minWidth: 0 }, [
           el('div', { alignItems: 'center', color, fontSize: 24, fontWeight: 800, letterSpacing: 6 }, [
@@ -163,14 +158,20 @@ export default async function handler(req: Request) {
   ];
 
   try {
-    return new ImageResponse(tree as never, {
-      width: 1200,
-      height: 630,
-      fonts: fonts.length ? fonts : undefined,
-      headers: { 'cache-control': 'public, max-age=86400, s-maxage=604800, stale-while-revalidate=86400' },
+    if (!fonts.length) throw new Error('fonts unavailable');
+    const svg = await satori(tree as never, { width: 1200, height: 630, fonts: fonts as never });
+    const png = new Resvg(svg, { fitTo: { mode: 'width', value: 1200 } }).render().asPng();
+    return new Response(new Uint8Array(png), {
+      headers: {
+        'content-type': 'image/png',
+        'cache-control': 'public, max-age=86400, s-maxage=604800, stale-while-revalidate=86400',
+      },
     });
   } catch {
     // Never leave the embed without a picture: fall back to the plain artwork.
     return Response.redirect(rawThumb || `${url.origin}/headphones.png`, 302);
   }
 }
+
+// Node.js runtime web handler (the Edge runtime rejects these modules at deploy time).
+export default { fetch: handler };

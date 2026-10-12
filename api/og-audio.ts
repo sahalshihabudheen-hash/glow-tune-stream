@@ -1,9 +1,5 @@
 import { resolveSaavn } from './_saavn';
 
-export const config = {
-  runtime: 'edge',
-};
-
 /**
  * Playable audio for share-link embeds (Discord plays og:video when it is a real MP4 file).
  *
@@ -20,7 +16,7 @@ const CORS: Record<string, string> = {
 
 const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120 Safari/537.36';
 
-export default async function handler(req: Request) {
+async function handler(req: Request) {
   if (req.method === 'OPTIONS') return new Response(null, { status: 204, headers: CORS });
   if (req.method !== 'GET' && req.method !== 'HEAD') return new Response('Method not allowed', { status: 405, headers: CORS });
 
@@ -57,3 +53,6 @@ export default async function handler(req: Request) {
   }
   return new Response('Audio source unavailable', { status: 502, headers: CORS });
 }
+
+// Node.js runtime web handler (the Edge runtime rejects these modules at deploy time).
+export default { fetch: handler };
