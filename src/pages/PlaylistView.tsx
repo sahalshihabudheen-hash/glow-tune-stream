@@ -1,6 +1,6 @@
 import { useState, useCallback, useEffect, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { Play, Pause, Trash2, Shuffle, Repeat, Repeat1, ArrowLeft, Search, Music2, Download, Check, Filter, Flame, Heart, Zap, Moon, Dumbbell, Sparkles, Plus, BookmarkPlus } from 'lucide-react';
+import { Play, Pause, Trash2, Shuffle, Repeat, Repeat1, ArrowLeft, Search, Music2, Download, Check, Filter, Flame, Heart, Zap, Moon, Dumbbell, Sparkles, Plus, BookmarkPlus, Youtube } from 'lucide-react';
 import { getFunctionAuthHeaders } from '@/lib/functionAuth';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
@@ -17,6 +17,7 @@ import { SpotifyIcon } from '@/components/SpotifyPlaylistsSection';
 
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
+import ExportToYouTubeDialog from '@/components/ExportToYouTubeDialog';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { useMusicPlayer } from '@/contexts/MusicPlayerContext';
 import { useDownloadManager } from '@/contexts/DownloadManagerContext';
@@ -89,6 +90,7 @@ const PlaylistView = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { user, loading: authLoading } = useAuth();
+  const [ytDialogOpen, setYtDialogOpen] = useState(false);
 
   const {
     currentTrack, isPlaying,
@@ -608,6 +610,25 @@ const PlaylistView = () => {
                   </Button>
                 </>
               )}
+
+              <button
+                onClick={() => setYtDialogOpen(true)}
+                disabled={playlistTracks.length === 0}
+                title="Upload this playlist to YouTube"
+                aria-label="Upload this playlist to YouTube"
+                className="h-12 px-4 rounded-2xl flex items-center gap-2 bg-red-600/15 text-red-400 border border-red-500/30 hover:bg-red-600/25 font-bold transition-all shadow-lg disabled:opacity-40 disabled:pointer-events-none"
+              >
+                <Youtube className="w-5 h-5 shrink-0" />
+                <span className="hidden sm:inline">Upload to YouTube</span>
+              </button>
+              <ExportToYouTubeDialog
+                open={ytDialogOpen}
+                onOpenChange={setYtDialogOpen}
+                playlistKey={id!}
+                playlistName={playlist?.name || 'My NYRA playlist'}
+                playlistDescription={playlist?.description || undefined}
+                tracks={playlistTracks}
+              />
 
               <button
                 onClick={toggleShuffle}
