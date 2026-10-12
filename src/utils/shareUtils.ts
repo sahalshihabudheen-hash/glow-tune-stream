@@ -52,6 +52,8 @@ export function buildShareUrl(options: ShareOptions): string {
  */
 export async function executeShare(options: ShareOptions): Promise<boolean> {
   const shareUrl = buildShareUrl(options);
+  // Warm the preview in the background so Discord's (impatient) crawler finds it ready.
+  try { void fetch(shareUrl, { mode: 'no-cors' }).catch(() => {}); } catch { /* ignore */ }
   const toastMsg = options.toastMessage || (
     options.type === 'playlist' ? 'Playlist link copied!' :
     options.type === 'artist' ? 'Artist link copied!' :

@@ -69,7 +69,7 @@ const decodeEntities = (s: string): string =>
 async function fetchYoutubeMeta(id: string): Promise<{ title: string; artist: string; thumbnail: string } | null> {
   try {
     const res = await fetch(`https://www.youtube.com/oembed?url=${encodeURIComponent(`https://www.youtube.com/watch?v=${id}`)}&format=json`, {
-      signal: AbortSignal.timeout(3500),
+      signal: AbortSignal.timeout(2000),
     });
     if (!res.ok) return null;
     const d = await res.json();
@@ -166,15 +166,24 @@ async function handler(req: Request) {
     // the song on JioSaavn, so songs without a match keep the normal image preview (no broken player).
     let videoTags = '';
     let twitterCard = 'summary_large_image';
+    let cacheControl = 'public, max-age=3600, s-maxage=86400';
     if (type === 'song' && trackTitle !== 'Great Music') {
-      const match = await resolveSaavn(trackTitle, trackArtist, 4500);
-      if (match) {
+      // Discord's crawler gives up fast, so never wait long here. If the lookup is slow, assume the song exists
+      // (most do) instead of dropping the player, and don't let that guess sit in the CDN for a day.
+      const lookup = resolveSaavn(trackTitle, trackArtist, 4500);
+      const raced = await Promise.race([
+        lookup.then((m) => ({ done: true, m })),
+        new Promise<{ done: boolean; m: SaavnMatch | null }>((r) => setTimeout(() => r({ done: false, m: null }), 2200)),
+      ]);
+      const hasAudio = raced.done ? !!raced.m : true;
+      if (!raced.done) cacheControl = 'public, max-age=60, s-maxage=60';
+      if (hasAudio) {
         const audioParams = new URLSearchParams({ title: trackTitle, artist: trackArtist, img: cardUrl });
         const audioUrl = escapeHtml(`${baseUrl}/api/og-audio?${audioParams.toString()}`);
         ogType = 'video.other';
         twitterCard = 'player';
         videoTags = `
-  <!-- Playable audio (AAC in MP4) so Discord shows a play button -->
+  <!-- Playable video (card + song audio) so Discord shows a play button -->
   <meta property="og:video" content="${audioUrl}">
   <meta property="og:video:url" content="${audioUrl}">
   <meta property="og:video:secure_url" content="${audioUrl}">
@@ -242,7 +251,7 @@ async function handler(req: Request) {
     return new Response(html, {
       headers: {
         'content-type': 'text/html; charset=UTF-8',
-        'cache-control': 'public, max-age=3600, s-maxage=86400',
+        'cache-control': cacheControl,
       },
     });
   } catch (err) {
