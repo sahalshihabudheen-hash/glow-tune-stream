@@ -144,7 +144,7 @@ async function handler(req: Request) {
     if (type === 'song' && trackTitle !== 'Great Music') {
       const match = await resolveSaavn(trackTitle, trackArtist, 4500);
       if (match) {
-        const audioParams = new URLSearchParams({ title: trackTitle, artist: trackArtist });
+        const audioParams = new URLSearchParams({ title: trackTitle, artist: trackArtist, img: cardUrl });
         const audioUrl = escapeHtml(`${baseUrl}/api/og-audio?${audioParams.toString()}`);
         ogType = 'video.other';
         twitterCard = 'player';

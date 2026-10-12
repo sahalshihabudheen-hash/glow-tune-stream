@@ -81,6 +81,10 @@
     }
   ],
   "functions": {
+    "api/og-audio.ts": {
+      "maxDuration": 60,
+      "includeFiles": "node_modules/ffmpeg-static/ffmpeg"
+    },
     "api/og-image.ts": {
       "includeFiles": "public/fonts/**"
     },
