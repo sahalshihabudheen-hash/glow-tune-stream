@@ -1,3 +1,5 @@
+import { resolveSaavn } from './_saavn';
+
 export const config = {
   runtime: 'edge',
 };
@@ -83,6 +85,30 @@ export default async function handler(req: Request) {
       redirectUrl = `${baseUrl}/?search=${encodeURIComponent(trackTitle)}`;
     }
 
+    // Playable embed: Discord plays og:video when it is a real MP4. Only add it when we actually found
+    // the song on JioSaavn, so songs without a match keep the normal image preview (no broken player).
+    let videoTags = '';
+    let twitterCard = 'summary_large_image';
+    if (type === 'song' && trackTitle !== 'Great Music') {
+      const match = await resolveSaavn(trackTitle, trackArtist, 4500);
+      if (match) {
+        const audioParams = new URLSearchParams({ title: trackTitle, artist: trackArtist });
+        const audioUrl = escapeHtml(`${baseUrl}/api/og-audio?${audioParams.toString()}`);
+        ogType = 'video.other';
+        twitterCard = 'player';
+        videoTags = `
+  <!-- Playable audio (AAC in MP4) so Discord shows a play button -->
+  <meta property="og:video" content="${audioUrl}">
+  <meta property="og:video:url" content="${audioUrl}">
+  <meta property="og:video:secure_url" content="${audioUrl}">
+  <meta property="og:video:type" content="video/mp4">
+  <meta property="og:video:width" content="1200">
+  <meta property="og:video:height" content="630">
+  <meta name="twitter:player:stream" content="${audioUrl}">
+  <meta name="twitter:player:stream:content_type" content="video/mp4">`;
+      }
+    }
+
     const html = `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -104,10 +130,10 @@ export default async function handler(req: Request) {
   <meta property="og:image:width" content="1200">
   <meta property="og:image:height" content="630">
   <meta property="og:image:alt" content="${safeTitle} by ${safeArtist} on ${appName}">
-  <meta property="og:url" content="${escapeHtml(redirectUrl)}">
+  <meta property="og:url" content="${escapeHtml(redirectUrl)}">${videoTags}
 
   <!-- Twitter / Discord Summary Large Image Card -->
-  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:card" content="${twitterCard}">
   <meta name="twitter:title" content="🎧 ${safeTitle}">
   <meta name="twitter:description" content="${description}">
   <meta name="twitter:image" content="${safeCard}">
