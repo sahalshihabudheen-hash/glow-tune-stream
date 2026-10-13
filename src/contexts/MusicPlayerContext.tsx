@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useRef, useCallback, useEffect } from 'react';
-import { notifyNativeTrack, notifyNativePlayback, listenCarCommands, isNative } from '@/lib/nyraMediaBridge';
+import { notifyNativeTrack, notifyNativePlayback, notifyNativeLiked, listenCarCommands, isNative } from '@/lib/nyraMediaBridge';
 import { toast } from 'sonner';
 import { usePlaylist } from '@/hooks/usePlaylist';
 import { useQueue } from '@/hooks/useQueue';
@@ -1555,6 +1555,17 @@ export function MusicPlayerProvider({ children }: { children: React.ReactNode })
   }, [isPlaying, currentTrack]);
 
 
+  // Heart button on the Android notification: keep it in sync with favourites and handle taps.
+  const currentTrackRef = useRef<Track | null>(null);
+  const toggleFavoriteRef = useRef(toggleFavorite);
+  currentTrackRef.current = currentTrack;
+  toggleFavoriteRef.current = toggleFavorite;
+
+  useEffect(() => {
+    if (!currentTrack) return;
+    notifyNativeLiked(isFavorite(currentTrack.id));
+  }, [currentTrack, isFavorite]);
+
   useEffect(() => {
     const unsub = listenCarCommands(
       () => { audioRef.current?.play()?.catch(() => {}); ytPlayerRef.current?.playVideo?.(); },
@@ -1564,7 +1575,11 @@ export function MusicPlayerProvider({ children }: { children: React.ReactNode })
         ytPlayerRef.current?.seekTo?.(ms / 1000, true);
       },
       () => handleNextRef.current?.(),
-      () => handlePreviousRef.current?.()
+      () => handlePreviousRef.current?.(),
+      () => {
+        const track = currentTrackRef.current;
+        if (track) toggleFavoriteRef.current(track);
+      }
     );
     return unsub;
   }, []);

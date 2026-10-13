@@ -1,0 +1,10 @@
+.gradle/
+build/
+local.properties
+.idea/
+captures/
+*.iml
+# Never commit signing material
+keystore.properties
+*.jks
+*.keystore

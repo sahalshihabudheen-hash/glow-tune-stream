@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- app_name is generated per build type in app/build.gradle.kts -->
+    <string name="notification_channel_name">NYRA now playing</string>
+    <string name="battery_tip_title">Keep the music going 🎧</string>
+    <string name="battery_tip_message">To keep playing when your screen is off, open the app settings, tap Battery and choose Unrestricted. Some phones stop music in the background otherwise.</string>
+    <string name="battery_tip_open">Open settings</string>
+    <string name="battery_tip_later">Not now</string>
+</resources>

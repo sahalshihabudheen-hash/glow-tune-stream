@@ -74,7 +74,8 @@ const Debug = () => {
 
       const cap = (window as any).Capacitor;
       const nativeActive = isNative();
-      const hasMediaPlugin = !!cap?.Plugins?.NyraMedia || !!cap?.registerPlugin;
+      const hasAndroidBridge = !!(window as any).NyraAndroid;
+      const hasMediaPlugin = hasAndroidBridge || !!cap?.Plugins?.NyraMedia || !!cap?.registerPlugin;
 
       return {
         playbackState: effective,
@@ -86,7 +87,7 @@ const Debug = () => {
         duration: Number.isFinite(dur) && dur > 0 ? `${dur.toFixed(1)}s` : "unknown",
         hidden: document.visibilityState,
         online: navigator.onLine ? "online" : "offline",
-        native: nativeActive ? "yes (Capacitor)" : "no (browser)",
+        native: nativeActive ? (hasAndroidBridge ? "yes (Android app)" : "yes (Capacitor)") : "no (browser)",
         nativeService: nativeActive
           ? hasMediaPlugin
             ? "active (NyraMedia media session bound)"

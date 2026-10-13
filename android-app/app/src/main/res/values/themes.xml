@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+
+    <!-- Shown while the app starts (Android 12+ splash screen API, back-ported by core-splashscreen) -->
+    <style name="Theme.Nyra.Starting" parent="Theme.SplashScreen">
+        <item name="windowSplashScreenBackground">@color/splash_bg</item>
+        <item name="windowSplashScreenAnimatedIcon">@drawable/ic_splash_logo</item>
+        <item name="postSplashScreenTheme">@style/Theme.Nyra</item>
+    </style>
+
+    <style name="Theme.Nyra" parent="Theme.AppCompat.NoActionBar">
+        <item name="android:windowBackground">@color/nyra_bg</item>
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:navigationBarColor">@android:color/transparent</item>
+        <item name="colorPrimary">@color/nyra_accent</item>
+        <item name="colorAccent">@color/nyra_accent</item>
+    </style>
+</resources>

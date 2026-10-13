@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- App background: matches the site's dark background (hsl 0 0% 4%) so there is no flash or stripe behind the status bar -->
+    <color name="nyra_bg">#0A0A0A</color>
+    <!-- Brand accent, taken from the logo's coral/orange. Tints the notification and dialog buttons. -->
+    <color name="nyra_accent">#EF6C44</color>
+    <!-- Flat background colour of the logo artwork: launcher icon + splash screen -->
+    <color name="ic_launcher_background">#101010</color>
+    <color name="splash_bg">#101010</color>
+</resources>
