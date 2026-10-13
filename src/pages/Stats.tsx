@@ -1,6 +1,12 @@
 import { useId, useMemo, useState } from 'react';
 import { Link, useNavigate, useParams, useLocation } from 'react-router-dom';
-import { ArrowLeft, BarChart3, Flame, Music2 } from 'lucide-react';
+import {
+  ArrowLeft, BarChart3, CalendarDays, Clock, Flame, Heart, Moon, Music2, Play, Trophy, Users,
+} from 'lucide-react';
+import {
+  ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid,
+  AreaChart, Area, PieChart, Pie, Cell, Legend,
+} from 'recharts';
 import Navbar from '@/components/Navbar';
 import Sidebar from '@/components/Sidebar';
 import { Button } from '@/components/ui/button';
@@ -15,6 +21,15 @@ const GENRE_COLORS = [
   'hsl(210 100% 60%)', 'hsl(190 95% 50%)', 'hsl(260 85% 66%)', 'hsl(330 85% 62%)',
   'hsl(35 95% 55%)', 'hsl(150 70% 45%)', 'hsl(0 80% 62%)', 'hsl(280 60% 60%)',
 ];
+
+const chartTooltip = {
+  contentStyle: {
+    background: 'hsl(var(--card))',
+    border: '1px solid hsl(var(--border))',
+    borderRadius: '0.75rem',
+    fontSize: '12px',
+  },
+};
 
 const WEEKDAY_ROWS = ['', 'Mon', '', 'Wed', '', 'Fri', ''];
 
@@ -131,24 +146,24 @@ const Calendar = ({ days }: { days: { date: string; weekday: number; plays: numb
   if (col.length) cols.push(col);
 
   return (
-    <div className="flex gap-1.5 overflow-x-auto no-scrollbar" role="img" aria-label="Plays per day over the last 12 weeks">
+    <div className="flex w-full gap-1.5" role="img" aria-label="Plays per day over the last 12 weeks">
       <div className="flex flex-col gap-[3px] pr-1 text-[10px] text-muted-foreground">
         {WEEKDAY_ROWS.map((d, i) => (
-          <span key={i} className="flex h-[22px] items-center">{d}</span>
+          <span key={i} className="flex h-3.5 items-center sm:h-[22px]">{d}</span>
         ))}
       </div>
-      <div className="flex gap-[3px]">
+      <div className="flex min-w-0 flex-1 gap-[3px]">
         {cols.map((c, i) => (
-          <div key={i} className="flex flex-col gap-[3px]">
+          <div key={i} className="flex min-w-0 flex-1 flex-col gap-[3px]">
             {Array.from({ length: 7 }).map((_, r) => {
               const d = c[r];
-              if (!d) return <span key={r} className="h-[22px] w-[22px]" />;
+              if (!d) return <span key={r} className="h-3.5 w-full sm:h-[22px]" />;
               const t = d.plays / max;
               return (
                 <span
                   key={r}
                   title={`${d.date} — ${d.plays} ${d.plays === 1 ? 'play' : 'plays'}`}
-                  className={cn('h-[22px] w-[22px] rounded-[4px]', d.date === todayKey && 'ring-1 ring-foreground/60')}
+                  className={cn('h-3.5 w-full rounded-[3px] sm:h-[22px] sm:rounded-[4px]', d.date === todayKey && 'ring-1 ring-foreground/60')}
                   style={{ background: d.plays === 0 ? 'hsl(var(--muted) / .55)' : `hsl(var(--primary) / ${0.25 + t * 0.75})` }}
                 />
               );
@@ -165,13 +180,24 @@ const Calendar = ({ days }: { days: { date: string; weekday: number; plays: numb
 /* ------------------------------------------------------------------ */
 
 const Section = ({ title, note, children, className }: { title: string; note?: string; children: React.ReactNode; className?: string }) => (
-  <section className={cn('border-t border-border/70 pt-6', className)}>
+  <section className={cn('rounded-2xl border border-white/10 bg-card/40 p-4 backdrop-blur-xl md:p-6', className)}>
     <div className="mb-4 flex flex-wrap items-baseline gap-x-3 gap-y-1">
-      <h2 className="text-xl font-extrabold tracking-tight">{title}</h2>
+      <h2 className="text-lg font-extrabold tracking-tight">{title}</h2>
       {note && <p className="text-xs text-muted-foreground">{note}</p>}
     </div>
     {children}
   </section>
+);
+
+const StatCard = ({ icon: Icon, label, value, sub }: { icon: typeof Clock; label: string; value: string; sub?: string }) => (
+  <div className="min-w-0 rounded-2xl border border-white/10 bg-card/40 p-4 backdrop-blur-xl">
+    <div className="mb-2 flex items-center gap-2 text-muted-foreground">
+      <Icon className="h-4 w-4 shrink-0 text-primary" />
+      <span className="truncate text-xs font-medium">{label}</span>
+    </div>
+    <p className="truncate text-2xl font-black tracking-tight tabular-nums md:text-3xl">{value}</p>
+    {sub && <p className="mt-0.5 truncate text-[11px] text-muted-foreground">{sub}</p>}
+  </div>
 );
 
 const Figure = ({ value, label }: { value: string; label: string }) => (
@@ -203,8 +229,6 @@ const Stats = () => {
   const play = (t: { id: string; title: string; thumbnail: string; channel: string }) => handlePlayTrack(t);
 
   const genreTotal = useMemo(() => s.topGenres.reduce((a, g) => a + g.plays, 0) || 1, [s.topGenres]);
-  const weekdayMax = Math.max(1, ...s.byWeekday.map((d) => d.plays));
-  const artistMax = Math.max(1, s.topArtists[0]?.plays || 1);
   const topWeekday = s.byWeekday.reduce((b, d) => (d.plays > b.plays ? d : b), s.byWeekday[0]);
 
   const todayKey = localDayKey(new Date());
@@ -237,7 +261,7 @@ const Stats = () => {
       <div className="ml-0 md:ml-64">
         <Navbar searchQuery={searchQuery} onSearchChange={setSearchQuery} onSearch={handleSearch} />
 
-        <main className="space-y-10 px-4 pb-48 pt-28 md:px-8">
+        <main className="space-y-6 px-4 pb-48 pt-28 md:px-8">
           {isViewingOtherUser && (
             <div className="flex items-center justify-between gap-3 rounded-xl border border-border bg-card/50 px-3 py-2 text-sm">
               <span className="min-w-0 truncate">Admin view of {subject}'s listening</span>
@@ -261,64 +285,68 @@ const Stats = () => {
           ) : (
             <>
               {/* Hero: persona + the record */}
-              <header className="grid items-center gap-8 md:grid-cols-[minmax(0,1fr)_340px]">
-                <div>
-                  <p className="mb-2 text-sm text-muted-foreground">
-                    {isViewingOtherUser ? `${subject} is` : 'You are'}
-                  </p>
-                  <h1 className="text-5xl font-black leading-[0.95] tracking-tighter sm:text-6xl lg:text-7xl">
-                    {s.persona.name}
-                  </h1>
-                  <p className="mt-4 max-w-md text-base text-muted-foreground">{s.persona.line}</p>
-
-                  <dl className="mt-8 grid grid-cols-2 gap-x-6 gap-y-5 border-t border-border/70 pt-5 sm:grid-cols-4">
-                    <Figure value={formatDuration(s.totalSeconds)} label="listened, estimated" />
-                    <Figure value={s.totalPlays.toLocaleString()} label={`plays, ${s.uniqueTracks.toLocaleString()} different songs`} />
-                    <Figure value={s.uniqueArtists.toLocaleString()} label="artists" />
-                    <Figure value={s.favoritesCount.toLocaleString()} label="favourites" />
-                  </dl>
-                </div>
-
-                <div>
+              <header className="relative overflow-hidden rounded-3xl border border-primary/25 bg-gradient-to-br from-primary/10 via-card/40 to-card/20 p-5 backdrop-blur-xl md:p-8">
+                <div className="pointer-events-none absolute -left-20 -top-20 h-64 w-64 rounded-full bg-primary/10 blur-3xl" />
+                <div className="relative grid items-center gap-6 md:grid-cols-[minmax(0,1fr)_320px]">
+                  <div>
+                    <p className="mb-2 text-sm text-muted-foreground">
+                      {isViewingOtherUser ? `${subject} is` : 'You are'}
+                    </p>
+                    <h1 className="text-5xl font-black leading-[0.95] tracking-tighter sm:text-6xl lg:text-7xl">
+                      {s.persona.name}
+                    </h1>
+                    <p className="mt-4 max-w-md text-base text-muted-foreground">{s.persona.line}</p>
+                    <p className="mt-6 text-sm text-muted-foreground">
+                      {s.peakHour !== null && <>You listen most around <b className="text-foreground">{hourLabel(s.peakHour)}</b>. </>}
+                      {top && <>The song on your record is <b className="text-foreground">{top.title.length > 40 ? `${top.title.slice(0, 38)}…` : top.title}</b>.</>}
+                    </p>
+                  </div>
                   <ListeningRecord byHour={s.byHour} cover={top?.thumbnail} peakHour={s.peakHour} />
-                  <p className="mt-6 text-center text-xs text-muted-foreground">
-                    {s.peakHour === null ? '' : `Your hour: ${hourLabel(s.peakHour)}. `}
-                    {top ? `On the label: ${top.title.length > 36 ? `${top.title.slice(0, 34)}…` : top.title}` : ''}
-                  </p>
                 </div>
               </header>
 
-              {/* Streak + calendar */}
-              <Section title="Showing up" note="Plays per day, last 12 weeks">
-                <div className="grid gap-6 lg:grid-cols-[220px_minmax(0,1fr)]">
-                  <div className="grid grid-cols-3 gap-4 lg:grid-cols-1">
-                    <div className="flex items-center gap-3">
-                      <Flame className={cn('h-8 w-8 shrink-0', s.currentStreak > 0 ? 'text-primary' : 'text-muted-foreground/50')} />
-                      <Figure value={`${s.currentStreak} ${s.currentStreak === 1 ? 'day' : 'days'}`} label="current streak" />
-                    </div>
-                    <Figure value={`${s.longestStreak} ${s.longestStreak === 1 ? 'day' : 'days'}`} label="longest streak" />
-                    <Figure value={String(s.activeDays)} label="days with music" />
-                  </div>
-                  <Calendar days={s.calendar} />
-                </div>
+              {/* Numbers */}
+              <div className="grid grid-cols-2 gap-3 md:grid-cols-4 md:gap-4">
+                <StatCard icon={Clock} label="Listening time" value={formatDuration(s.totalSeconds)} sub="Estimated from play count" />
+                <StatCard icon={Play} label="Total plays" value={s.totalPlays.toLocaleString()} sub={`${s.uniqueTracks.toLocaleString()} different songs`} />
+                <StatCard icon={Users} label="Artists" value={s.uniqueArtists.toLocaleString()} sub="Different channels" />
+                <StatCard icon={Heart} label="Favourites" value={String(s.favoritesCount)} sub="Saved songs" />
+                <StatCard icon={Flame} label="Current streak" value={`${s.currentStreak} ${s.currentStreak === 1 ? 'day' : 'days'}`} sub="Days in a row with music" />
+                <StatCard icon={Trophy} label="Longest streak" value={`${s.longestStreak} ${s.longestStreak === 1 ? 'day' : 'days'}`} sub={`${s.activeDays} days with music`} />
+                <StatCard icon={CalendarDays} label="This week" value={`${s.weekPlays} plays`} sub={formatDuration(s.weekSeconds)} />
+                <StatCard icon={Moon} label="This month" value={`${s.monthPlays} plays`} sub={formatDuration(s.monthSeconds)} />
+              </div>
+
+              {/* Calendar */}
+              <Section title="Showing up" note="Plays per day, last 24 weeks. Brighter means more.">
+                <Calendar days={s.calendar} />
               </Section>
 
               {/* Today */}
               <Section title="Today" note={new Date().toLocaleDateString([], { weekday: 'long', month: 'long', day: 'numeric' })}>
-                <div className="grid grid-cols-3 gap-4 sm:max-w-md">
-                  <Figure value={`${Math.round(s.todaySeconds / 60)}m`} label="listened" />
-                  <Figure value={String(s.todayPlays)} label="plays" />
-                  <Figure value={String(s.todayUnique)} label="different songs" />
+                <div className="grid grid-cols-3 gap-3">
+                  <div className="rounded-xl border border-primary/20 bg-primary/10 p-3 text-center">
+                    <p className="text-2xl font-black text-primary">{Math.round(s.todaySeconds / 60)}<span className="ml-0.5 text-sm font-semibold">m</span></p>
+                    <p className="mt-1 text-[11px] text-muted-foreground">listened</p>
+                  </div>
+                  <div className="rounded-xl border border-cyan-500/20 bg-cyan-500/10 p-3 text-center">
+                    <p className="text-2xl font-black text-cyan-400">{s.todayPlays}</p>
+                    <p className="mt-1 text-[11px] text-muted-foreground">songs played</p>
+                  </div>
+                  <div className="rounded-xl border border-purple-500/20 bg-purple-500/10 p-3 text-center">
+                    <p className="text-2xl font-black text-purple-400">{s.todayUnique}</p>
+                    <p className="mt-1 text-[11px] text-muted-foreground">different songs</p>
+                  </div>
                 </div>
                 {todayRows.length === 0 ? (
-                  <p className="mt-4 text-sm text-muted-foreground">Nothing played yet today.</p>
+                  <p className="mt-4 py-3 text-center text-sm text-muted-foreground">Nothing played yet today.</p>
                 ) : (
-                  <ul className="mt-4 max-h-56 divide-y divide-border/60 overflow-y-auto">
+                  <ul className="mt-4 max-h-56 divide-y divide-border/50 overflow-y-auto pr-1">
                     {todayRows.slice(0, 15).map((r) => (
                       <li key={r.id}>
                         <button
                           onClick={() => handlePlayTrack({ id: r.track_id, title: r.track_title, thumbnail: r.track_thumbnail, channel: r.track_channel })}
-                          className="flex w-full items-center gap-3 py-2 text-left transition-colors hover:bg-foreground/5"
+                          className="flex w-full items-center gap-3 rounded-lg p-2 text-left transition-colors hover:bg-white/5"
                         >
                           <img src={r.track_thumbnail} alt="" loading="lazy" className="h-9 w-9 rounded-md object-cover" />
                           <span className="min-w-0 flex-1">
@@ -335,36 +363,76 @@ const Stats = () => {
                 )}
               </Section>
 
-              {/* Top songs */}
-              <Section title="On repeat" note="Your most played songs">
-                <div className="grid items-end gap-4 sm:grid-cols-3">
-                  {podium.map((t, i) => (
-                    <button
-                      key={t.id}
-                      onClick={() => play(t)}
-                      className={cn('group text-left', i === 0 && 'sm:order-2', i === 1 && 'sm:order-1', i === 2 && 'sm:order-3')}
-                    >
-                      <div className="relative overflow-hidden rounded-2xl">
-                        <img
-                          src={t.thumbnail}
-                          alt=""
-                          loading="lazy"
-                          className={cn('w-full object-cover transition-transform duration-500 group-hover:scale-105', i === 0 ? 'aspect-square' : 'aspect-[5/4]')}
-                        />
-                        <span className="absolute left-2 top-2 rounded-full bg-background/80 px-2 py-0.5 text-xs font-black backdrop-blur">
-                          {i === 0 ? 'Most played' : `#${i + 1}`}
-                        </span>
-                      </div>
-                      <p className="mt-2 truncate text-sm font-semibold">{t.title}</p>
-                      <p className="truncate text-xs text-muted-foreground">{t.channel} · {t.plays}×</p>
-                    </button>
-                  ))}
+              {/* Trend */}
+              <Section title="Listening activity" note="Plays per day, last 30 days">
+                <div className="h-56">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <AreaChart data={s.activity}>
+                      <defs>
+                        <linearGradient id="statsArea" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="0%" stopColor="hsl(var(--primary))" stopOpacity={0.6} />
+                          <stop offset="100%" stopColor="hsl(var(--primary))" stopOpacity={0} />
+                        </linearGradient>
+                      </defs>
+                      <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" opacity={0.3} />
+                      <XAxis dataKey="date" tick={{ fontSize: 10 }} stroke="hsl(var(--muted-foreground))" interval={4} />
+                      <YAxis tick={{ fontSize: 10 }} stroke="hsl(var(--muted-foreground))" allowDecimals={false} width={28} />
+                      <Tooltip {...chartTooltip} />
+                      <Area type="monotone" name="Plays" dataKey="plays" stroke="hsl(var(--primary))" fill="url(#statsArea)" strokeWidth={2} />
+                    </AreaChart>
+                  </ResponsiveContainer>
                 </div>
-                {rest.length > 0 && (
-                  <ol start={4} className="mt-5 divide-y divide-border/60">
+              </Section>
+
+              <div className="grid gap-6 md:grid-cols-2">
+                <Section title="Activity by day" note={topWeekday.plays > 0 ? `${topWeekday.day} is your biggest day` : undefined}>
+                  <div className="h-52">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <BarChart data={s.byWeekday}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" opacity={0.3} />
+                        <XAxis dataKey="day" tick={{ fontSize: 10 }} stroke="hsl(var(--muted-foreground))" />
+                        <YAxis tick={{ fontSize: 10 }} stroke="hsl(var(--muted-foreground))" allowDecimals={false} width={28} />
+                        <Tooltip {...chartTooltip} cursor={{ fill: 'hsl(var(--muted))', opacity: 0.15 }} />
+                        <Bar name="Plays" dataKey="plays" fill="hsl(var(--primary))" radius={[6, 6, 0, 0]} />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
+                </Section>
+
+                <Section title="Activity by hour" note="Your listening clock, local time">
+                  <div className="h-52">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <BarChart data={s.byHour}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" opacity={0.3} />
+                        <XAxis dataKey="hour" tick={{ fontSize: 10 }} stroke="hsl(var(--muted-foreground))" interval={2} />
+                        <YAxis tick={{ fontSize: 10 }} stroke="hsl(var(--muted-foreground))" allowDecimals={false} width={28} />
+                        <Tooltip {...chartTooltip} cursor={{ fill: 'hsl(var(--muted))', opacity: 0.15 }} />
+                        <Bar name="Plays" dataKey="plays" fill="hsl(190 95% 50%)" radius={[6, 6, 0, 0]} />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
+                </Section>
+              </div>
+
+              {/* Top songs + artists */}
+              <div className="grid gap-6 md:grid-cols-2">
+                <Section title="Most played songs" note="Top 10 by play count">
+                  <div className="mb-4 grid grid-cols-3 gap-3">
+                    {podium.map((t, i) => (
+                      <button key={t.id} onClick={() => play(t)} className="group min-w-0 text-left">
+                        <div className="relative overflow-hidden rounded-xl">
+                          <img src={t.thumbnail} alt="" loading="lazy" className="aspect-square w-full object-cover transition-transform duration-500 group-hover:scale-105" />
+                          <span className="absolute left-1.5 top-1.5 rounded-full bg-background/80 px-1.5 py-0.5 text-[10px] font-black backdrop-blur">#{i + 1}</span>
+                        </div>
+                        <p className="mt-1.5 truncate text-xs font-semibold">{t.title}</p>
+                        <p className="text-[11px] text-primary">{t.plays}×</p>
+                      </button>
+                    ))}
+                  </div>
+                  <ol start={4} className="divide-y divide-border/50">
                     {rest.map((t, i) => (
                       <li key={t.id}>
-                        <button onClick={() => play(t)} className="flex w-full items-center gap-3 py-2 text-left transition-colors hover:bg-foreground/5">
+                        <button onClick={() => play(t)} className="flex w-full items-center gap-3 rounded-lg p-2 text-left transition-colors hover:bg-white/5">
                           <span className="w-5 text-xs font-bold tabular-nums text-muted-foreground">{i + 4}</span>
                           <img src={t.thumbnail} alt="" loading="lazy" className="h-10 w-10 rounded-md object-cover" />
                           <span className="min-w-0 flex-1">
@@ -376,13 +444,27 @@ const Stats = () => {
                       </li>
                     ))}
                   </ol>
-                )}
-              </Section>
+                </Section>
 
-              {/* Genres + artists */}
-              <div className="grid gap-10 lg:grid-cols-2">
-                <Section title="Your genres" note="Guessed from song and channel names">
-                  <div className="flex h-5 overflow-hidden rounded-full bg-muted" role="img" aria-label="Genre share of plays">
+                <Section title="Most played artists" note="Top 10 channels">
+                  <div className="h-[420px]">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <BarChart data={s.topArtists.slice(0, 10)} layout="vertical" margin={{ left: 8 }}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" opacity={0.3} />
+                        <XAxis type="number" tick={{ fontSize: 10 }} stroke="hsl(var(--muted-foreground))" allowDecimals={false} />
+                        <YAxis type="category" dataKey="name" width={110} tick={{ fontSize: 10 }} stroke="hsl(var(--muted-foreground))" />
+                        <Tooltip {...chartTooltip} cursor={{ fill: 'hsl(var(--muted))', opacity: 0.15 }} />
+                        <Bar name="Plays" dataKey="plays" fill="hsl(260 85% 62%)" radius={[0, 6, 6, 0]} />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
+                </Section>
+              </div>
+
+              {/* Genres + recent */}
+              <div className="grid gap-6 md:grid-cols-2">
+                <Section title="Most played genres" note="Guessed from song and channel names">
+                  <div className="mb-3 flex h-4 overflow-hidden rounded-full bg-muted" role="img" aria-label="Genre share of plays">
                     {s.topGenres.slice(0, 8).map((g, i) => (
                       <span
                         key={g.name}
@@ -391,64 +473,28 @@ const Stats = () => {
                       />
                     ))}
                   </div>
-                  <ul className="mt-4 grid grid-cols-2 gap-x-6 gap-y-2">
-                    {s.topGenres.slice(0, 8).map((g, i) => (
-                      <li key={g.name} className="flex items-center gap-2 text-sm">
-                        <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ background: GENRE_COLORS[i % GENRE_COLORS.length] }} />
-                        <span className="min-w-0 flex-1 truncate">{g.name}</span>
-                        <span className="text-xs tabular-nums text-muted-foreground">{Math.round((g.plays / genreTotal) * 100)}%</span>
-                      </li>
-                    ))}
-                  </ul>
+                  <div className="h-60">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <PieChart>
+                        <Pie data={s.topGenres.slice(0, 8)} dataKey="plays" nameKey="name" innerRadius={50} outerRadius={85} paddingAngle={3}>
+                          {s.topGenres.slice(0, 8).map((_, i) => (
+                            <Cell key={i} fill={GENRE_COLORS[i % GENRE_COLORS.length]} />
+                          ))}
+                        </Pie>
+                        <Legend wrapperStyle={{ fontSize: 11 }} />
+                        <Tooltip {...chartTooltip} />
+                      </PieChart>
+                    </ResponsiveContainer>
+                  </div>
                 </Section>
 
-                <Section title="Your artists" note="Top 8 channels">
-                  <ul className="space-y-3">
-                    {s.topArtists.slice(0, 8).map((a) => (
-                      <li key={a.name}>
-                        <div className="mb-1 flex items-baseline justify-between gap-3 text-sm">
-                          <span className="truncate font-medium">{a.name}</span>
-                          <span className="shrink-0 text-xs tabular-nums text-muted-foreground">{a.plays}×</span>
-                        </div>
-                        <div className="h-1 overflow-hidden rounded-full bg-muted">
-                          <div className="h-full rounded-full bg-primary" style={{ width: `${Math.max(4, (a.plays / artistMax) * 100)}%` }} />
-                        </div>
-                      </li>
-                    ))}
-                  </ul>
-                </Section>
-              </div>
-
-              {/* Rhythm */}
-              <Section
-                title="Your week"
-                note={topWeekday.plays > 0 ? `${topWeekday.day} is your biggest day` : undefined}
-              >
-                <div className="flex h-32 items-end gap-2 sm:max-w-xl">
-                  {s.byWeekday.map((d) => (
-                    <div key={d.day} className="flex flex-1 flex-col items-center gap-1.5">
-                      <div className="flex h-24 w-full items-end">
-                        <div
-                          title={`${d.plays} plays`}
-                          className={cn('w-full rounded-t-md', d.day === topWeekday.day ? 'bg-primary' : 'bg-primary/30')}
-                          style={{ height: `${Math.max(4, (d.plays / weekdayMax) * 100)}%` }}
-                        />
-                      </div>
-                      <span className="text-[11px] text-muted-foreground">{d.day}</span>
-                    </div>
-                  ))}
-                </div>
-              </Section>
-
-              {/* Recent + favourites */}
-              <div className="grid gap-10 lg:grid-cols-2">
                 <Section title="Recently played" note="Last 20 plays">
-                  <ul className="max-h-72 divide-y divide-border/60 overflow-y-auto pr-1">
+                  <ul className="max-h-[360px] divide-y divide-border/50 overflow-y-auto pr-1">
                     {s.recent.map((r) => (
                       <li key={r.id}>
                         <button
                           onClick={() => play({ id: r.track_id, title: r.track_title, thumbnail: r.track_thumbnail, channel: r.track_channel })}
-                          className="flex w-full items-center gap-3 py-2 text-left transition-colors hover:bg-foreground/5"
+                          className="flex w-full items-center gap-3 rounded-lg p-2 text-left transition-colors hover:bg-white/5"
                         >
                           <img src={r.track_thumbnail} alt="" loading="lazy" className="h-10 w-10 rounded-md object-cover" />
                           <span className="min-w-0 flex-1">
@@ -463,29 +509,29 @@ const Stats = () => {
                     ))}
                   </ul>
                 </Section>
-
-                {!isViewingOtherUser && (
-                  <Section title="Favourites" note={`${favoriteTracks.length} saved`}>
-                    {favoriteTracks.length === 0 ? (
-                      <p className="text-sm text-muted-foreground">Tap the heart on a song to save it here.</p>
-                    ) : (
-                      <ul className="grid gap-x-4 sm:grid-cols-2">
-                        {favoriteTracks.slice(0, 12).map((t) => (
-                          <li key={t.id}>
-                            <button onClick={() => play(t)} className="flex w-full items-center gap-3 py-2 text-left transition-colors hover:bg-foreground/5">
-                              <img src={t.thumbnail} alt="" loading="lazy" className="h-10 w-10 rounded-md object-cover" />
-                              <span className="min-w-0">
-                                <span className="block truncate text-sm font-medium">{t.title}</span>
-                                <span className="block truncate text-[11px] text-muted-foreground">{t.channel}</span>
-                              </span>
-                            </button>
-                          </li>
-                        ))}
-                      </ul>
-                    )}
-                  </Section>
-                )}
               </div>
+
+              {!isViewingOtherUser && (
+                <Section title="Favourite songs" note={`${favoriteTracks.length} saved`}>
+                  {favoriteTracks.length === 0 ? (
+                    <p className="text-sm text-muted-foreground">Tap the heart on a song to save it here.</p>
+                  ) : (
+                    <ul className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                      {favoriteTracks.slice(0, 12).map((t) => (
+                        <li key={t.id}>
+                          <button onClick={() => play(t)} className="flex w-full items-center gap-3 rounded-xl p-2 text-left transition-colors hover:bg-white/5">
+                            <img src={t.thumbnail} alt="" loading="lazy" className="h-10 w-10 rounded-md object-cover" />
+                            <span className="min-w-0">
+                              <span className="block truncate text-sm font-medium">{t.title}</span>
+                              <span className="block truncate text-[11px] text-muted-foreground">{t.channel}</span>
+                            </span>
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </Section>
+              )}
             </>
           )}
         </main>

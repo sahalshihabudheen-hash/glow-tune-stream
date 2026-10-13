@@ -167,9 +167,9 @@ export function useListeningStats(targetUserId?: string) {
     const todayRows = history.filter((r) => localDayKey(new Date(r.played_at)) === todayKey);
     const todayUnique = new Set(todayRows.map((r) => r.track_id)).size;
 
-    // Last 12 weeks as a calendar grid (oldest -> newest, local days)
-    const calendar = Array.from({ length: 84 }, (_, i) => {
-      const d = new Date(now - (83 - i) * 86400000);
+    // Last 24 weeks as a calendar grid (oldest -> newest, local days)
+    const calendar = Array.from({ length: 168 }, (_, i) => {
+      const d = new Date(now - (167 - i) * 86400000);
       const key = localDayKey(d);
       return { date: key, weekday: d.getDay(), plays: byDate.get(key) || 0 };
     });
