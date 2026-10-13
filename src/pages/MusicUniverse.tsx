@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Orbit, Search, Play, Plus, Minus, Locate, X, Loader2, Sparkles, Users, Disc3, Waves } from 'lucide-react';
+import { Orbit, Search, Play, Plus, Minus, Locate, X, Loader2, Sparkles, Users, Disc3, Waves, Dices, Crosshair } from 'lucide-react';
 import Sidebar from '@/components/Sidebar';
 import Navbar from '@/components/Navbar';
 import MusicPlayer from '@/components/MusicPlayer';
@@ -41,6 +41,16 @@ interface UniEdge {
 }
 
 type Galaxy = 'mine' | 'discovery' | 'blend';
+
+/** An artist's cluster of songs, painted as a nebula. */
+interface UniCluster {
+  name: string;
+  x: number;
+  y: number;
+  radius: number;
+  hue: number;
+  count: number;
+}
 
 const clamp = (v: number, min: number, max: number) => Math.min(max, Math.max(min, v));
 const cleanChannel = (c: string) => (c || 'Unknown').replace(/\s*-\s*topic$/i, '').trim();
@@ -101,7 +111,8 @@ const MusicUniverse = () => {
   const pinchRef = useRef<{ dist: number; z: number } | null>(null);
   const tRef = useRef(0);
   const posRef = useRef<{ x: number; y: number }[]>([]);
-  const particlesRef = useRef<{ x: number; y: number; vx: number; vy: number; r: number; hue: number }[]>([]);
+  const particlesRef = useRef<{ x: number; y: number; vx: number; vy: number; r: number; hue: number; depth: number }[]>([]);
+  const shootingRef = useRef<{ x: number; y: number; vx: number; vy: number; life: number } | null>(null);
 
   /* ---------------- Data ---------------- */
   useEffect(() => {
@@ -149,7 +160,7 @@ const MusicUniverse = () => {
   }, []);
 
   /* ---------------- Graph build ---------------- */
-  const { nodes, edges } = useMemo(() => {
+  const { nodes, edges, nebulae } = useMemo(() => {
     const map = new Map<string, UniNode>();
     const order: string[] = [];
     rows.forEach((r) => {
@@ -180,12 +191,24 @@ const MusicUniverse = () => {
     });
     const clusters = [...byArtist.entries()].sort((a, b) => b[1].length - a[1].length);
     const golden = Math.PI * (3 - Math.sqrt(5));
-    clusters.forEach(([, members], ci) => {
+    const nebulae: UniCluster[] = [];
+    clusters.forEach(([artistName, members], ci) => {
       const cr = 240 * Math.sqrt(ci + 0.6);
       const ca = ci * golden;
       const cx = Math.cos(ca) * cr;
       const cy = Math.sin(ca) * cr;
       const orbit = 34 + members.length * 9;
+      const genreCount = new Map<string, number>();
+      members.forEach((m) => genreCount.set(m.genre, (genreCount.get(m.genre) || 0) + m.plays));
+      const dominant = [...genreCount.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] || 'Other';
+      nebulae.push({
+        name: artistName,
+        x: cx,
+        y: cy,
+        radius: (members.length === 1 ? 0 : orbit) + 70,
+        hue: hueFor(dominant),
+        count: members.length,
+      });
       members.forEach((n, i) => {
         const a = (i / Math.max(1, members.length)) * Math.PI * 2 + ci;
         const rad = members.length === 1 ? 0 : orbit;
@@ -302,7 +325,7 @@ const MusicUniverse = () => {
       });
     }
 
-    return { nodes: [...list, ...satellites], edges: es };
+    return { nodes: [...list, ...satellites], edges: es, nebulae };
   }, [rows, pool]);
 
   const visible = useMemo(() => {
@@ -331,6 +354,20 @@ const MusicUniverse = () => {
     });
     return set;
   }, [search, nodes, visible]);
+
+  const identity = useMemo(() => {
+    const known = nodes.filter((n) => n.known);
+    const undiscovered = nodes.length - known.length;
+    const byGenre = new Map<string, number>();
+    known.forEach((n) => byGenre.set(n.genre, (byGenre.get(n.genre) || 0) + n.plays));
+    const topGenre = [...byGenre.entries()].sort((a, b) => b[1] - a[1])[0]?.[0];
+    const name = !known.length
+      ? 'Your universe is waiting'
+      : topGenre && topGenre !== 'Other'
+      ? `The ${topGenre} Nebula`
+      : 'Your Universe';
+    return { name, stars: known.length, constellations: nebulae.length, undiscovered };
+  }, [nodes, nebulae]);
 
   const nodePos = useCallback((n: UniNode, t: number) => {
     if (n.parent !== undefined && nodes[n.parent]) {
@@ -396,6 +433,7 @@ const MusicUniverse = () => {
         vy: (Math.random() - 0.5) * 0.25,
         r: 0.6 + Math.random() * 1.8,
         hue: 190 + Math.random() * 140,
+        depth: 0.2 + Math.random() * 0.8,
       }));
     };
     resize();
@@ -419,11 +457,33 @@ const MusicUniverse = () => {
         p.y += p.vy * (1 + beat * 5);
         if (p.x < 0) p.x = W; if (p.x > W) p.x = 0;
         if (p.y < 0) p.y = H; if (p.y > H) p.y = 0;
-        ctx.fillStyle = `hsla(${p.hue}, 90%, 70%, ${0.15 + beat * 0.45})`;
+        // Parallax: nearer stars drift further when the view is panned.
+        const px = ((p.x + ox * p.depth * 0.15) % W + W) % W;
+        const py = ((p.y + oy * p.depth * 0.15) % H + H) % H;
+        ctx.fillStyle = `hsla(${p.hue}, 90%, 70%, ${(0.1 + p.depth * 0.15) + beat * 0.45})`;
         ctx.beginPath();
-        ctx.arc(p.x, p.y, p.r * (1 + beat * 1.2), 0, Math.PI * 2);
+        ctx.arc(px, py, p.r * (0.6 + p.depth * 0.6) * (1 + beat * 1.2), 0, Math.PI * 2);
         ctx.fill();
       });
+
+      // --- an occasional shooting star ---
+      if (!shootingRef.current && Math.random() < 0.0025) {
+        shootingRef.current = { x: Math.random() * W * 0.7, y: Math.random() * H * 0.4, vx: 7 + Math.random() * 4, vy: 3 + Math.random() * 2, life: 1 };
+      }
+      const shot = shootingRef.current;
+      if (shot) {
+        shot.x += shot.vx; shot.y += shot.vy; shot.life -= 0.02;
+        const tail = ctx.createLinearGradient(shot.x, shot.y, shot.x - shot.vx * 9, shot.y - shot.vy * 9);
+        tail.addColorStop(0, `rgba(255,255,255,${0.8 * shot.life})`);
+        tail.addColorStop(1, 'rgba(255,255,255,0)');
+        ctx.strokeStyle = tail;
+        ctx.lineWidth = 1.6;
+        ctx.beginPath();
+        ctx.moveTo(shot.x, shot.y);
+        ctx.lineTo(shot.x - shot.vx * 9, shot.y - shot.vy * 9);
+        ctx.stroke();
+        if (shot.life <= 0 || shot.x > W + 40 || shot.y > H + 40) shootingRef.current = null;
+      }
 
       const positions: { x: number; y: number }[] = new Array(nodes.length);
       nodes.forEach((n, i) => {
@@ -434,6 +494,30 @@ const MusicUniverse = () => {
         };
       });
       posRef.current = positions;
+
+      // nebula halos: one soft cloud per artist cluster, named when zoomed out
+      if (galaxy !== 'discovery') {
+        nebulae.forEach((c) => {
+          const cx = c.x * z + ox;
+          const cy = c.y * z + oy;
+          const rad = c.radius * z * (1 + beat * 0.06);
+          if (cx < -rad || cy < -rad || cx > W + rad || cy > H + rad) return;
+          const g = ctx.createRadialGradient(cx, cy, 0, cx, cy, rad);
+          g.addColorStop(0, `hsla(${c.hue}, 85%, 55%, ${0.16 + beat * 0.08})`);
+          g.addColorStop(0.55, `hsla(${(c.hue + 30) % 360}, 80%, 50%, 0.07)`);
+          g.addColorStop(1, `hsla(${c.hue}, 80%, 50%, 0)`);
+          ctx.fillStyle = g;
+          ctx.beginPath();
+          ctx.arc(cx, cy, rad, 0, Math.PI * 2);
+          ctx.fill();
+          if (z < 1.25 && (c.count > 1 || z > 0.5) && rad > 26) {
+            ctx.fillStyle = 'rgba(255,255,255,0.5)';
+            ctx.font = `600 ${clamp(11 * z + 3, 10, 14)}px system-ui, sans-serif`;
+            ctx.textAlign = 'center';
+            ctx.fillText(c.name.length > 22 ? `${c.name.slice(0, 20)}…` : c.name, cx, cy - rad * 0.62);
+          }
+        });
+      }
 
       // edges
       activeEdges.forEach((e) => {
@@ -482,6 +566,17 @@ const MusicUniverse = () => {
         const isCurrent = currentTrack?.id === n.id;
         const hue = hueFor(n.genre);
         const pulse = isCurrent ? 1 + Math.sin(t * 3) * 0.12 + beat * 0.25 : 1 + beat * 0.08;
+
+        if (isCurrent && isPlaying) {
+          for (let k = 0; k < 2; k++) {
+            const phase = ((t * 0.6 + k * 0.5) % 1);
+            ctx.strokeStyle = `hsla(${hue}, 95%, 75%, ${(1 - phase) * 0.55})`;
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.arc(p.x, p.y, r * 1.5 + phase * r * 6, 0, Math.PI * 2);
+            ctx.stroke();
+          }
+        }
 
         const grad = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, r * 3 * pulse);
         grad.addColorStop(0, `hsla(${hue}, 95%, 65%, ${dim ? 0.12 : n.known ? 0.55 : 0.35})`);
@@ -538,7 +633,7 @@ const MusicUniverse = () => {
         }
 
         // labels only when zoomed in enough
-        if (z > 0.75 && !dim && (n.plays > 1 || !n.known || z > 1.3)) {
+        if (!dim && ((z > 1.1 && (n.plays > 1 || !n.known || z > 1.5)) || isCurrent || selected?.id === n.id)) {
           ctx.fillStyle = n.known ? 'rgba(255,255,255,0.78)' : 'rgba(255,255,255,0.55)';
           ctx.font = `${Math.min(13, 11 * z)}px system-ui, sans-serif`;
           ctx.textAlign = 'center';
@@ -551,7 +646,7 @@ const MusicUniverse = () => {
     };
     raf = requestAnimationFrame(draw);
     return () => { cancelAnimationFrame(raf); ro.disconnect(); };
-  }, [nodes, activeEdges, visible, matches, selected, currentTrack?.id, isPlaying, filters.covers, filters.undiscovered, nodePos]);
+  }, [nodes, nebulae, galaxy, activeEdges, visible, matches, selected, currentTrack?.id, isPlaying, filters.covers, filters.undiscovered, nodePos]);
 
   /* ---------------- Interaction ---------------- */
   const zoomAt = useCallback((px: number, py: number, nextZ: number) => {
@@ -637,6 +732,24 @@ const MusicUniverse = () => {
     );
   };
 
+  const surprise = () => {
+    const pickable = nodes.filter((n, i) => !n.known && visible.has(i));
+    if (!pickable.length) return;
+    const n = pickable[Math.floor(Math.random() * pickable.length)];
+    setSelected(n);
+    focusNode(n);
+  };
+
+  const findPlaying = () => {
+    const n = nodes.find((x) => x.known && x.id === currentTrack?.id);
+    if (!n) return;
+    setSelected(n);
+    focusNode(n);
+  };
+
+  const canFindPlaying = !!currentTrack && nodes.some((x) => x.known && x.id === currentTrack.id);
+  const canSurprise = nodes.some((n, i) => !n.known && visible.has(i));
+
   const genreLegend = useMemo(() => {
     const counts = new Map<string, number>();
     nodes.forEach((n, i) => { if (visible.has(i)) counts.set(n.genre, (counts.get(n.genre) || 0) + 1); });
@@ -671,10 +784,18 @@ const MusicUniverse = () => {
         <Navbar searchQuery={navSearch} onSearchChange={setNavSearch} onSearch={() => navSearch.trim() && navigate(`/?search=${encodeURIComponent(navSearch)}`)} />
 
         <main className="pt-24 md:pt-28 pb-40 px-4 md:px-8">
-          <div className="flex items-center gap-3 mb-4">
-            <Orbit className="w-6 h-6 text-primary" style={{ transform: 'scale(var(--beat-scale, 1))' }} />
-            <h1 className="text-2xl md:text-3xl font-bold">Music Universe</h1>
-          </div>
+          <header className="mb-5">
+            <h1 className="flex items-center gap-3 text-3xl font-black leading-tight tracking-tighter md:text-5xl">
+              <Orbit className="h-7 w-7 shrink-0 text-primary md:h-9 md:w-9" style={{ transform: 'scale(var(--beat-scale, 1))' }} />
+              <span className="min-w-0">{identity.name}</span>
+            </h1>
+            {!loading && identity.stars > 0 && (
+              <p className="mt-2 text-sm text-muted-foreground">
+                {identity.stars.toLocaleString()} {identity.stars === 1 ? 'star' : 'stars'} across {identity.constellations.toLocaleString()} {identity.constellations === 1 ? 'artist cluster' : 'artist clusters'}
+                {identity.undiscovered > 0 ? `, with ${identity.undiscovered.toLocaleString()} unexplored songs orbiting nearby.` : '.'}
+              </p>
+            )}
+          </header>
 
           {disabled ? (
             <div className="bg-card border border-border rounded-2xl p-8 text-center">
@@ -684,16 +805,16 @@ const MusicUniverse = () => {
           ) : (
             <>
               {/* Galaxy switcher */}
-              <div className="flex flex-wrap gap-2 mb-3">
+              <div className="mb-3 inline-flex max-w-full overflow-x-auto rounded-full border border-border bg-card/70 p-1 no-scrollbar" role="tablist" aria-label="Universe view">
                 {galaxies.map((g) => (
                   <button
                     key={g.id}
+                    role="tab"
+                    aria-selected={galaxy === g.id}
                     onClick={() => { setGalaxy(g.id); setSelected(null); fittedRef.current = false; }}
                     className={cn(
-                      'text-xs px-3 py-1.5 rounded-full border transition-colors',
-                      galaxy === g.id
-                        ? 'border-primary bg-primary/15 text-primary'
-                        : 'border-border bg-card hover:border-primary/50 text-muted-foreground',
+                      'shrink-0 rounded-full px-3.5 py-1.5 text-xs font-semibold transition-colors',
+                      galaxy === g.id ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-foreground',
                     )}
                   >
                     {g.label}
@@ -730,21 +851,30 @@ const MusicUniverse = () => {
                   />
                 </div>
                 <div className="flex gap-2">
-                  <Button variant="secondary" size="icon" onClick={() => zoomAt((wrapRef.current?.clientWidth || 0) / 2, (wrapRef.current?.clientHeight || 0) / 2, viewRef.current.z * 1.3)}>
+                  <Button variant="secondary" className="gap-1.5" onClick={surprise} disabled={!canSurprise} title="Jump to a song you haven't played yet">
+                    <Dices className="w-4 h-4" /> <span className="hidden sm:inline">Surprise me</span>
+                  </Button>
+                  <Button variant="secondary" className="gap-1.5" onClick={findPlaying} disabled={!canFindPlaying} title="Jump to the song that's playing">
+                    <Crosshair className="w-4 h-4" /> <span className="hidden sm:inline">Find playing</span>
+                  </Button>
+                  <Button variant="secondary" size="icon" aria-label="Zoom in" onClick={() => zoomAt((wrapRef.current?.clientWidth || 0) / 2, (wrapRef.current?.clientHeight || 0) / 2, viewRef.current.z * 1.3)}>
                     <Plus className="w-4 h-4" />
                   </Button>
-                  <Button variant="secondary" size="icon" onClick={() => zoomAt((wrapRef.current?.clientWidth || 0) / 2, (wrapRef.current?.clientHeight || 0) / 2, viewRef.current.z / 1.3)}>
+                  <Button variant="secondary" size="icon" aria-label="Zoom out" onClick={() => zoomAt((wrapRef.current?.clientWidth || 0) / 2, (wrapRef.current?.clientHeight || 0) / 2, viewRef.current.z / 1.3)}>
                     <Minus className="w-4 h-4" />
                   </Button>
-                  <Button variant="secondary" size="icon" onClick={() => { fittedRef.current = false; setSelected(null); setSearch(''); }}>
+                  <Button variant="secondary" size="icon" aria-label="Fit everything" onClick={() => { fittedRef.current = false; setSelected(null); setSearch(''); }}>
                     <Locate className="w-4 h-4" />
                   </Button>
                 </div>
               </div>
 
               <div
-                className="relative rounded-2xl border border-border overflow-hidden bg-card/40"
-                style={{ boxShadow: '0 0 var(--beat-glow-px, 0px) hsl(var(--primary) / 0.35)' }}
+                className="relative rounded-3xl border border-border overflow-hidden"
+                style={{
+                  boxShadow: '0 0 var(--beat-glow-px, 0px) hsl(var(--primary) / 0.35)',
+                  background: 'radial-gradient(120% 90% at 50% 40%, hsl(var(--primary) / 0.10), hsl(var(--background)) 62%), hsl(var(--background))',
+                }}
               >
                 <div
                   ref={wrapRef}

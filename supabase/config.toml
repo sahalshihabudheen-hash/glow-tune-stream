@@ -42,3 +42,6 @@ verify_jwt = false
 
 [functions.admin-updates-ai]
 verify_jwt = false
+
+[functions.admin-get-usage-stats]
+verify_jwt = false

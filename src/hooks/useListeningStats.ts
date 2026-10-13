@@ -36,6 +36,18 @@ const GENRE_KEYWORDS: Record<string, string[]> = {
   Instrumental: ['instrumental', 'cover', 'karaoke', 'bgm', 'theme'],
 };
 
+/** YYYY-MM-DD in the viewer's local time (so days, hours and streaks all agree). */
+export const localDayKey = (d: Date) =>
+  `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+
+export type PersonaId = 'night-owl' | 'early-bird' | 'loyalist' | 'explorer' | 'streaker' | 'newcomer' | 'all-rounder';
+
+export interface Persona {
+  id: PersonaId;
+  name: string;
+  line: string;
+}
+
 export function guessGenre(title: string, channel: string): string {
   const text = `${title} ${channel}`.toLowerCase();
   for (const [genre, words] of Object.entries(GENRE_KEYWORDS)) {
@@ -134,14 +146,14 @@ export function useListeningStats(targetUserId?: string) {
       const d = new Date(row.played_at);
       byHour[d.getHours()].plays += 1;
       byWeekday[d.getDay()].plays += 1;
-      const key = d.toISOString().slice(0, 10);
+      const key = localDayKey(d);
       byDate.set(key, (byDate.get(key) || 0) + 1);
     }
 
     // Last 30 days activity series (oldest -> newest)
     const activity = Array.from({ length: 30 }, (_, i) => {
       const d = new Date(now - (29 - i) * 86400000);
-      const key = d.toISOString().slice(0, 10);
+      const key = localDayKey(d);
       return {
         date: key.slice(5),
         plays: byDate.get(key) || 0,
@@ -151,11 +163,71 @@ export function useListeningStats(targetUserId?: string) {
     const sortDesc = <T,>(m: Map<T, number>) =>
       [...m.entries()].sort((a, b) => b[1] - a[1]).map(([name, plays]) => ({ name: String(name), plays }));
 
-    const todayKey = new Date().toISOString().slice(0, 10);
-    const todayRows = history.filter((r) => r.played_at.slice(0, 10) === todayKey);
+    const todayKey = localDayKey(new Date());
+    const todayRows = history.filter((r) => localDayKey(new Date(r.played_at)) === todayKey);
     const todayUnique = new Set(todayRows.map((r) => r.track_id)).size;
 
+    // Last 12 weeks as a calendar grid (oldest -> newest, local days)
+    const calendar = Array.from({ length: 84 }, (_, i) => {
+      const d = new Date(now - (83 - i) * 86400000);
+      const key = localDayKey(d);
+      return { date: key, weekday: d.getDay(), plays: byDate.get(key) || 0 };
+    });
+
+    // Streaks: consecutive local days with at least one play
+    let longestStreak = 0;
+    let run = 0;
+    const sortedDays = [...byDate.keys()].sort();
+    let prev: number | null = null;
+    for (const key of sortedDays) {
+      const t = new Date(`${key}T12:00:00`).getTime();
+      run = prev !== null && Math.round((t - prev) / 86400000) === 1 ? run + 1 : 1;
+      longestStreak = Math.max(longestStreak, run);
+      prev = t;
+    }
+    // Current streak counts back from today (or yesterday, if nothing played yet today)
+    let currentStreak = 0;
+    const cursor = new Date();
+    if (!byDate.has(localDayKey(cursor))) cursor.setDate(cursor.getDate() - 1);
+    while (byDate.has(localDayKey(cursor))) {
+      currentStreak += 1;
+      cursor.setDate(cursor.getDate() - 1);
+    }
+
+    const peakHourEntry = byHour.reduce((best, h) => (h.plays > best.plays ? h : best), byHour[0]);
+    const peakHour = peakHourEntry.plays > 0 ? peakHourEntry.hour : null;
+    const total = history.length;
+    const nightPlays = byHour.filter((h) => h.hour >= 22 || h.hour < 4).reduce((s, h) => s + h.plays, 0);
+    const morningPlays = byHour.filter((h) => h.hour >= 5 && h.hour < 10).reduce((s, h) => s + h.plays, 0);
+    const repeatRate = total ? 1 - byTrack.size / total : 0;
+    const discoveryRate = total ? byTrack.size / total : 0;
+
+    let persona: Persona;
+    if (total < 15) {
+      persona = { id: 'newcomer', name: 'The Newcomer', line: 'Your sound is still taking shape. Keep playing.' };
+    } else if (currentStreak >= 7) {
+      persona = { id: 'streaker', name: 'The Streaker', line: `${currentStreak} days in a row. The music never stops.` };
+    } else if (nightPlays / total > 0.35) {
+      persona = { id: 'night-owl', name: 'The Night Owl', line: 'Most of your listening happens after dark.' };
+    } else if (morningPlays / total > 0.35) {
+      persona = { id: 'early-bird', name: 'The Early Bird', line: 'You start the day with a soundtrack.' };
+    } else if (repeatRate > 0.6) {
+      persona = { id: 'loyalist', name: 'The Loyalist', line: 'You know what you love and you play it again.' };
+    } else if (discoveryRate > 0.7) {
+      persona = { id: 'explorer', name: 'The Explorer', line: 'Almost every song you play is a different one.' };
+    } else {
+      persona = { id: 'all-rounder', name: 'The All-Rounder', line: 'A balanced mix of favourites and fresh finds.' };
+    }
+
     return {
+      calendar,
+      currentStreak,
+      longestStreak,
+      peakHour,
+      repeatRate,
+      discoveryRate,
+      activeDays: byDate.size,
+      persona,
       totalPlays: history.length,
       uniqueTracks: byTrack.size,
       uniqueArtists: byArtist.size,

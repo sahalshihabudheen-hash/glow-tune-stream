@@ -26,6 +26,7 @@ import ArtistProfile from "./pages/ArtistProfile";
 import BecomeArtist from "./pages/BecomeArtist";
 import Favorites from "./pages/Favorites";
 import Admin from "./pages/Admin";
+import AdminStats from "./pages/AdminStats";
 import Games from "./pages/Games";
 import AiDj from "./pages/AiDj";
 import DjMode from "./pages/DjMode";
@@ -72,6 +73,8 @@ const App = () => (
                 <Route path="/become-artist" element={<BecomeArtist />} />
                 <Route path="/favorites" element={<Favorites />} />
                 <Route path="/admin" element={<Admin />} />
+                <Route path="/admin/stats" element={<AdminStats />} />
+                <Route path="/admin/usage" element={<AdminStats />} />
                 <Route path="/ai-dj" element={<AiDj />} />
                 <Route path="/games" element={<Games />} />
                 <Route path="/yt-artist/:channelId" element={<YouTubeArtistPage />} />
