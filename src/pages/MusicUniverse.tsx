@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Orbit, Search, Play, Plus, Minus, Locate, X, Loader2, Sparkles, Users, Disc3, Waves, Dices, Crosshair } from 'lucide-react';
+import { Orbit, Search, Play, Plus, Minus, Locate, X, Loader2, Sparkles, Users, Disc3, Waves, Dices, Crosshair, HelpCircle, Star, Flame, Clock } from 'lucide-react';
 import Sidebar from '@/components/Sidebar';
 import Navbar from '@/components/Navbar';
 import MusicPlayer from '@/components/MusicPlayer';
@@ -99,6 +99,13 @@ const MusicUniverse = () => {
   const [search, setSearch] = useState('');
   const [selected, setSelected] = useState<UniNode | null>(null);
   const [galaxy, setGalaxy] = useState<Galaxy>('mine');
+  const [showGuide, setShowGuide] = useState(() => {
+    try { return localStorage.getItem('nyra-universe-guide-seen') !== '1'; } catch { return true; }
+  });
+  const closeGuide = () => {
+    setShowGuide(false);
+    try { localStorage.setItem('nyra-universe-guide-seen', '1'); } catch { /* storage unavailable */ }
+  };
   const [filters, setFilters] = useState({ artist: true, genre: true, vibe: true, undiscovered: true, covers: true });
 
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -377,6 +384,13 @@ const MusicUniverse = () => {
     }
     return { x: n.x, y: n.y };
   }, [nodes]);
+
+  const focusPoint = useCallback((x: number, y: number, zoom: number) => {
+    const el = wrapRef.current;
+    if (!el) return;
+    const z = clamp(zoom, 0.2, 6);
+    viewRef.current = { z, x: el.clientWidth / 2 - x * z, y: el.clientHeight / 2 - y * z };
+  }, []);
 
   const focusNode = useCallback((n: UniNode) => {
     const el = wrapRef.current;
@@ -750,24 +764,64 @@ const MusicUniverse = () => {
   const canFindPlaying = !!currentTrack && nodes.some((x) => x.known && x.id === currentTrack.id);
   const canSurprise = nodes.some((n, i) => !n.known && visible.has(i));
 
+  const landmarks = useMemo(() => {
+    const known = nodes.filter((n) => n.known);
+    if (!known.length) return [];
+    const brightest = known.reduce((b, n) => (n.plays > b.plays ? n : b), known[0]);
+    const newest = rows[0] ? known.find((n) => n.id === rows[0].track_id) : undefined;
+    const list: { key: string; label: string; hint: string; icon: typeof Star; go: () => void }[] = [
+      {
+        key: 'star', label: 'Most played', hint: `${brightest.title} · ${brightest.plays}×`, icon: Star,
+        go: () => { setSelected(brightest); focusNode(brightest); },
+      },
+    ];
+    if (nebulae[0]) {
+      list.push({
+        key: 'cluster', label: 'Biggest cluster', hint: `${nebulae[0].name} · ${nebulae[0].count} songs`, icon: Flame,
+        go: () => { setSelected(null); focusPoint(nebulae[0].x, nebulae[0].y, 1.1); },
+      });
+    }
+    if (newest) {
+      list.push({
+        key: 'new', label: 'Latest play', hint: newest.title, icon: Clock,
+        go: () => { setSelected(newest); focusNode(newest); },
+      });
+    }
+    return list;
+  }, [nodes, nebulae, rows, focusNode, focusPoint]);
+
+  const selectedWhy = useMemo(() => {
+    if (!selected) return '';
+    if (selected.known) {
+      const sameArtist = nodes.filter((n) => n.known && n.channel === selected.channel).length - 1;
+      return sameArtist > 0
+        ? `You've also played ${sameArtist} other ${sameArtist === 1 ? 'song' : 'songs'} by ${selected.channel}.`
+        : `The only ${selected.channel} song you've played.`;
+    }
+    const parent = selected.parent !== undefined ? nodes[selected.parent] : undefined;
+    return parent
+      ? `Suggested because you play ${parent.channel === selected.channel ? parent.channel : `${parent.channel} (${selected.genre})`}.`
+      : "From the discovery pool. You haven't played it yet.";
+  }, [selected, nodes]);
+
   const genreLegend = useMemo(() => {
     const counts = new Map<string, number>();
     nodes.forEach((n, i) => { if (visible.has(i)) counts.set(n.genre, (counts.get(n.genre) || 0) + 1); });
     return [...counts.entries()].sort((a, b) => b[1] - a[1]).slice(0, 6);
   }, [nodes, visible]);
 
-  const galaxies: { id: Galaxy; label: string }[] = [
-    { id: 'mine', label: 'My Universe' },
-    { id: 'discovery', label: 'Discovery Universe' },
-    { id: 'blend', label: 'Blended Universe' },
+  const galaxies: { id: Galaxy; label: string; desc: string }[] = [
+    { id: 'mine', label: 'My music', desc: 'Songs you have played, plus a few new ones nearby.' },
+    { id: 'discovery', label: 'Discover', desc: 'Only songs you have not played yet.' },
+    { id: 'blend', label: 'Both', desc: 'Everything together.' },
   ];
 
-  const filterChips: { key: keyof typeof filters; label: string; icon: typeof Users }[] = [
-    { key: 'artist', label: 'Same artist', icon: Users },
-    { key: 'genre', label: 'Same genre', icon: Disc3 },
-    { key: 'vibe', label: 'Same vibe', icon: Waves },
-    { key: 'undiscovered', label: 'Undiscovered', icon: Sparkles },
-    { key: 'covers', label: 'Cover art', icon: Orbit },
+  const filterChips: { key: keyof typeof filters; label: string; hint: string; icon: typeof Users }[] = [
+    { key: 'artist', label: 'Same artist', hint: 'Lines between songs by the same artist', icon: Users },
+    { key: 'genre', label: 'Same genre', hint: 'Faint lines between songs of the same genre', icon: Disc3 },
+    { key: 'vibe', label: 'Played together', hint: 'Bright lines between songs you play back to back', icon: Waves },
+    { key: 'undiscovered', label: 'Songs to try', hint: 'Dashed dots: songs you have not played yet', icon: Sparkles },
+    { key: 'covers', label: 'Cover art', hint: 'Show album art inside the dots when zoomed in', icon: Orbit },
   ];
 
   const disabled = !settings.musicUniverse;
@@ -797,6 +851,37 @@ const MusicUniverse = () => {
             )}
           </header>
 
+          {!disabled && showGuide && (
+            <section className="mb-5 rounded-2xl border border-primary/30 bg-primary/5 p-4 md:p-5" aria-label="How to read your universe">
+              <div className="mb-3 flex items-start justify-between gap-3">
+                <h2 className="text-base font-bold md:text-lg">How to read your universe</h2>
+                <button onClick={closeGuide} className="text-muted-foreground hover:text-foreground" aria-label="Close guide">
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+              <ul className="grid gap-x-8 gap-y-3 text-sm sm:grid-cols-2">
+                <li className="flex gap-3">
+                  <span className="mt-1 h-3.5 w-3.5 shrink-0 rounded-full bg-primary shadow-[0_0_10px_hsl(var(--primary)/0.8)]" />
+                  <span><b>Each glowing dot is a song you've played.</b> The more you play it, the bigger it gets.</span>
+                </li>
+                <li className="flex gap-3">
+                  <span className="mt-1 h-3.5 w-3.5 shrink-0 rounded-full bg-primary/25 blur-[2px]" />
+                  <span><b>Soft clouds are artists.</b> Songs by the same artist sit in one cloud. Colour shows the genre.</span>
+                </li>
+                <li className="flex gap-3">
+                  <span className="mt-1 h-3.5 w-3.5 shrink-0 rounded-full border border-dashed border-primary" />
+                  <span><b>Dashed dots are songs you haven't played.</b> They orbit artists you already like. Tap one to try it.</span>
+                </li>
+                <li className="flex gap-3">
+                  <span className="mt-2 h-px w-4 shrink-0 bg-primary" />
+                  <span><b>Lines connect related songs:</b> same artist, same genre, or songs you play back to back.</span>
+                </li>
+              </ul>
+              <p className="mt-3 text-xs text-muted-foreground">Drag to move around. Scroll or pinch to zoom. Tap any dot for details.</p>
+              <Button size="sm" className="mt-3" onClick={closeGuide}>Got it</Button>
+            </section>
+          )}
+
           {disabled ? (
             <div className="bg-card border border-border rounded-2xl p-8 text-center">
               <p className="text-muted-foreground mb-4">Music Universe is turned off.</p>
@@ -821,12 +906,43 @@ const MusicUniverse = () => {
                   </button>
                 ))}
               </div>
+              <span className="mb-3 ml-3 hidden align-middle text-xs text-muted-foreground sm:inline">
+                {galaxies.find((g) => g.id === galaxy)?.desc}
+              </span>
+              {!showGuide && (
+                <button
+                  onClick={() => setShowGuide(true)}
+                  className="mb-3 ml-3 inline-flex items-center gap-1 align-middle text-xs text-muted-foreground transition-colors hover:text-foreground"
+                >
+                  <HelpCircle className="h-3.5 w-3.5" /> How to read this
+                </button>
+              )}
+
+              {!!landmarks.length && (
+                <div className="mb-3 flex gap-2 overflow-x-auto pb-1 no-scrollbar" aria-label="Jump to">
+                  {landmarks.map(({ key, label, hint, icon: Icon, go }) => (
+                    <button
+                      key={key}
+                      onClick={go}
+                      className="flex shrink-0 items-center gap-2 rounded-xl border border-border bg-card/60 px-3 py-2 text-left transition-colors hover:border-primary/60"
+                    >
+                      <Icon className="h-4 w-4 shrink-0 text-primary" />
+                      <span className="min-w-0">
+                        <span className="block text-xs font-semibold">{label}</span>
+                        <span className="block max-w-[180px] truncate text-[11px] text-muted-foreground">{hint}</span>
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              )}
 
               {/* Filters */}
               <div className="flex flex-wrap gap-2 mb-4">
-                {filterChips.map(({ key, label, icon: Icon }) => (
+                {filterChips.map(({ key, label, hint, icon: Icon }) => (
                   <button
                     key={key}
+                    title={hint}
+                    aria-pressed={filters[key]}
                     onClick={() => setFilters((f) => ({ ...f, [key]: !f[key] }))}
                     className={cn(
                       'flex items-center gap-1.5 text-[11px] px-3 py-1.5 rounded-full border transition-colors',
@@ -899,6 +1015,10 @@ const MusicUniverse = () => {
                     </div>
                   )}
 
+                  <p className="pointer-events-none absolute left-3 top-3 hidden text-[11px] text-muted-foreground/80 sm:block">
+                    Drag to move · scroll to zoom · tap a dot
+                  </p>
+
                   {/* Legend */}
                   {!!genreLegend.length && (
                     <div className="absolute left-3 bottom-3 flex flex-wrap gap-2 max-w-[70%]">
@@ -922,8 +1042,9 @@ const MusicUniverse = () => {
                           <p className="font-semibold text-sm truncate">{selected.title}</p>
                           <p className="text-xs text-muted-foreground truncate">{selected.channel}</p>
                           <p className="text-[11px] text-primary mt-1">
-                            {selected.genre} · {selected.known ? `${selected.plays} play${selected.plays === 1 ? '' : 's'}` : 'not discovered yet'}
+                            {selected.genre} · {selected.known ? `${selected.plays} play${selected.plays === 1 ? '' : 's'}` : 'not played yet'}
                           </p>
+                          <p className="mt-1 text-[11px] leading-snug text-muted-foreground">{selectedWhy}</p>
                         </div>
                         <button onClick={() => setSelected(null)} className="text-muted-foreground hover:text-foreground">
                           <X className="w-4 h-4" />
