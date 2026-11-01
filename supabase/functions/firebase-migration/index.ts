@@ -267,16 +267,6 @@ async function importUserChunk(users: AuthUser[]) {
   return { ok: true, imported: users.length - errs.length, errors: errs };
 }
 
-async function readSourceUsers(limit?: number, offset = 0) {
-  const db = adminClient();
-  const qs = `select=id,email,encrypted_password,email_confirmed_at,raw_user_meta_data,banned_until,created_at&order=created_at.asc&limit=${limit ?? 1000}&offset=${offset}`;
-  const res = await db.rest(`auth_users_rpc_not_used&${qs}`);
-  return res;
-}
-
-// The Supabase REST API exposes auth.users under /rest/v1/... only with a special header trick;
-// instead read users via the postgres endpoint is not allowed, so we use the service-role
-// PostgREST route with schema header.
 async function readUsersViaPostgrest(limit: number, offset: number): Promise<AuthUser[]> {
   const url = Deno.env.get('SUPABASE_URL');
   const key = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
