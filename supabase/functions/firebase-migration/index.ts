@@ -189,7 +189,12 @@ async function actionValidate() {
   // Service account identity
   const raw = Deno.env.get('FIREBASE_SERVICE_ACCOUNT_JSON')!;
   const sa = JSON.parse(raw) as ServiceAccount;
-  report.serviceAccount = { client_email: sa.client_email, project_id: sa.project_id ?? null };
+  const pk = sa.private_key ?? '';
+  report.serviceAccount = {
+    client_email: sa.client_email,
+    project_id: sa.project_id ?? null,
+    keyDebug: { len: pk.length, startsWithBegin: pk.slice(0, 10), newlineCount: (pk.match(/\n/g) ?? []).length, hasLiteralBackslashN: pk.includes('\\n'), bodyLen: pk.replace(/-----BEGIN PRIVATE KEY-----/, '').replace(/-----END PRIVATE KEY-----/, '').replace(/\s+/g, '').length },
+  };
 
   // Auth (Identity Toolkit): read 1 existing account
   const authRes = await fetch(
