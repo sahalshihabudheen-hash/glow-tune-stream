@@ -40,9 +40,6 @@ async function getGoogleAccessToken(): Promise<string> {
   const raw = Deno.env.get('FIREBASE_SERVICE_ACCOUNT_JSON');
   if (!raw) throw new Error('FIREBASE_SERVICE_ACCOUNT_JSON secret is not configured');
   const sa: ServiceAccount = JSON.parse(raw);
-  if (sa.project_id && sa.project_id !== FIREBASE_PROJECT_ID) {
-    // Key must belong to the user's existing Firebase project.
-  }
   const now = Math.floor(Date.now() / 1000);
   if (cachedToken && cachedToken.exp - 60 > now) return cachedToken.token;
 
