@@ -183,17 +183,46 @@ async function firestoreBatchWrite(writes: { collection: string; docId: string; 
 // ---------- Actions ----------
 
 async function actionValidate() {
-  const token = await getGoogleAccessToken();
+  let token: string | null = null;
+  try {
+    token = await getGoogleAccessToken();
+  } catch (e) {
+    // Report only boolean diagnostics — never any key material or derived values.
+    const raw = Deno.env.get('FIREBASE_SERVICE_ACCOUNT_JSON');
+    const diag: Record<string, unknown> = { tokenExchangeOk: false, error: String(e).slice(0, 200) };
+    if (!raw) {
+      diag.secretPresent = false;
+    } else {
+      diag.secretPresent = true;
+      try {
+        const sa = JSON.parse(raw) as Partial<ServiceAccount>;
+        diag.jsonParses = true;
+        diag.hasClientEmail = typeof sa.client_email === 'string' && sa.client_email.length > 0;
+        diag.hasTokenUri = typeof sa.token_uri === 'string' && sa.token_uri.length > 0;
+        diag.hasPrivateKeyField = typeof sa.private_key === 'string';
+        if (typeof sa.private_key === 'string') {
+          diag.pkHasBeginMarker = sa.private_key.includes('-----BEGIN PRIVATE KEY-----');
+          diag.pkHasEndMarker = sa.private_key.includes('-----END PRIVATE KEY-----');
+          let importOk = false;
+          try {
+            await crypto.subtle.importKey('pkcs8', pemToPkcs8(sa.private_key), { name: 'RSASSA-PKCS1-v1_5', hash: 'SHA-256' }, false, ['sign']);
+            importOk = true;
+          } catch { importOk = false; }
+          diag.pkImportsAsPkcs8 = importOk;
+        }
+      } catch {
+        diag.jsonParses = false;
+      }
+    }
+    return json({ ok: false, stage: 'token-exchange', diag }, 200);
+  }
   const report: Record<string, unknown> = {};
 
   // Service account identity
-  const raw = Deno.env.get('FIREBASE_SERVICE_ACCOUNT_JSON')!;
-  const sa = JSON.parse(raw) as ServiceAccount;
-  const pk = sa.private_key ?? '';
+  const sa = JSON.parse(Deno.env.get('FIREBASE_SERVICE_ACCOUNT_JSON')!) as ServiceAccount;
   report.serviceAccount = {
     client_email: sa.client_email,
     project_id: sa.project_id ?? null,
-    keyDebug: { len: pk.length, startsWithBegin: pk.slice(0, 10), newlineCount: (pk.match(/\n/g) ?? []).length, hasLiteralBackslashN: pk.includes('\\n'), bodyLen: pk.replace(/-----BEGIN PRIVATE KEY-----/, '').replace(/-----END PRIVATE KEY-----/, '').replace(/\s+/g, '').length },
   };
 
   // Auth (Identity Toolkit): read 1 existing account
