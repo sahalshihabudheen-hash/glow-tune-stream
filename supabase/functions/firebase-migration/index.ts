@@ -300,13 +300,16 @@ async function importUserChunk(users: AuthUser[]) {
 }
 
 async function readUsersViaPostgrest(limit: number, offset: number): Promise<AuthUser[]> {
+  // PostgREST does not expose the auth schema on hosted Supabase; use the Auth Admin API.
   const url = Deno.env.get('SUPABASE_URL');
   const key = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
-  const res = await fetch(`${url}/rest/v1/users?select=id,email,encrypted_password,email_confirmed_at,raw_user_meta_data,banned_until,created_at&order=created_at.asc&limit=${limit}&offset=${offset}`, {
-    headers: { apikey: key, Authorization: `Bearer ${key}`, 'Accept-Profile': 'auth', Accept: 'application/json' },
+  const page = Math.floor(offset / limit) + 1;
+  const res = await fetch(`${url}/auth/v1/admin/users?page=${page}&per_page=${limit}`, {
+    headers: { apikey: key, Authorization: `Bearer ${key}` },
   });
   if (!res.ok) throw new Error(`auth.users read failed [${res.status}]: ${(await res.text()).slice(0, 300)}`);
-  return res.json();
+  const j = await res.json() as { users?: AuthUser[] };
+  return (j.users ?? []).map((u) => u as AuthUser);
 }
 
 async function actionMigrateUsers(offset = 0, chunk = 60) {
