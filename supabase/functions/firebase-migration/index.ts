@@ -234,9 +234,10 @@ async function actionValidate() {
     ? { ok: true, status: authRes.status, existingUsers: ((await authRes.json()) as { users?: unknown[] }).users?.length ?? 0 }
     : { ok: false, status: authRes.status, detail: (await authRes.text()).slice(0, 300) };
 
-  // Firestore: check the default database answers
+  // Firestore: the default database must answer a collection-level read.
+  // (A bare /documents path is not a valid REST target and always 404s with HTML.)
   const fsRes = await fetch(
-    `https://firestore.googleapis.com/v1/projects/${FIREBASE_PROJECT_ID}/databases/(default)/documents?pageSize=1&mask.fieldPaths=`,
+    `https://firestore.googleapis.com/v1/projects/${FIREBASE_PROJECT_ID}/databases/(default)/documents/__validate_probe__`,
     { headers: { Authorization: `Bearer ${token}` } },
   );
   report.firestore = fsRes.ok
