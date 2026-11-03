@@ -237,7 +237,7 @@ async function actionValidate() {
   // Firestore: the default database must answer a collection-level read.
   // (A bare /documents path is not a valid REST target and always 404s with HTML.)
   const fsRes = await fetch(
-    `https://firestore.googleapis.com/v1/projects/${FIREBASE_PROJECT_ID}/databases/(default)/documents/__validate_probe__`,
+    `https://firestore.googleapis.com/v1/projects/${FIREBASE_PROJECT_ID}/databases/(default)/documents/validate_probe_collection`,
     { headers: { Authorization: `Bearer ${token}` } },
   );
   report.firestore = fsRes.ok
