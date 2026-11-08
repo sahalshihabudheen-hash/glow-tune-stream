@@ -178,7 +178,7 @@ export async function extractColorFromImage(imageUrl: string): Promise<ArtworkPa
   return new Promise((resolve) => {
     try {
       const img = new Image();
-      img.crossOrigin = 'Anonymous';
+      img.crossOrigin = 'anonymous';
       
       const timeout = setTimeout(() => {
         resolve(getDefaultPalette(imageUrl));

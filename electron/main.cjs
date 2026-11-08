@@ -67,6 +67,9 @@ ipcMain.on('nyra:presence', (_event, payload) => {
   const now = Date.now();
   const positionMs = Math.max(0, Math.floor((payload.position || 0) * 1000));
   const durationMs = Math.max(0, Math.floor((payload.duration || 0) * 1000));
+  const youtubeMusicUrl = /^[\w-]{11}$/.test(String(payload.videoId || ''))
+    ? `https://music.youtube.com/watch?v=${payload.videoId}`
+    : 'https://music.youtube.com';
 
   const activity = {
     details: String(payload.title).slice(0, 128),
@@ -76,7 +79,7 @@ ipcMain.on('nyra:presence', (_event, payload) => {
     smallImageKey: payload.isPlaying ? 'play' : 'pause',
     smallImageText: payload.isPlaying ? 'Playing' : 'Paused',
     instance: false,
-    buttons: [{ label: 'Listen on NYRA', url: 'https://nyra.app' }],
+    buttons: [{ label: 'Listen on YouTube Music', url: youtubeMusicUrl }],
   };
 
   // A start/end pair renders Discord's native live progress bar.
