@@ -56,6 +56,7 @@ export function useDiscordPresence() {
       lastKey.current = key;
 
       bridge.updatePresence({
+        videoId: currentTrack.id,
         title: currentTrack.title,
         artist: currentTrack.channel,
         artwork: currentTrack.thumbnail,
