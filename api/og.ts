@@ -120,8 +120,8 @@ async function handler(req: Request) {
       redirectUrl = `${baseUrl}/?search=${encodeURIComponent(trackTitle)}`;
     }
 
-    // Call to action under every preview: send listeners to the app's home page.
-    description += `\n🎶 Listen to more music — visit ${appName}: ${escapeHtml(baseUrl)}`;
+    // Keep the song call to action tied to its actual listening destination.
+    if (type !== 'song') description += `\n🎶 Listen to more music — visit ${appName}: ${escapeHtml(baseUrl)}`;
 
     // Keep song previews as image cards. The actual track link always points to YouTube Music.
     let videoTags = '';
