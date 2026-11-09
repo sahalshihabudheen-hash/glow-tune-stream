@@ -29,17 +29,10 @@ export function buildShareUrl(options: ShareOptions): string {
   const thumbnail = options.thumbnail || '';
   
   const isYoutubeSong = type === 'song' && /^[\w-]{11}$/.test(id);
-  const hasRealTitle = !!options.title && options.title !== 'Great Music';
 
   // Share the actual YouTube Music track, rather than the NYRA audio-preview card.
   if (isYoutubeSong) {
     return `https://music.youtube.com/watch?v=${encodeURIComponent(id)}`;
-  }
-
-  // Fallback short link (no title known): the server has to look title/artist up from the id, and that lookup
-  // is unreliable from serverless IPs, so only use it when we truly have nothing else.
-  if (isYoutubeSong && !hasRealTitle) {
-    return `${origin}/api/og?id=${id}`;
   }
 
   const params = new URLSearchParams();
