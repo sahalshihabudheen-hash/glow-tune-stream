@@ -481,7 +481,7 @@ export function generateOgImageSvg(data: OgContentData): string {
       </g>
       
       <text x="48" y="31" class="font-sans" font-size="14" font-weight="700" fill="#ffffff">
-        Listen on NYRA
+        ${data.type === 'song' ? 'Open on YouTube Music' : 'Listen on NYRA'}
       </text>
       
       <text x="165" y="31" class="font-sans" font-size="13" font-weight="500" fill="#94a3b8">
@@ -536,13 +536,13 @@ export function generateDiscordOgHtml(data: OgContentData): string {
     ogType = 'music.album';
     description = `🎵 ${data.title} by ${safeArtist} · Lossless streaming on NYRA`;
   } else {
-    // Default song
-    redirectUrl = `${data.baseUrl}/?play=${encodeURIComponent(trackId)}&title=${encodeURIComponent(data.title)}&channel=${encodeURIComponent(data.artist || 'NYRA')}&thumbnail=${encodeURIComponent(safeImageUrl)}`;
-    ogType = 'video.other';
-    description = `✨ ${safeArtist} · NYRA PREMIUM • FEEL THE PULSE`;
+    // Song shares open the corresponding YouTube Music track directly.
+    redirectUrl = /^[\w-]{11}$/.test(trackId)
+      ? `https://music.youtube.com/watch?v=${encodeURIComponent(trackId)}`
+      : `${data.baseUrl}/`;
+    ogType = 'music.song';
+    description = `✨ ${safeArtist} · Listen on YouTube Music`;
   }
-
-  const isSongWithVideo = data.type === 'song' && trackId;
 
   return `<!DOCTYPE html>
 <html lang="en">
@@ -567,27 +567,11 @@ export function generateDiscordOgHtml(data: OgContentData): string {
   <meta property="og:image:type" content="${imageType}">
   <meta property="og:url" content="${escapeXml(redirectUrl)}">
 
-  <!-- Discord & Social Embed Player / Large Banner -->
-  ${isSongWithVideo ? `
-  <meta property="og:video" content="https://www.youtube.com/embed/${encodeURIComponent(trackId)}">
-  <meta property="og:video:secure_url" content="https://www.youtube.com/embed/${encodeURIComponent(trackId)}">
-  <meta property="og:video:type" content="text/html">
-  <meta property="og:video:width" content="1280">
-  <meta property="og:video:height" content="720">
-
-  <meta name="twitter:card" content="player">
-  <meta name="twitter:title" content="🎧 ${safeTitle}">
-  <meta name="twitter:description" content="${description}">
-  <meta name="twitter:image" content="${escapeXml(safeImageUrl)}">
-  <meta name="twitter:player" content="https://www.youtube.com/embed/${encodeURIComponent(trackId)}">
-  <meta name="twitter:player:width" content="1280">
-  <meta name="twitter:player:height" content="720">
-  ` : `
+  <!-- Use a normal image card; the link opens YouTube Music rather than an unreliable audio embed. -->
   <meta name="twitter:card" content="summary_large_image">
   <meta name="twitter:title" content="🎧 ${safeTitle}">
   <meta name="twitter:description" content="${description}">
   <meta name="twitter:image" content="${escapeXml(safeImageUrl)}">
-  `}
 
   <!-- Discord Dynamic Border Theme Color (Extracted from Artwork) -->
   <meta name="theme-color" content="${color.themeColor}">
@@ -607,7 +591,7 @@ export function generateDiscordOgHtml(data: OgContentData): string {
     <h1 style="margin: 0 0 8px 0; font-size: 22px; font-weight: 800;">${safeTitle}</h1>
     <p style="margin: 0 0 24px 0; color: #94a3b8; font-size: 15px;">${safeArtist}</p>
     <a href="${redirectUrl}" style="display: inline-block; background: ${color.dominant}; color: #000000; font-weight: 800; font-size: 14px; text-decoration: none; padding: 12px 28px; border-radius: 999px; box-shadow: 0 4px 20px ${color.glow};">
-      Open in ${safeAppName}
+      ${data.type === 'song' ? 'Open on YouTube Music' : `Open in ${safeAppName}`}
     </a>
   </div>
 </body>

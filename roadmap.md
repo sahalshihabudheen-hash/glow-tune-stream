@@ -2,6 +2,7 @@
 
 - [x] Read-only inventory of current app tables, accounts, storage buckets, and code usage.
 - [x] Fix "Download all" in playlists so every song downloads/caches offline (was only saving one).
+- [x] Make song-share links open the matching YouTube Music track instead of the NYRA/JioSaavn preview.
 - [x] Database backup export created in Lovable Cloud (database_export_10_10_26).
 - [x] Connect the user's existing Firebase project (never create a new one). Firebase web-app config received for `nyra-music-566bf`.
 - [x] Confirm secure server-side migration access (Firebase service account, stored as a secret, valid).

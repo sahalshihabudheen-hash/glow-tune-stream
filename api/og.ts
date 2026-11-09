@@ -1,58 +1,3 @@
-// Song lookup helper, inlined so the function has no relative imports (ESM + Vercel Node can't resolve them).
-/**
- * Server-side JioSaavn lookup, shared by the share-link endpoints.
- *
- * YouTube blocks audio downloads from server IPs, so (like DJ Mode and the offline downloader)
- * we match the track on JioSaavn through the existing `saavn-audio` Supabase function, which
- * returns direct AAC/MP4 CDN links. Files starting with "_" are helpers, not routes, on Vercel.
- */
-
-// Public project URL (it is already committed in .env). Env vars win if they are set on Vercel.
-const FALLBACK_SUPABASE_URL = 'https://nsznavxgjkjlkiicmqmq.supabase.co';
-
-const env = (name: string): string => ((globalThis as { process?: { env?: Record<string, string | undefined> } }).process?.env?.[name] || '').trim();
-
-const supabaseUrl = (): string => (env('VITE_SUPABASE_URL') || env('SUPABASE_URL') || FALLBACK_SUPABASE_URL).replace(/\/$/, '');
-
-interface SaavnMatch {
-  urls: string[];
-  matchedTitle?: string;
-  matchedArtist?: string;
-}
-
-const TTL_MS = 15 * 60 * 1000; // Saavn CDN links expire, so don't keep them long
-const cache = new Map<string, { at: number; value: SaavnMatch | null }>();
-
-async function resolveSaavn(title: string, artist: string, timeoutMs = 9000): Promise<SaavnMatch | null> {
-  const t = title.trim().slice(0, 300);
-  if (t.length < 2) return null;
-  const key = `${t.toLowerCase()}|${artist.trim().toLowerCase()}`;
-
-  const hit = cache.get(key);
-  if (hit && Date.now() - hit.at < TTL_MS) return hit.value;
-
-  let value: SaavnMatch | null = null;
-  try {
-    const params = new URLSearchParams({ title: t });
-    if (artist.trim()) params.set('artist', artist.trim().slice(0, 200));
-    const res = await fetch(`${supabaseUrl()}/functions/v1/saavn-audio?${params}`, { signal: AbortSignal.timeout(timeoutMs) });
-    if (res.ok && !(res.headers.get('content-type') || '').includes('text/html')) {
-      const data = await res.json();
-      const urls = [data?.audioUrl, ...(Array.isArray(data?.fallbackUrls) ? data.fallbackUrls : [])].filter(
-        (u: unknown): u is string => typeof u === 'string' && /^https:\/\//.test(u),
-      );
-      if (urls.length) value = { urls, matchedTitle: data?.matchedTitle, matchedArtist: data?.matchedArtist };
-    }
-  } catch {
-    value = null;
-  }
-
-  // Remember "no match" briefly too, so a dead song doesn't hammer the backend.
-  cache.set(key, { at: Date.now() - (value ? 0 : TTL_MS - 60_000), value });
-  return value;
-}
-
-
 function escapeHtml(str: string = ''): string {
   return String(str)
     .replace(/&/g, '&amp;')
@@ -155,7 +100,10 @@ async function handler(req: Request) {
     const safeCard = escapeHtml(cardUrl);
 
     let description = `✨ ${safeArtist} · ${appName} PREMIUM • FEEL THE PULSE`;
-    let redirectUrl = `${baseUrl}/?play=${encodeURIComponent(trackId)}&title=${encodeURIComponent(trackTitle)}&channel=${encodeURIComponent(trackArtist)}&thumbnail=${encodeURIComponent(trackThumbnail)}`;
+    const isYoutubeTrack = type === 'song' && /^[\w-]{11}$/.test(trackId);
+    let redirectUrl = isYoutubeTrack
+      ? `https://music.youtube.com/watch?v=${encodeURIComponent(trackId)}`
+      : `${baseUrl}/?play=${encodeURIComponent(trackId)}&title=${encodeURIComponent(trackTitle)}&channel=${encodeURIComponent(trackArtist)}&thumbnail=${encodeURIComponent(trackThumbnail)}`;
     let ogType = 'music.song';
 
     if (type === 'playlist') {
@@ -172,52 +120,14 @@ async function handler(req: Request) {
       redirectUrl = `${baseUrl}/?search=${encodeURIComponent(trackTitle)}`;
     }
 
-    // Call to action under every preview: send listeners to the app's home page.
-    description += `\n🎶 Listen to more music — visit ${appName}: ${escapeHtml(baseUrl)}`;
+    // Keep the song call to action tied to its actual listening destination.
+    if (type !== 'song') description += `\n🎶 Listen to more music — visit ${appName}: ${escapeHtml(baseUrl)}`;
 
-    // Playable embed: Discord plays og:video when it is a real MP4. Only add it when we actually found
-    // the song on JioSaavn, so songs without a match keep the normal image preview (no broken player).
+    // Keep song previews as image cards. The actual track link always points to YouTube Music.
     let videoTags = '';
     let twitterCard = 'summary_large_image';
     let cacheControl = 'public, max-age=3600, s-maxage=86400';
-    // A failed title lookup produced a generic card: never let the CDN keep that for a day.
     if (metaLookupFailed) cacheControl = 'public, max-age=30, s-maxage=30';
-    if (type === 'song' && trackTitle !== 'Great Music') {
-      // Discord's crawler gives up fast, so never wait long here. If the lookup is slow, assume the song exists
-      // (most do) instead of dropping the player, and don't let that guess sit in the CDN for a day.
-      const lookup = resolveSaavn(trackTitle, trackArtist, 4500);
-      const raced = await Promise.race([
-        lookup.then((m) => ({ done: true, m })),
-        new Promise<{ done: boolean; m: SaavnMatch | null }>((r) => setTimeout(() => r({ done: false, m: null }), 900)),
-      ]);
-      const hasAudio = raced.done ? !!raced.m : true;
-      if (!raced.done) cacheControl = 'public, max-age=60, s-maxage=60';
-      if (hasAudio) {
-        const audioParams = new URLSearchParams({ title: trackTitle, artist: trackArtist, img: cardUrl });
-        const audioHref = `${baseUrl}/api/og-audio?${audioParams.toString()}`;
-        const audioUrl = escapeHtml(audioHref);
-        // Building the MP4 takes several seconds, far longer than Discord waits. Start building it now so it is ready
-        // when Discord (or the first listener) asks. With ?warm=1 (sent by the app the moment a link is copied) we
-        // hold this request open until the build is done, which keeps the function alive for the whole build.
-        const prebuild = fetch(audioHref, { method: 'HEAD', signal: AbortSignal.timeout(45000) }).catch(() => null);
-        if (url.searchParams.get('warm') === '1') {
-          await prebuild;
-          return new Response(null, { status: 204, headers: { 'cache-control': 'no-store' } });
-        }
-        ogType = 'video.other';
-        twitterCard = 'player';
-        videoTags = `
-  <!-- Playable video (card + song audio) so Discord shows a play button -->
-  <meta property="og:video" content="${audioUrl}">
-  <meta property="og:video:url" content="${audioUrl}">
-  <meta property="og:video:secure_url" content="${audioUrl}">
-  <meta property="og:video:type" content="video/mp4">
-  <meta property="og:video:width" content="1200">
-  <meta property="og:video:height" content="630">
-  <meta name="twitter:player:stream" content="${audioUrl}">
-  <meta name="twitter:player:stream:content_type" content="video/mp4">`;
-      }
-    }
 
     const html = `<!DOCTYPE html>
 <html lang="en">

@@ -28,13 +28,11 @@ export function buildShareUrl(options: ShareOptions): string {
   const artist = options.artist || options.channel || 'NYRA';
   const thumbnail = options.thumbnail || '';
   
-  const isYoutubeSong = type === 'song' && /^[\w-]{11}$/.test(id) && (!thumbnail || /^https:\/\/i\.ytimg\.com\//.test(thumbnail));
-  const hasRealTitle = !!options.title && options.title !== 'Great Music';
+  const isYoutubeSong = type === 'song' && /^[\w-]{11}$/.test(id);
 
-  // Fallback short link (no title known): the server has to look title/artist up from the id, and that lookup
-  // is unreliable from serverless IPs, so only use it when we truly have nothing else.
-  if (isYoutubeSong && !hasRealTitle) {
-    return `${origin}/api/og?id=${id}`;
+  // Share the actual YouTube Music track, rather than the NYRA audio-preview card.
+  if (isYoutubeSong) {
+    return `https://music.youtube.com/watch?v=${encodeURIComponent(id)}`;
   }
 
   const params = new URLSearchParams();
@@ -89,6 +87,13 @@ async function copyText(text: string): Promise<boolean> {
 export async function executeShare(options: ShareOptions): Promise<boolean> {
   const shareUrl = buildShareUrl(options);
   const type = options.type || 'song';
+
+  if (type === 'song' && /^[\w-]{11}$/.test(options.id || '')) {
+    const ok = await copyText(shareUrl);
+    if (ok) toast.success('YouTube Music link copied!', { icon: shareIcon() });
+    else toast.error('Could not copy link to clipboard');
+    return ok;
+  }
 
   if (type !== 'song') {
     // Warm the preview in the background so Discord's (impatient) crawler finds it ready.
