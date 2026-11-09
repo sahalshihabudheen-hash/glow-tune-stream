@@ -92,7 +92,7 @@ async function handler(req: Request) {
 
   const subtitle =
     type === 'playlist' ? `${tracks ? `${tracks} tracks · ` : ''}Playlist` : type === 'album' ? `${artist} · Album` : type === 'artist' ? 'Artist' : artist;
-  const cta = type === 'playlist' ? 'Open playlist' : type === 'artist' ? 'View artist' : type === 'album' ? 'Open album' : 'Play on NYRA';
+  const cta = type === 'playlist' ? 'Open playlist' : type === 'artist' ? 'View artist' : type === 'album' ? 'Open album' : 'Open YouTube Music';
 
   const titleSize = title.length <= 16 ? 84 : title.length <= 28 ? 68 : title.length <= 44 ? 56 : 46;
   const bars = barHeights(title + artist, 34);
